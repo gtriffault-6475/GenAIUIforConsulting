@@ -1,4 +1,5 @@
 .DS_Store
+.claude/settings.local.json
 
 # Generated/seeded design-canvas bundles (build output of seed-canvas.mjs,
 # ~2MB minified editor payload) — regenerate from the .dc.html sources
