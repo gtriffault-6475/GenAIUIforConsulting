@@ -1,0 +1,10 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "title": "Espace de travail", "x": 0, "y": 0, "w": 1440, "h": 900, "is_interactive": true },
+    { "file": "Editor.dc.html", "title": "Éditeur assisté (livrable ouvert)", "x": 1560, "y": 0, "w": 1320, "h": 900, "is_interactive": true }
+  ],
+  "annotations": [
+    { "id": "flow-note", "x": 1440, "y": 940, "w": 480, "text": "Le consultant ouvre un livrable depuis le panneau de droite de l'espace de travail, ce qui l'amène ici, dans l'éditeur assisté." }
+  ],
+  "launch": { "view": "canvas" }
+}

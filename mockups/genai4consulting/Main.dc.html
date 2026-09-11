@@ -1,0 +1,301 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "IBM Plex Sans", system-ui, sans-serif; color: #1c2030; }
+    a { color: #3E4C7C; text-decoration: none; } a:hover { color: #2c3760; }
+    .row { display: flex; flex-direction: row; }
+    .col { display: flex; flex-direction: column; }
+    .label-caps { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: #8a90a3; font-weight: 600; }
+    .hoverable { cursor: pointer; transition: background 0.12s ease; }
+    .hoverable:hover { background: #f1f2f6; }
+  </style>
+</helmet>
+
+<div class="col" style="width: 1440px; height: 900px; background: #f3f4f8; overflow: hidden;">
+
+  <!-- Top bar -->
+  <div class="row" style="height: 60px; min-height: 60px; align-items: center; justify-content: space-between; padding: 0 24px; background: #ffffff; border-bottom: 1px solid #e3e5ec;">
+    <div class="row" style="align-items: center; gap: 28px;">
+      <div class="row" style="align-items: center; gap: 8px;">
+        <div style="width: 26px; height: 26px; border-radius: 7px; background: {{accent}};"></div>
+        <span style="font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 16px;">GenAI4Consulting</span>
+      </div>
+      <div class="row hoverable" style="align-items: center; gap: 10px; padding: 7px 12px; border: 1px solid #e3e5ec; border-radius: 8px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5a5f72" stroke-width="1.8"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/></svg>
+        <span style="font-size: 13px; font-weight: 500;">Réponse RFP — Acme Corp</span>
+        <span style="font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 5px; background: #eef0f8; color: #5a5f72;">OCTOPOD</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8a90a3" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+    </div>
+    <div style="width: 30px; height: 30px; border-radius: 50%; background: #dfe2ee; color: {{accent}}; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center;">GT</div>
+  </div>
+
+  <!-- Body -->
+  <div class="row" style="flex: 1; min-height: 0;">
+
+    <!-- Left sidebar -->
+    <div class="col" style="width: 240px; min-width: 240px; background: #ffffff; border-right: 1px solid #e3e5ec; padding: 20px 14px; gap: 22px; overflow-y: auto;">
+      <div class="col" style="gap: 8px;">
+        <span class="label-caps" style="padding: 0 6px;">Conversations</span>
+        <sc-for list="{{conversations}}" as="conv" hint-placeholder-count="3">
+          <div class="row hoverable" onClick="{{conv.pick}}" style="{{conv.rowStyle}}; align-items: center; gap: 8px; padding: 8px 8px; border-radius: 7px;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="{{conv.iconColor}}" stroke-width="1.8"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+            <span style="font-size: 13px; {{conv.textStyle}}">{{conv.title}}</span>
+          </div>
+        </sc-for>
+        <div class="row hoverable" style="align-items: center; gap: 8px; padding: 8px 8px; border-radius: 7px; color: #8a90a3;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8a90a3" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          <span style="font-size: 13px;">Nouvelle conversation</span>
+        </div>
+      </div>
+
+      <div style="height: 1px; background: #e3e5ec;"></div>
+
+      <div class="col" style="gap: 8px;">
+        <span class="label-caps" style="padding: 0 6px;">Skills chargées</span>
+        <sc-for list="{{skills}}" as="skill" hint-placeholder-count="4">
+          <div class="row" style="align-items: center; gap: 8px; padding: 7px 8px; border: 1px solid #eceef4; border-radius: 7px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="{{aiAccent}}" stroke-width="2"><path d="M12 3l1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2z"/></svg>
+            <span style="font-size: 12.5px;">{{skill.name}}</span>
+          </div>
+        </sc-for>
+        <div class="row hoverable" style="align-items: center; gap: 8px; padding: 7px 8px; border: 1px dashed #d3d6e0; border-radius: 7px; color: #8a90a3;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8a90a3" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          <span style="font-size: 12.5px;">Ajouter une skill</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Center -->
+    <div class="col" style="flex: 1; min-width: 0; background: #f3f4f8;">
+
+      <!-- Stepper -->
+      <div class="row" style="align-items: center; padding: 16px 32px; background: #ffffff; border-bottom: 1px solid #e3e5ec; gap: 0;">
+        <sc-for list="{{steps}}" as="step" hint-placeholder-count="4">
+          <div class="row" style="align-items: center; flex: 1;">
+            <div class="row hoverable" onClick="{{step.pick}}" style="align-items: center; gap: 8px; padding: 4px 6px; border-radius: 7px;">
+              <div style="{{step.circleStyle}}; width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600;">
+                <sc-if value="{{step.isDone}}" hint-placeholder-val="{{false}}">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3"><path d="M5 12l5 5L20 7"/></svg>
+                </sc-if>
+                <sc-if value="{{step.showNum}}" hint-placeholder-val="{{true}}">
+                  <span>{{step.num}}</span>
+                </sc-if>
+              </div>
+              <span style="{{step.labelStyle}}; font-size: 13px;">{{step.label}}</span>
+            </div>
+            <sc-if value="{{step.hasLine}}" hint-placeholder-val="{{true}}">
+              <div style="flex: 1; height: 2px; background: {{step.lineColor}}; margin: 0 10px;"></div>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+
+      <!-- Conversation area -->
+      <div class="col" style="flex: 1; padding: 24px 32px; gap: 14px; overflow-y: auto;">
+
+        <sc-if value="{{suggestionVisible}}" hint-placeholder-val="{{true}}">
+          <div class="col" style="background: #f1eefc; border-radius: 10px; padding: 16px 18px; gap: 10px;">
+            <div class="row" style="align-items: center; gap: 8px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="{{aiAccent}}" stroke-width="2"><path d="M12 3l1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2z"/></svg>
+              <span style="font-size: 12.5px; font-weight: 600; color: {{aiAccent}};">Suggestion de départ</span>
+            </div>
+            <p style="margin: 0; font-size: 13.5px; line-height: 1.5;">Pour ce projet, je propose de commencer par identifier les missions OCTO déjà réalisées pour un client similaire à Acme Corp — ça nourrira la partie "références" de la réponse. On y va ?</p>
+            <div class="row" style="gap: 10px;">
+              <div class="hoverable" onClick="{{acceptSuggestion}}" style="font-size: 12.5px; font-weight: 600; color: #ffffff; background: {{aiAccent}}; padding: 7px 14px; border-radius: 7px;">Oui, commençons</div>
+              <div class="hoverable" onClick="{{dismissSuggestion}}" style="font-size: 12.5px; font-weight: 500; color: #5a5f72; padding: 7px 14px; border-radius: 7px;">Plus tard</div>
+            </div>
+          </div>
+        </sc-if>
+
+        <div class="row" style="justify-content: flex-end;">
+          <div style="max-width: 60%; background: #dfe2ee; border-radius: 12px 12px 2px 12px; padding: 10px 14px; font-size: 13.5px; line-height: 1.45;">On a déjà répondu à un appel d'offres proche de celui-ci chez un acteur bancaire ?</div>
+        </div>
+        <div class="row" style="justify-content: flex-start;">
+          <div style="max-width: 62%; background: #ffffff; border: 1px solid #e3e5ec; border-radius: 12px 12px 12px 2px; padding: 10px 14px; font-size: 13.5px; line-height: 1.45;">Oui — deux missions similaires en 2025 pour des acteurs du secteur financier. Je vous prépare une synthèse des approches et des consultants impliqués.</div>
+        </div>
+      </div>
+
+      <!-- Composer -->
+      <div class="row" style="align-items: center; gap: 12px; padding: 16px 32px; background: #ffffff; border-top: 1px solid #e3e5ec; position: relative;">
+        <div style="flex: 1; padding: 10px 14px; border: 1px solid #e3e5ec; border-radius: 9px; font-size: 13.5px; color: #a3a7b8;">Écrivez à l'IA…</div>
+
+        <div style="position: relative;">
+          <div class="row hoverable" onClick="{{toggleModel}}" style="align-items: center; gap: 6px; padding: 9px 12px; border: 1px solid #e3e5ec; border-radius: 9px; font-size: 12.5px; font-weight: 500;">
+            <span>{{selectedModel}}</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8a90a3" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+          <sc-if value="{{modelOpen}}" hint-placeholder-val="{{false}}">
+            <div class="col" style="position: absolute; bottom: 44px; right: 0; background: #ffffff; border: 1px solid #e3e5ec; border-radius: 9px; box-shadow: 0 6px 18px rgba(20,22,40,0.12); min-width: 150px; padding: 6px; gap: 2px;">
+              <sc-for list="{{models}}" as="m" hint-placeholder-count="3">
+                <div class="hoverable" onClick="{{m.pick}}" style="{{m.rowStyle}}; padding: 8px 10px; border-radius: 6px; font-size: 12.5px;">{{m.name}}</div>
+              </sc-for>
+            </div>
+          </sc-if>
+        </div>
+
+        <div class="hoverable" style="width: 36px; height: 36px; border-radius: 9px; background: {{accent}}; display: flex; align-items: center; justify-content: center;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4z"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right sidebar -->
+    <div class="col" style="width: 300px; min-width: 300px; background: #ffffff; border-left: 1px solid #e3e5ec; padding: 20px 16px; gap: 22px; overflow-y: auto;">
+
+      <div class="col" style="gap: 8px;">
+        <span class="label-caps">Contexte</span>
+        <sc-for list="{{contextDocs}}" as="doc" hint-placeholder-count="3">
+          <div class="row" style="align-items: center; gap: 8px; padding: 6px 4px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8a90a3" stroke-width="1.8"><path d="M6 2h9l5 5v13a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2z"/><path d="M15 2v5h5"/></svg>
+            <span style="font-size: 12.5px;">{{doc.name}}</span>
+          </div>
+        </sc-for>
+        <span style="font-size: 11px; color: #a3a7b8;">Depuis le drive du projet Octopod</span>
+      </div>
+
+      <div style="height: 1px; background: #e3e5ec;"></div>
+
+      <div class="col" style="gap: 8px;">
+        <span class="label-caps">Livrables</span>
+        <sc-for list="{{livrables}}" as="doc" hint-placeholder-count="2">
+          <div class="row hoverable" style="align-items: center; justify-content: space-between; gap: 8px; padding: 8px 8px; border: 1px solid #eceef4; border-radius: 8px;">
+            <div class="row" style="align-items: center; gap: 8px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="{{aiAccent}}" stroke-width="1.8"><path d="M6 2h9l5 5v13a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2z"/><path d="M15 2v5h5"/></svg>
+              <span style="font-size: 12.5px;">{{doc.name}}</span>
+            </div>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8a90a3" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </div>
+        </sc-for>
+        <span style="font-size: 11px; color: #a3a7b8;">Ouvre l'éditeur assisté (écran ci-contre)</span>
+      </div>
+
+      <div style="height: 1px; background: #e3e5ec;"></div>
+
+      <div class="col" style="gap: 8px;">
+        <span class="label-caps">Mattermost</span>
+        <div class="col" style="border: 1px solid #eceef4; border-radius: 8px; padding: 10px; gap: 6px;">
+          <div class="row" style="align-items: center; gap: 6px;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#5a5f72" stroke-width="2"><path d="M4 9h16M4 15h16M10 3L8 21M16 3l-2 18"/></svg>
+            <span style="font-size: 12.5px; font-weight: 600;">rfp-acme-corp</span>
+          </div>
+          <p style="margin: 0; font-size: 12px; color: #6b7280; line-height: 1.4;">"Le client confirme le go pour vendredi, on a jusqu'au 22 pour déposer."</p>
+          <div class="row hoverable" style="align-items: center; gap: 6px; margin-top: 2px;">
+            <span style="font-size: 12px; font-weight: 600; color: {{accent}};">Ouvrir dans Mattermost</span>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="{{accent}}" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#3E4C7C","options":["#3E4C7C","#2F5D62","#5B4B8A","#1F2937"]},"aiAccent":{"editor":"color","default":"#7C5CFC","options":["#7C5CFC","#8A5CF6","#B45309","#0E7490"]}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      activeStep: 1,
+      activeConv: 0,
+      modelOpen: false,
+      selectedModel: 'Sonnet 5',
+      suggestionVisible: true,
+    };
+  }
+
+  renderVals() {
+    const accent = this.props.accent ?? '#3E4C7C';
+    const aiAccent = this.props.aiAccent ?? '#7C5CFC';
+    const stepLabels = ['Qualification', 'Références', 'Experts', 'Rédaction'];
+    const activeStep = this.state.activeStep;
+
+    const steps = stepLabels.map((label, i) => {
+      const isActive = i === activeStep;
+      const isDone = i < activeStep;
+      return {
+        label,
+        num: i + 1,
+        isDone,
+        showNum: !isDone,
+        hasLine: i < stepLabels.length - 1,
+        lineColor: i < activeStep ? accent : '#e3e5ec',
+        circleStyle: isDone
+          ? `background:${accent}; color:#fff;`
+          : (isActive ? `background:${accent}; color:#fff;` : `background:#eceef4; color:#8a90a3;`),
+        labelStyle: isActive ? `font-weight:600; color:#1c2030;` : `font-weight:500; color:#8a90a3;`,
+        pick: () => this.setState({ activeStep: i }),
+      };
+    });
+
+    const convData = [
+      { title: 'Atelier du Codir — 17/05' },
+      { title: 'Qualification RFP — Acme Corp' },
+      { title: 'Recherche références Fintech' },
+    ];
+    const conversations = convData.map((c, i) => {
+      const isActive = i === this.state.activeConv;
+      return {
+        title: c.title,
+        rowStyle: isActive ? `background:#eef0f8;` : `background:transparent;`,
+        textStyle: isActive ? `font-weight:600;` : `font-weight:400; color:#3a3f52;`,
+        iconColor: isActive ? accent : '#a3a7b8',
+        pick: () => this.setState({ activeConv: i }),
+      };
+    });
+
+    const skills = [
+      { name: 'Qualification OCTO' },
+      { name: 'Recherche de références' },
+      { name: 'Identification experts' },
+      { name: 'Rédaction avant-vente' },
+    ];
+
+    const contextDocs = [
+      { name: 'RFP — Acme Corp.pdf' },
+      { name: 'CR call achats.docx' },
+      { name: 'Note de synthèse client.pdf' },
+    ];
+
+    const livrables = [
+      { name: 'Réponse RFP — v1.docx' },
+      { name: 'Executive summary.docx' },
+    ];
+
+    const modelNames = ['Sonnet 5', 'Opus 5', 'Haiku 4.5'];
+    const models = modelNames.map((name) => ({
+      name,
+      rowStyle: name === this.state.selectedModel ? `background:#eef0f8; font-weight:600;` : ``,
+      pick: () => this.setState({ selectedModel: name, modelOpen: false }),
+    }));
+
+    return {
+      accent,
+      aiAccent,
+      steps,
+      conversations,
+      skills,
+      contextDocs,
+      livrables,
+      models,
+      modelOpen: this.state.modelOpen,
+      selectedModel: this.state.selectedModel,
+      toggleModel: () => this.setState({ modelOpen: !this.state.modelOpen }),
+      suggestionVisible: this.state.suggestionVisible,
+      dismissSuggestion: () => this.setState({ suggestionVisible: false }),
+      acceptSuggestion: () => this.setState({ suggestionVisible: false, activeStep: 1 }),
+    };
+  }
+}
+</script>
+</body>
+</html>

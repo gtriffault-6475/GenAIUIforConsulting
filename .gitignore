@@ -1,0 +1,6 @@
+.DS_Store
+
+# Generated/seeded design-canvas bundles (build output of seed-canvas.mjs,
+# ~2MB minified editor payload) — regenerate from the .dc.html sources
+# instead of diffing this; the live version is the published Artifact.
+mockups/**/*-mockup.html
