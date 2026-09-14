@@ -1,7 +1,51 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
 .DS_Store
+*.pem
 .claude/settings.local.json
 
 # Generated/seeded design-canvas bundles (build output of seed-canvas.mjs,
 # ~2MB minified editor payload) — regenerate from the .dc.html sources
 # instead of diffing this; the live version is the published Artifact.
 mockups/**/*-mockup.html
+
+# local sqlite database file (round 1, mono-poste)
+*.db
+*.db-journal
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
