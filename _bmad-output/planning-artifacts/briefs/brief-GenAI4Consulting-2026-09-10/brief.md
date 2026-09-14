@@ -1,22 +1,15 @@
 ---
 title: "Product Brief: GenAI4Consulting"
-status: draft
+status: final
 created: 2026-09-10
-updated: 2026-09-10
+updated: 2026-09-11
 ---
 
 # Product Brief: GenAI4Consulting
 
 ## Executive Summary
 
-Chez OCTO, moins de la moitié des consultants utilisent aujourd'hui l'IA de façon structurée — avec des skills, des agents et une réutilisation d'un projet à l'autre. Ceux qui le font progressent individuellement ; le cabinet, lui, ne capitalise pas collectivement dessus. Pendant ce temps, l'écart se creuse au niveau du marché : les grands cabinets de conseil ont déjà déployé des plateformes d'agents IA à l'échelle du cabinet [ASSUMPTION: chiffres tirés de sources publiques récentes, à vérifier avant tout usage externe] :
-
-- **McKinsey (Lilli)** — 40 000+ consultants, ~20 000 agents IA, 30 % de temps gagné sur la recherche et la synthèse.
-- **Deloitte (Sidekick/Zora)** — 75 000 postes.
-- **Accenture (AI Refinery)** — 85 000+ professionnels IA & data.
-- **PwC (ChatPwC)** — 200 000 postes, le plus grand déploiement GenAI d'entreprise du secteur.
-
-Ce n'est plus une hypothèse : c'est déjà la référence que les clients commencent à connaître.
+Chez OCTO, moins de la moitié des consultants utilisent aujourd'hui l'IA de façon structurée — avec des skills, des agents et une réutilisation d'un projet à l'autre. Ceux qui le font progressent individuellement ; le cabinet, lui, ne capitalise pas collectivement dessus. Pendant ce temps, l'écart se creuse au niveau du marché : plusieurs grands cabinets de conseil ont déjà déployé leurs propres plateformes d'agents IA à l'échelle du cabinet, avec des gains de productivité documentés sur les tâches de recherche et de rédaction (détail et sources dans l'addendum). Ce n'est plus une hypothèse : c'est déjà la référence que les clients commencent à connaître.
 
 GenAI4Consulting est un **prototype exploratoire**, pas un projet à l'échelle de ces plateformes. L'idée : une interface de travail agentique qui se branche sur l'existant OCTO — Octopod, le drive, Mattermost — plutôt que de le remplacer. Dès le round 1, elle combine trois briques : un espace multi-agents, un éditeur assisté par IA et un orchestrateur de workflow. Elle est testée sur deux cas d'usage qui suivent le même schéma : les réponses avant-vente aux appels d'offres et les livrables de mission hors code.
 
@@ -81,4 +74,4 @@ Le détail complet du scénario avant-vente est décrit dans l'addendum.
 
 ## Vision
 
-Si le round 1 valide l'idée, le projet a vocation à grossir au-delà de ces deux cas d'usage initiaux — vers plus de cas d'usage, une intégration plus profonde à l'écosystème d'outils OCTO, et potentiellement une offre présentée aux clients eux-mêmes [ASSUMPTION: cette dernière piste (offre client) reste à confirmer et à cadrer — elle a été évoquée sans être approfondie]. Le calendrier et l'ampleur de cette croissance ne sont pas encore définis.
+Si le round 1 valide l'idée, le projet a vocation à grossir au-delà de ces deux cas d'usage initiaux — vers plus de cas d'usage et une intégration plus profonde à l'écosystème d'outils OCTO. Le calendrier et l'ampleur de cette croissance ne sont pas encore définis.

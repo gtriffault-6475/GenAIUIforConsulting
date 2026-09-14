@@ -1,0 +1,336 @@
+<title>GenAI4Consulting C4</title>
+<style>
+  :root {
+    --bg: #F3F4F8;
+    --surface: #FFFFFF;
+    --surface-2: #FAFAFC;
+    --border: #D7DAE3;
+    --text: #1C2030;
+    --text-2: #5A5F72;
+    --text-3: #8A90A3;
+    --accent: #3E4C7C;
+    --accent-soft: #E7EAF3;
+    --deferred: #A3763C;
+    --deferred-soft: #F3E9DA;
+  }
+  :root:not([data-theme="light"]) {
+    @media (prefers-color-scheme: dark) {
+      --bg: #15171F;
+      --surface: #1D2029;
+      --surface-2: #1A1D25;
+      --border: #333748;
+      --text: #EDEFF5;
+      --text-2: #A6ABBE;
+      --text-3: #767C90;
+      --accent: #8FA3D9;
+      --accent-soft: #262C42;
+      --deferred: #D6A868;
+      --deferred-soft: #332A1C;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #15171F;
+    --surface: #1D2029;
+    --surface-2: #1A1D25;
+    --border: #333748;
+    --text: #EDEFF5;
+    --text-2: #A6ABBE;
+    --text-3: #767C90;
+    --accent: #8FA3D9;
+    --accent-soft: #262C42;
+    --deferred: #D6A868;
+    --deferred-soft: #332A1C;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+  }
+  code, .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+
+  .page { max-width: 980px; margin: 0 auto; padding: 48px 32px 80px; }
+
+  header h1 {
+    font-size: 26px;
+    font-weight: 600;
+    margin: 0 0 6px;
+    text-wrap: balance;
+  }
+  header p {
+    color: var(--text-2);
+    font-size: 14.5px;
+    line-height: 1.6;
+    margin: 0 0 8px;
+    max-width: 62ch;
+  }
+  header .meta {
+    color: var(--text-3);
+    font-size: 12.5px;
+  }
+
+  .legend {
+    display: flex;
+    gap: 24px;
+    align-items: center;
+    margin: 28px 0 40px;
+    padding: 12px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 12.5px;
+    color: var(--text-2);
+  }
+  .legend-item { display: flex; align-items: center; gap: 8px; }
+  .legend-line { width: 28px; height: 0; border-top: 2px solid var(--accent); }
+  .legend-line.deferred { border-top: 2px dashed var(--deferred); }
+
+  section.level {
+    margin-bottom: 56px;
+  }
+  section.level h2 {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-3);
+    margin: 0 0 4px;
+  }
+  section.level h3 {
+    font-size: 19px;
+    font-weight: 600;
+    margin: 0 0 10px;
+  }
+  section.level .note {
+    font-size: 13.5px;
+    color: var(--text-2);
+    line-height: 1.6;
+    margin: 0 0 18px;
+    max-width: 68ch;
+  }
+  section.level .note code { font-size: 12.5px; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; border: 1px solid var(--border); }
+
+  figure { margin: 0; }
+  figure .diagram-frame {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    overflow-x: auto;
+  }
+  svg { display: block; width: 100%; height: auto; }
+  figcaption {
+    margin-top: 10px;
+    font-size: 12.5px;
+    color: var(--text-3);
+  }
+
+  .src { fill: var(--text); font-family: "IBM Plex Sans", system-ui, sans-serif; }
+  .src-mono { fill: var(--text); font-family: "IBM Plex Mono", ui-monospace, monospace; }
+  .src-sub { fill: var(--text-2); font-family: "IBM Plex Sans", system-ui, sans-serif; }
+  .src-label { fill: var(--text-2); font-family: "IBM Plex Sans", system-ui, sans-serif; }
+</style>
+
+<div class="page">
+  <header>
+    <h1>GenAI4Consulting — C4</h1>
+    <p>Contexte, conteneurs et composants de la spine d'architecture round 1 — solide où c'est construit maintenant, pointillé où c'est différé (adaptateurs réels Octopod/drive/Mattermost).</p>
+    <p class="meta mono">Source : ARCHITECTURE-SPINE.md · 2026-09-14</p>
+  </header>
+
+  <div class="legend">
+    <div class="legend-item"><span class="legend-line"></span> construit round 1</div>
+    <div class="legend-item"><span class="legend-line deferred"></span> mocké / différé</div>
+  </div>
+
+  <section class="level">
+    <h2>Niveau 1</h2>
+    <h3>Contexte système</h3>
+    <p class="note">Le consultant est seul utilisateur round 1 (mono-poste, mono-utilisateur). Le système appelle réellement l'API Anthropic ; Octopod, le drive et Mattermost sont simulés derrière la frontière posée par <code>AD-1</code>.</p>
+    <figure>
+      <div class="diagram-frame">
+        <svg viewBox="0 0 900 300" role="img" aria-label="Le consultant utilise GenAI4Consulting, qui appelle réellement l'API Anthropic et simule Octopod, le drive et Mattermost pour le round 1.">
+          <defs>
+            <marker id="c1-arrow" markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto"><polygon points="0,0 8,3.5 0,7" fill="currentColor" /></marker>
+            <marker id="c1-arrow-d" markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto"><polygon points="0,0 8,3.5 0,7" fill="var(--deferred)" /></marker>
+          </defs>
+
+          <!-- actor -->
+          <g transform="translate(70,110)" class="src">
+            <circle cx="30" cy="18" r="14" fill="none" stroke="currentColor" stroke-width="2" />
+            <path d="M8 78 Q8 44 30 44 Q52 44 52 78" fill="none" stroke="currentColor" stroke-width="2" />
+            <text x="30" y="104" text-anchor="middle" font-size="13" font-weight="600">Consultant</text>
+            <text x="30" y="120" text-anchor="middle" font-size="11" class="src-sub">porteur du projet</text>
+          </g>
+
+          <!-- system -->
+          <rect x="300" y="90" width="220" height="100" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2" />
+          <text x="410" y="130" text-anchor="middle" font-size="15" font-weight="600" class="src">GenAI4Consulting</text>
+          <text x="410" y="150" text-anchor="middle" font-size="11.5" class="src-sub">app Next.js locale</text>
+          <text x="410" y="166" text-anchor="middle" font-size="11.5" class="src-sub">(localhost, round 1)</text>
+
+          <!-- anthropic -->
+          <rect x="640" y="30" width="220" height="80" rx="8" fill="var(--surface-2)" stroke="var(--accent)" stroke-width="2" />
+          <text x="750" y="62" text-anchor="middle" font-size="13.5" font-weight="600" class="src">API Anthropic</text>
+          <text x="750" y="80" text-anchor="middle" font-size="11" class="src-sub">Messages API + tool use</text>
+
+          <!-- octo -->
+          <rect x="640" y="180" width="220" height="90" rx="8" fill="var(--deferred-soft)" stroke="var(--deferred)" stroke-width="2" stroke-dasharray="6 5" />
+          <text x="750" y="208" text-anchor="middle" font-size="13" font-weight="600" class="src">Octopod · Drive · Mattermost</text>
+          <text x="750" y="228" text-anchor="middle" font-size="11" class="src-sub">simulés round 1 (AD-1)</text>
+          <text x="750" y="244" text-anchor="middle" font-size="11" class="src-sub">réel différé</text>
+
+          <!-- arrows -->
+          <line x1="160" y1="140" x2="292" y2="140" stroke="currentColor" stroke-width="1.6" marker-end="url(#c1-arrow)" class="src" />
+          <text x="225" y="130" text-anchor="middle" font-size="11" class="src-label">utilise</text>
+
+          <path d="M520 125 L 636 70" fill="none" stroke="currentColor" stroke-width="1.6" marker-end="url(#c1-arrow)" class="src" />
+          <text x="595" y="90" text-anchor="middle" font-size="11" class="src-label">appelle</text>
+
+          <path d="M520 160 L 636 220" fill="none" stroke="var(--deferred)" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#c1-arrow-d)" />
+          <text x="600" y="205" text-anchor="middle" font-size="11" fill="var(--deferred)">port Mock</text>
+        </svg>
+      </div>
+      <figcaption>Niveau 1 — un seul utilisateur, un système, une dépendance réelle et trois dépendances simulées.</figcaption>
+    </figure>
+  </section>
+
+  <section class="level">
+    <h2>Niveau 2</h2>
+    <h3>Conteneurs</h3>
+    <p class="note">Un seul process (<code>Next.js</code>) porte l'UI et les Server Actions ; <code>node:sqlite</code> est un fichier local, pas un service à démarrer. C'est ce qui rend l'installation "très simple" — contrainte posée par l'utilisateur.</p>
+    <figure>
+      <div class="diagram-frame">
+        <svg viewBox="0 0 940 360" role="img" aria-label="Le navigateur du consultant charge l'app Next.js, qui lit et écrit dans SQLite en local, appelle l'API Anthropic, et parle à des adaptateurs mock pour Octopod/drive/Mattermost.">
+          <defs>
+            <marker id="c2-arrow" markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto"><polygon points="0,0 8,3.5 0,7" fill="currentColor" /></marker>
+            <marker id="c2-arrow-d" markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto"><polygon points="0,0 8,3.5 0,7" fill="var(--deferred)" /></marker>
+          </defs>
+
+          <!-- boundary -->
+          <rect x="40" y="40" width="480" height="280" rx="10" fill="none" stroke="var(--text-3)" stroke-width="1.4" stroke-dasharray="3 4" />
+          <text x="56" y="62" font-size="11" class="src-sub">système GenAI4Consulting</text>
+
+          <!-- actor -->
+          <g transform="translate(-30,150)" class="src">
+            <circle cx="30" cy="14" r="11" fill="none" stroke="currentColor" stroke-width="2" />
+            <path d="M12 62 Q12 36 30 36 Q48 36 48 62" fill="none" stroke="currentColor" stroke-width="2" />
+            <text x="30" y="82" text-anchor="middle" font-size="12" font-weight="600">Consultant</text>
+          </g>
+
+          <!-- nextjs -->
+          <rect x="80" y="90" width="220" height="100" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2" />
+          <text x="190" y="122" text-anchor="middle" font-size="14" font-weight="600" class="src">App Next.js</text>
+          <text x="190" y="142" text-anchor="middle" font-size="11" class="src-sub">App Router — UI +</text>
+          <text x="190" y="157" text-anchor="middle" font-size="11" class="src-sub">Server Actions, 1 process</text>
+          <text x="190" y="175" text-anchor="middle" font-size="10.5" class="src-sub mono">Next.js 16 · React 19</text>
+
+          <!-- sqlite -->
+          <rect x="80" y="230" width="220" height="70" rx="8" fill="var(--surface-2)" stroke="var(--accent)" stroke-width="2" />
+          <text x="190" y="258" text-anchor="middle" font-size="13" font-weight="600" class="src">SQLite</text>
+          <text x="190" y="276" text-anchor="middle" font-size="10.5" class="src-sub mono">Drizzle + node:sqlite</text>
+          <text x="190" y="291" text-anchor="middle" font-size="10.5" class="src-sub">fichier local, zéro service</text>
+
+          <!-- anthropic -->
+          <rect x="640" y="50" width="240" height="80" rx="8" fill="var(--surface-2)" stroke="var(--accent)" stroke-width="2" />
+          <text x="760" y="82" text-anchor="middle" font-size="13.5" font-weight="600" class="src">API Anthropic</text>
+          <text x="760" y="100" text-anchor="middle" font-size="11" class="src-sub">Messages API + tool use</text>
+
+          <!-- octo -->
+          <rect x="640" y="220" width="240" height="90" rx="8" fill="var(--deferred-soft)" stroke="var(--deferred)" stroke-width="2" stroke-dasharray="6 5" />
+          <text x="760" y="248" text-anchor="middle" font-size="13" font-weight="600" class="src">Octopod · Drive · Mattermost</text>
+          <text x="760" y="266" text-anchor="middle" font-size="11" class="src-sub">réel — différé</text>
+          <text x="760" y="282" text-anchor="middle" font-size="11" class="src-sub">round 1 = adaptateurs mock</text>
+
+          <!-- arrows -->
+          <line x1="30" y1="140" x2="78" y2="140" stroke="currentColor" stroke-width="1.6" marker-end="url(#c2-arrow)" class="src" />
+          <text x="20" y="120" text-anchor="middle" font-size="10.5" class="src-label">navigateur</text>
+
+          <line x1="190" y1="190" x2="190" y2="228" stroke="currentColor" stroke-width="1.6" marker-end="url(#c2-arrow)" class="src" />
+          <text x="245" y="212" text-anchor="middle" font-size="10.5" class="src-label">lit/écrit</text>
+
+          <path d="M300 120 L 636 90" fill="none" stroke="currentColor" stroke-width="1.6" marker-end="url(#c2-arrow)" class="src" />
+          <text x="470" y="90" text-anchor="middle" font-size="11" class="src-label">Messages API</text>
+
+          <path d="M300 170 L 636 260" fill="none" stroke="var(--deferred)" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#c2-arrow-d)" />
+          <text x="470" y="245" text-anchor="middle" font-size="11" fill="var(--deferred)">ports (AD-1, mock)</text>
+        </svg>
+      </div>
+      <figcaption>Niveau 2 — un process, un fichier de données, aucune infrastructure à provisionner.</figcaption>
+    </figure>
+  </section>
+
+  <section class="level">
+    <h2>Niveau 3</h2>
+    <h3>Composants — à l'intérieur de l'app Next.js</h3>
+    <p class="note">Sens des dépendances imposé par <code>AD-2</code> (mutation uniquement par <code>actions/</code>) et <code>AD-5</code> (<code>domain/</code> ne dépend de rien) : suivre les flèches, jamais dans l'autre sens.</p>
+    <figure>
+      <div class="diagram-frame">
+        <svg viewBox="0 0 900 460" role="img" aria-label="app/ appelle actions/, qui appelle domain/, integrations/ports, skills/ et db/. integrations/mock implémente integrations/ports en pointillé.">
+          <defs>
+            <marker id="c3-arrow" markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto"><polygon points="0,0 8,3.5 0,7" fill="currentColor" /></marker>
+            <marker id="c3-arrow-d" markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto"><polygon points="0,0 8,3.5 0,7" fill="var(--deferred)" /></marker>
+          </defs>
+
+          <!-- app/ -->
+          <rect x="60" y="20" width="200" height="64" rx="7" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2" />
+          <text x="160" y="47" text-anchor="middle" font-size="13.5" font-weight="600" class="src-mono">app/</text>
+          <text x="160" y="65" text-anchor="middle" font-size="10.5" class="src-sub">routes, composants UI</text>
+
+          <!-- actions/ -->
+          <rect x="30" y="140" width="360" height="96" rx="7" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2" />
+          <text x="210" y="163" text-anchor="middle" font-size="13.5" font-weight="600" class="src-mono">actions/</text>
+          <text x="210" y="180" text-anchor="middle" font-size="10.5" class="src-sub">Server Actions — seul point de mutation (AD-2)</text>
+          <text x="210" y="200" text-anchor="middle" font-size="10.5" class="src-sub mono">project · conversation · livrable · suggestion</text>
+          <text x="210" y="218" text-anchor="middle" font-size="10.5" class="src-sub">document</text>
+
+          <!-- domain/ -->
+          <rect x="30" y="330" width="180" height="80" rx="7" fill="var(--surface-2)" stroke="var(--accent)" stroke-width="2" />
+          <text x="120" y="358" text-anchor="middle" font-size="13" font-weight="600" class="src-mono">domain/</text>
+          <text x="120" y="376" text-anchor="middle" font-size="10.5" class="src-sub">règles pures (AD-5)</text>
+          <text x="120" y="392" text-anchor="middle" font-size="10.5" class="src-sub">sans I/O — un puits</text>
+
+          <!-- skills/ -->
+          <rect x="250" y="330" width="180" height="80" rx="7" fill="var(--surface-2)" stroke="var(--accent)" stroke-width="2" />
+          <text x="340" y="354" text-anchor="middle" font-size="13" font-weight="600" class="src-mono">skills/</text>
+          <text x="340" y="372" text-anchor="middle" font-size="10.5" class="src-sub mono">catalog.ts</text>
+          <text x="340" y="388" text-anchor="middle" font-size="10.5" class="src-sub mono">buildRequest.ts (AD-11)</text>
+
+          <!-- integrations/ports -->
+          <rect x="470" y="140" width="200" height="70" rx="7" fill="var(--surface-2)" stroke="var(--accent)" stroke-width="2" />
+          <text x="570" y="164" text-anchor="middle" font-size="12.5" font-weight="600" class="src-mono">integrations/ports</text>
+          <text x="570" y="182" text-anchor="middle" font-size="10.5" class="src-sub">interfaces (AD-1)</text>
+          <text x="570" y="198" text-anchor="middle" font-size="9.5" class="src-sub mono">Project·Drive·Mattermost</text>
+
+          <!-- integrations/mock -->
+          <rect x="470" y="330" width="200" height="70" rx="7" fill="var(--deferred-soft)" stroke="var(--deferred)" stroke-width="2" stroke-dasharray="6 5" />
+          <text x="570" y="354" text-anchor="middle" font-size="12.5" font-weight="600" class="src-mono">integrations/mock</text>
+          <text x="570" y="372" text-anchor="middle" font-size="10.5" class="src-sub">round 1 — réel différé</text>
+
+          <!-- db/ -->
+          <rect x="720" y="140" width="150" height="70" rx="7" fill="var(--surface-2)" stroke="var(--accent)" stroke-width="2" />
+          <text x="795" y="168" text-anchor="middle" font-size="13" font-weight="600" class="src-mono">db/</text>
+          <text x="795" y="186" text-anchor="middle" font-size="10.5" class="src-sub">schéma Drizzle</text>
+          <text x="795" y="200" text-anchor="middle" font-size="10.5" class="src-sub">+ client SQLite</text>
+
+          <!-- arrows -->
+          <line x1="160" y1="84" x2="160" y2="138" stroke="currentColor" stroke-width="1.6" marker-end="url(#c3-arrow)" class="src" />
+
+          <line x1="120" y1="236" x2="120" y2="328" stroke="currentColor" stroke-width="1.6" marker-end="url(#c3-arrow)" class="src" />
+
+          <path d="M280 236 L 320 328" fill="none" stroke="currentColor" stroke-width="1.6" marker-end="url(#c3-arrow)" class="src" />
+
+          <path d="M390 190 L 468 178" fill="none" stroke="currentColor" stroke-width="1.6" marker-end="url(#c3-arrow)" class="src" />
+
+          <path d="M390 165 L 718 172" fill="none" stroke="currentColor" stroke-width="1.6" marker-end="url(#c3-arrow)" class="src" />
+
+          <line x1="570" y1="330" x2="570" y2="212" stroke="var(--deferred)" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#c3-arrow-d)" />
+          <text x="610" y="272" text-anchor="middle" font-size="10.5" fill="var(--deferred)">implémente</text>
+        </svg>
+      </div>
+      <figcaption>Niveau 3 — <code>domain/</code> ne renvoie aucune flèche : c'est le puits que garantit AD-5.</figcaption>
+    </figure>
+  </section>
+</div>
