@@ -241,3 +241,55 @@ a {
 .project-selector-error {
   margin: var(--space-2) 0 0;
 }
+
+/* Story 1.4 — first text-field tokens the app needs (name/folder/content
+   inputs of the add-document form). `{rounded.sm}` per DESIGN.md ("rounded.sm
+   pour les boutons et champs"). */
+input[type='text'],
+textarea {
+  display: block;
+  width: 100%;
+  font-family: var(--font-body);
+  font-size: var(--text-body-size);
+  font-weight: var(--text-body-weight);
+  line-height: var(--text-body-line-height);
+  color: var(--color-text-primary);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+}
+
+input[type='text']:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+input[type='text']:disabled,
+textarea:disabled {
+  opacity: 0.6;
+}
+
+textarea {
+  resize: vertical;
+  min-height: 96px;
+}
+
+.context-panel {
+  position: relative;
+}
+
+.add-document-dropdown {
+  /* Spans the full card (edge-to-edge, `-var(--space-panel-padding)` on
+     each side) rather than just the header's inset content width —
+     anchoring to the narrower header left the card's own padding and
+     rounded corner visible as a frame around the dropdown. */
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  left: calc(-1 * var(--space-panel-padding));
+  right: calc(-1 * var(--space-panel-padding));
+  z-index: 10;
+  padding: var(--space-3);
+  box-shadow: var(--elevation-dropdown);
+}

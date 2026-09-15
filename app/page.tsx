@@ -62,7 +62,7 @@ export default async function Home() {
         <span className="text-heading">{activeProject.name}</span>
       </header>
       <div style={{ padding: 'var(--space-gutter)' }}>
-        <ContextPanel documents={documents} />
+        <ContextPanel projectId={activeProject.id} documents={documents} />
       </div>
     </div>
   );

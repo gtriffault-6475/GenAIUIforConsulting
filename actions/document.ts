@@ -76,3 +76,65 @@ export async function listDocuments(
     };
   }
 }
+
+// Story 1.4 — Ajout d'un document hors-drive. A manually-added document is
+// NOT Octopod data (AD-1): it never goes through `DriveProvider` or any
+// `integrations/*` adapter — this Server Action writes the `DOCUMENT` row
+// directly, the same table `listDocuments` reads from, so the new row is
+// visible immediately without any resync. The client (`AddDocumentForm`)
+// already blocks empty name/content before ever calling this action; the
+// checks below are a second line of defense so this function never trusts
+// its caller and never throws an uncaught exception to the UI.
+export async function addManualDocument({
+  projectId,
+  name,
+  folderPath,
+  content,
+}: {
+  projectId: string;
+  name: string;
+  folderPath: string | null;
+  content: string;
+}): Promise<ActionResult<DocumentSummary>> {
+  const trimmedName = name.trim();
+  const trimmedContent = content.trim();
+  const trimmedFolderPath = folderPath?.trim() || null;
+
+  if (!trimmedName || !trimmedContent) {
+    return {
+      ok: false,
+      error: 'Le nom et le contenu sont obligatoires.',
+    };
+  }
+
+  try {
+    const id = crypto.randomUUID();
+
+    db.insert(document)
+      .values({
+        id,
+        projectId,
+        name: trimmedName,
+        source: 'manual',
+        folderPath: trimmedFolderPath,
+        content: trimmedContent,
+      })
+      .run();
+
+    return {
+      ok: true,
+      data: {
+        id,
+        name: trimmedName,
+        source: 'manual',
+        folderPath: trimmedFolderPath,
+      },
+    };
+  } catch (error) {
+    console.error('addManualDocument failed', error);
+    return {
+      ok: false,
+      error: "Impossible d'ajouter ce document.",
+    };
+  }
+}
