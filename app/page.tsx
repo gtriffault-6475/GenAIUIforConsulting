@@ -1,4 +1,6 @@
+import { listDocuments } from '@/actions/document';
 import { getActiveProject, listProjects } from '@/actions/project';
+import { ContextPanel } from '@/components/ContextPanel';
 import { ProjectSelector } from '@/components/ProjectSelector';
 
 // Reads APP_STATE (mutable, changed by the `selectProject` Server Action)
@@ -9,9 +11,11 @@ export const dynamic = 'force-dynamic';
 
 // Story 1.2 — Sélection d'un projet Octopod. No project selected yet →
 // only the selector renders (no conversation/skills/livrable surface).
-// Once a project is active, this is a minimal top bar naming it; the
-// Contexte/Livrables/Mattermost panels and conversation surface arrive in
-// later stories.
+// Once a project is active, this is a top bar naming it plus the
+// Contexte panel (Story 1.3); the Livrables/Mattermost panels and
+// conversation surface arrive in later stories. Not yet the full
+// three-column workspace grid — a single panel below the top bar is
+// enough until Epic 2 has a center conversation to put beside it.
 export default async function Home() {
   const activeProjectResult = await getActiveProject();
 
@@ -49,11 +53,17 @@ export default async function Home() {
     );
   }
 
+  const documentsResult = await listDocuments(activeProject.id);
+  const documents = documentsResult.ok ? documentsResult.data : null;
+
   return (
     <div>
       <header className="top-bar">
         <span className="text-heading">{activeProject.name}</span>
       </header>
+      <div style={{ padding: 'var(--space-gutter)' }}>
+        <ContextPanel documents={documents} />
+      </div>
     </div>
   );
 }

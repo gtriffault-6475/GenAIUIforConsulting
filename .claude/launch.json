@@ -3,8 +3,11 @@
   "configurations": [
     {
       "name": "genai4consulting-dev",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeExecutable": "/bin/bash",
+      "runtimeArgs": [
+        "-c",
+        "PATH=\"$(ls -d $HOME/.nvm/versions/node/v24.*/bin | sort -V | tail -1):$PATH\" npm run dev"
+      ],
       "port": 3000
     }
   ]

@@ -13,3 +13,23 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-2-selection-d-un-projet-octopod.md`
   summary: There is no UI affordance to switch to a different active project once one is selected — the only way back to the selector is deleting `db/local.db`.
   evidence: A real gap a consultant would hit in daily use, but excluded by this story's frozen Intent (only describes a selector when none is active and a top bar once one is) and by the epic's "un seul projet actif à la fois" framing — no switcher UX is specified anywhere in round 1's planning artifacts. Revisit once a story defines the intended UX for changing projects (e.g. a click target on the top bar reopening the selector, with a decision on what happens to any active conversation/livrable state).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-3-panneau-contexte.md`
+  summary: `actions/document.ts`'s sync upsert (`onConflictDoUpdate` keyed on `document.id`) never refreshes `projectId`, and `document.id` is a global (not per-project) primary key.
+  evidence: Not triggered today — the mock's seed ids are namespaced per project (`doc-acme-*`, `doc-audit-*`), so no collision occurs across the two seed projects (independently confirmed by two review passes). Would only manifest if a future real `DriveProvider` or Story 1.4's manual-add path ever produced an `id` colliding across two different projects: the row's content would silently overwrite while `projectId` stayed pointed at the original owner. Revisit if/when a real (non-mock) `DriveProvider` is wired in, or when Story 1.4 defines how manual-document ids are generated.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-3-panneau-contexte.md`
+  summary: The drive sync in `actions/document.ts` only inserts/updates `source: 'drive'` rows — it never deletes a row whose id disappeared from the provider's latest listing.
+  evidence: Not exercisable today since the mock's seed list is static (always returns the same ids). Once a real `DriveProvider` exists, a file actually removed from Octopod's drive would remain listed in the Contexte panel forever. Revisit when a real (non-mock) `DriveProvider` replaces `integrations/mock/drive-provider.ts`.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-3-panneau-contexte.md`
+  summary: `ContextPanel`'s folder grouping treats `folderPath: null` (root) and `folderPath: ''` (empty string) as two distinct, equally headerless groups.
+  evidence: Not triggered today — the mock adapter only ever emits `null` for root-level documents, never `''`. A future real `DriveProvider` that uses `''` as its "no folder" convention would silently split root documents into two indistinguishable headerless clusters. Revisit alongside the real `DriveProvider` work; likely fix is normalizing `''` to `null` at the port boundary.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-3-panneau-contexte.md`
+  summary: `app/page.tsx` has no `Suspense`/`loading.tsx` boundary — the whole page (including the top bar) blocks on `listDocuments` resolving, not just the Contexte panel.
+  evidence: Pre-existing pattern from Story 1.2 (already true for `getActiveProject`), not a regression introduced here. Harmless today since the mock adapter's simulated latency is short, but would show as a blank page rather than a progressively-rendering one if a real, slower `DriveProvider`/`ProjectProvider` were wired in. Revisit if real integrations introduce noticeable latency.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-3-panneau-contexte.md`
+  summary: The `SELECT` in `actions/document.ts` that reads back `document` rows has no `ORDER BY`, so within-folder document order relies on incidental SQLite row order rather than a guaranteed contract.
+  evidence: Low risk (order is stable in practice today), but a future SQLite/driver change could reorder documents within a folder with no code change on our side. Revisit by adding an explicit `.orderBy(document.name)` (or similar) if this is ever observed to matter.
