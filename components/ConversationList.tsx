@@ -3,18 +3,25 @@
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
-import { selectConversation, type ConversationSummary } from '@/actions/conversation';
+import {
+  createConversation,
+  selectConversation,
+  type ConversationSummary,
+} from '@/actions/conversation';
 
 // Left-sidebar conversation list (Story 2.1 — Conversations multiples et
-// sélection active). Client component so a click can call the
-// `selectConversation` Server Action and refresh the page — same
+// sélection active; Story 2.2 — Création d'une nouvelle conversation).
+// Client component so a click can call the `selectConversation`/
+// `createConversation` Server Actions and refresh the page — same
 // `useTransition` + `router.refresh()` shape as `ProjectSelector.tsx`'s
 // `handleChoose`. No `OverlayProvider` here (AD-8 only governs floating
 // surfaces): this list renders in normal flow, not as a dropdown/overlay.
 export function ConversationList({
+  projectId,
   conversations,
   activeConversationId,
 }: {
+  projectId: string;
   // `null` means the conversation list failed to load — distinct from a
   // genuinely empty list. Mirrors `ContextPanel`'s `documents` convention.
   conversations: ConversationSummary[] | null;
@@ -40,12 +47,42 @@ export function ConversationList({
     });
   }
 
+  function handleCreate() {
+    // Synchronous re-entry guard: `disabled={isPending}` only takes effect
+    // once React commits the re-render, leaving a window where a second
+    // activation (key-repeat, assistive tech) could fire before that paint
+    // — this check closes it immediately, matching `handleSelect`'s own
+    // guard against redundant re-entry.
+    if (isPending) return;
+
+    setError(null);
+    startTransition(async () => {
+      const result = await createConversation(projectId);
+      if (!result.ok) {
+        // No ghost row in the list and no change to the active selection
+        // until the action actually succeeds.
+        setError(result.error);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
   return (
     <nav
       aria-label="Conversations"
       style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}
     >
       <span className="text-label">Conversations</span>
+
+      <button
+        type="button"
+        className="nav-row"
+        disabled={isPending}
+        onClick={handleCreate}
+      >
+        Nouvelle conversation
+      </button>
 
       {conversations === null ? (
         <p className="text-caption">

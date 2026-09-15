@@ -265,3 +265,39 @@ export async function selectConversation(
     };
   }
 }
+
+// Story 2.2 — Création d'une nouvelle conversation. Inserts an empty
+// CONVERSATION row (default French title, no MESSAGE rows) and makes it
+// active in the same synchronous `db.transaction` callback as
+// `seedFixturesIfEmpty` above, for the same reason: the insert and the
+// `PROJECT.activeConversationId` update must land atomically, with no
+// `await` boundary between them where another reader could observe one
+// without the other.
+export async function createConversation(
+  projectId: string,
+): Promise<ActionResult<ConversationSummary>> {
+  try {
+    const newConversation: ConversationSummary = {
+      id: crypto.randomUUID(),
+      projectId,
+      title: 'Nouvelle conversation',
+    };
+
+    db.transaction((tx) => {
+      tx.insert(conversation).values(newConversation).run();
+
+      tx.update(project)
+        .set({ activeConversationId: newConversation.id })
+        .where(eq(project.id, projectId))
+        .run();
+    });
+
+    return { ok: true, data: newConversation };
+  } catch (error) {
+    console.error('createConversation failed', error);
+    return {
+      ok: false,
+      error: 'Impossible de créer une nouvelle conversation.',
+    };
+  }
+}

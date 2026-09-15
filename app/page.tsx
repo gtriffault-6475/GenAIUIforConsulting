@@ -95,6 +95,7 @@ export default async function Home() {
       <div className="workspace-grid">
         <aside className="workspace-sidebar-left">
           <ConversationList
+            projectId={activeProject.id}
             conversations={conversations}
             activeConversationId={activeConversationId}
           />
