@@ -6,7 +6,7 @@
       "runtimeExecutable": "/bin/bash",
       "runtimeArgs": [
         "-c",
-        "PATH=\"$(ls -d $HOME/.nvm/versions/node/v24.*/bin | sort -V | tail -1):$PATH\" npm run dev"
+        "NVM_NODE24_DIR=\"$(ls -d \"$HOME/.nvm/versions/node/v24.\"* 2>/dev/null | sort -V | tail -1)\"; if [ -z \"$NVM_NODE24_DIR\" ]; then echo 'No nvm-managed Node 24 found under ~/.nvm/versions/node/v24.* — install one (nvm install 24); refusing to silently fall back to the wrong Node.' >&2; exit 1; fi; PATH=\"$NVM_NODE24_DIR/bin:$PATH\" npm run dev"
       ],
       "port": 3000
     }

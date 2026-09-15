@@ -2,6 +2,7 @@ import type {
   MattermostMessage,
   MattermostProvider,
 } from '../ports/mattermost-provider';
+import { withLatency } from './with-latency';
 
 // Round-1 seed data: one credible last message per seed project's
 // `mattermostChannelRef` (ids match `integrations/mock/project-provider.ts`)
@@ -24,12 +25,6 @@ const SEED_MESSAGES: Record<string, MattermostMessage> = {
       'https://mattermost.octo-technology.com/octo/pl/mi-audit-interne-9a71e3',
   },
 };
-
-// A believable Mattermost read has network latency; see
-// `integrations/mock/project-provider.ts` for the same rationale.
-function withLatency<T>(value: T): Promise<T> {
-  return new Promise((resolve) => setTimeout(() => resolve(value), 180));
-}
 
 export const mockMattermostProvider: MattermostProvider = {
   async getLastMessage(channelRef) {

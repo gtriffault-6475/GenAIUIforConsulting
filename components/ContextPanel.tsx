@@ -71,7 +71,6 @@ export function ContextPanel({
         <button
           type="button"
           className="button-primary"
-          aria-haspopup="dialog"
           aria-expanded={isOpen}
           onClick={handleToggle}
         >
@@ -79,11 +78,13 @@ export function ContextPanel({
         </button>
 
         {isOpen && (
-          <div
-            role="dialog"
-            aria-label="Ajouter un document"
-            className="card add-document-dropdown"
-          >
+          // No `role="dialog"`/`aria-haspopup="dialog"` on the trigger:
+          // this disclosure has no focus trap and no modal behavior, so
+          // claiming the dialog role would promise more than it delivers
+          // (see the Epic 1 retrospective). The revealed `<form>` already
+          // carries its own accessible name (`AddDocumentForm`'s
+          // `aria-label`), so this wrapper needs none of its own.
+          <div className="card add-document-dropdown">
             <AddDocumentForm projectId={projectId} onAdded={handleAdded} />
           </div>
         )}

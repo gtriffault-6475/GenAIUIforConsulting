@@ -2,6 +2,7 @@
 
 import { eq } from 'drizzle-orm';
 
+import type { ActionResult } from '@/actions/types';
 import { db } from '@/db/client';
 import { document } from '@/db/schema';
 import { driveProvider } from '@/integrations';
@@ -18,10 +19,6 @@ export type DocumentSummary = {
   source: 'drive' | 'manual';
   folderPath: string | null;
 };
-
-export type ActionResult<T> =
-  | { ok: true; data: T }
-  | { ok: false; error: string };
 
 export async function listDocuments(
   projectId: string,

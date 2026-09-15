@@ -57,6 +57,8 @@ context:
 
 ## Implementation Notes
 
+**Superseded in part by Story 1.4** (`spec-1-4-ajout-d-un-document-hors-drive.md`), which knowingly adds an "Ajouter un document" affordance to this panel — the frozen Boundaries above ("no edit, delete, upload, or drag-and-drop affordance") describe this panel's original read-only-only scope, not its final state. Flagged by the Epic 1 retrospective (`epic-1-retro-2026-09-15.md`, finding F) as a traceability gap: an audit reading only this file would otherwise conclude the shipped code violates its own frozen constraint.
+
 Implemented by a scoped subagent per Code Map/Tasks. Orchestrator then ran an independent Reviewer Gate (three parallel review lenses — blind-spot, edge-case, verification-gap — against the staged diff) rather than trusting the implementer's self-reported verification, per the process established after the Story 1.2 incident.
 
 **Review Triage Log:**

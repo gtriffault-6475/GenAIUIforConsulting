@@ -79,14 +79,14 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
-        setOpenOverlayId(null);
+        closeOverlay();
       }
     }
 
     function handlePointerDown(event: PointerEvent) {
       const node = contentNodeRef.current;
       if (node && event.target instanceof Node && !node.contains(event.target)) {
-        setOpenOverlayId(null);
+        closeOverlay();
       }
     }
 
@@ -96,7 +96,12 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
       document.removeEventListener('keydown', handleKeyDown);
       document.removeEventListener('pointerdown', handlePointerDown);
     };
-  }, [openOverlayId]);
+    // `closeOverlay` is a stable `useCallback` (empty deps) — including it
+    // here does not change how often this effect re-runs, but routes both
+    // internal close paths through the same `contentNodeRef` cleanup as
+    // the public API, rather than relying on every consumer's JSX
+    // detaching its ref on the next render (see the Epic 1 retrospective).
+  }, [openOverlayId, closeOverlay]);
 
   const value = useMemo(
     () => ({ openOverlayId, openOverlay, closeOverlay, isOverlayOpen, contentRef }),

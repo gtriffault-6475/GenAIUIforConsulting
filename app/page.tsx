@@ -55,16 +55,19 @@ export default async function Home() {
     );
   }
 
-  const documentsResult = await listDocuments(activeProject.id);
+  // Independent reads (different tables/providers, no data dependency
+  // between them) — run concurrently rather than paying both mocks'
+  // simulated latency back-to-back on the app's single most
+  // latency-sensitive path (`dynamic = 'force-dynamic'` disables caching).
+  const [documentsResult, mattermostResult] = await Promise.all([
+    listDocuments(activeProject.id),
+    // Read straight from the provider on every render (via the action),
+    // never synced into a table first — unlike documents, this preview is
+    // never reused elsewhere as context, so there's no other reader that
+    // would need a durable row to read from.
+    getLastMattermostMessage(activeProject.mattermostChannelRef),
+  ]);
   const documents = documentsResult.ok ? documentsResult.data : null;
-
-  // Read straight from the provider on every render (via the action),
-  // never synced into a table first — unlike documents, this preview is
-  // never reused elsewhere as context, so there's no other reader that
-  // would need a durable row to read from.
-  const mattermostResult = await getLastMattermostMessage(
-    activeProject.mattermostChannelRef,
-  );
 
   return (
     <div>

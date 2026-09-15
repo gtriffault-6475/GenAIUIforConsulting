@@ -1,4 +1,5 @@
 import type { DriveProvider, OctopodDocument } from '../ports/drive-provider';
+import { withLatency } from './with-latency';
 
 // Round-1 seed data: a handful of documents per seed project (ids match
 // `integrations/mock/project-provider.ts`), credible enough to read as a
@@ -52,12 +53,6 @@ const SEED_DOCUMENTS: Record<string, OctopodDocument[]> = {
     },
   ],
 };
-
-// A believable drive listing has network latency; see
-// `integrations/mock/project-provider.ts` for the same rationale.
-function withLatency<T>(value: T): Promise<T> {
-  return new Promise((resolve) => setTimeout(() => resolve(value), 180));
-}
 
 export const mockDriveProvider: DriveProvider = {
   async listDocuments(projectId) {

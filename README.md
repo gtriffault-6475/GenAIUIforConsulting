@@ -2,14 +2,15 @@ GenAI4Consulting round 1 — an internal agentic workspace prototype for OCTO co
 
 ## Getting started
 
+**Requires Node.js 24** (`nvm use` picks it up from `.nvmrc`) — `npm install` refuses anything older (`engine-strict` in `.npmrc`). Node <24's `node:sqlite` is missing `stmt.setReturnArrays`, which every Drizzle query needs; running on the wrong version throws `TypeError: stmt.setReturnArrays is not a function` on the first database read.
+
 ```bash
+nvm use
 npm install
 npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000). No separate services to start — the app runs as a single Next.js process, with SQLite (`node:sqlite`, no native compile step) as its only dependency.
-
-Requires Node.js 24 (see `.nvmrc` / `package.json` `engines`).
 
 ## Stack
 

@@ -1,5 +1,6 @@
 'use server';
 
+import type { ActionResult } from '@/actions/types';
 import { mattermostProvider } from '@/integrations';
 import type { MattermostMessage } from '@/integrations/ports/mattermost-provider';
 
@@ -9,10 +10,6 @@ import type { MattermostMessage } from '@/integrations/ports/mattermost-provider
 // table: the spec is explicit that a Mattermost preview is never reused
 // elsewhere as context, so it's read straight from the provider on every
 // render rather than synced into DB first.
-
-export type ActionResult<T> =
-  | { ok: true; data: T }
-  | { ok: false; error: string };
 
 export async function getLastMattermostMessage(
   channelRef: string,

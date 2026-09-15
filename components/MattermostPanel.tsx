@@ -1,4 +1,4 @@
-import type { ActionResult } from '@/actions/mattermost';
+import type { ActionResult } from '@/actions/types';
 import type { MattermostMessage } from '@/integrations/ports/mattermost-provider';
 
 // Read-only Mattermost preview (Story 1.5 — Panneau Mattermost). Server

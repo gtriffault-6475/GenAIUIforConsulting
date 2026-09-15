@@ -74,17 +74,32 @@ for (const name of pendingMigrations) {
     // transaction — if another OS process (e.g. a bundler's worker pool)
     // raced this one and already applied the same migration against the
     // same fresh `db/local.db`, SQLite reports "already exists" rather
-    // than letting both succeed. That is not a real failure — the schema
-    // this migration describes already landed — so record it as applied
-    // and move on instead of crashing this process.
+    // than letting both succeed. That is only a non-failure if the whole
+    // migration truly landed elsewhere: `ROLLBACK` just undid every
+    // statement *this* transaction ran, so if a *later* statement is the
+    // one that collided, the earlier statements never re-ran and must be
+    // verified, not assumed, before this migration is marked applied.
     const message = error instanceof Error ? error.message : String(error);
     if (/already exists/i.test(message)) {
-      sqlite
-        .prepare(
-          'INSERT OR IGNORE INTO __schema_migrations (name) VALUES (?)',
-        )
-        .run(name);
-      continue;
+      const targets = [
+        ...sql.matchAll(/CREATE\s+(?:TABLE|INDEX|UNIQUE INDEX)\s+`(\w+)`/gi),
+      ].map((match) => match[1]);
+      const allObjectsExist = targets.every(
+        (target) =>
+          sqlite
+            .prepare(
+              "SELECT 1 FROM sqlite_master WHERE name = ? AND type IN ('table', 'index')",
+            )
+            .get(target) !== undefined,
+      );
+      if (allObjectsExist) {
+        sqlite
+          .prepare(
+            'INSERT OR IGNORE INTO __schema_migrations (name) VALUES (?)',
+          )
+          .run(name);
+        continue;
+      }
     }
     throw error;
   }

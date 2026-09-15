@@ -2,6 +2,7 @@
 
 import { eq } from 'drizzle-orm';
 
+import type { ActionResult } from '@/actions/types';
 import { db } from '@/db/client';
 import { APP_STATE_ID, appState, project } from '@/db/schema';
 import { projectProvider } from '@/integrations';
@@ -15,10 +16,6 @@ import type { OctopodProject } from '@/integrations/ports/project-provider';
 // a name that doesn't leak the "Octopod" integration detail into the UI
 // layer.
 export type ProjectSummary = OctopodProject;
-
-export type ActionResult<T> =
-  | { ok: true; data: T }
-  | { ok: false; error: string };
 
 export async function listProjects(): Promise<ActionResult<ProjectSummary[]>> {
   try {
@@ -51,7 +48,20 @@ export async function getActiveProject(): Promise<
       .from(project)
       .where(eq(project.id, state.activeProjectId));
 
-    return { ok: true, data: row ?? null };
+    // `activeProjectId` set but no matching PROJECT row is not the same
+    // state as "no project ever selected" (the branch above) — that would
+    // mean the FK target itself went missing, which the UI should surface
+    // as an error, not silently fall back to an empty selector as if
+    // nothing had ever been chosen.
+    if (!row) {
+      console.error(
+        'getActiveProject: APP_STATE.activeProjectId points at a missing PROJECT row',
+        state.activeProjectId,
+      );
+      return { ok: false, error: 'Le projet actif est introuvable.' };
+    }
+
+    return { ok: true, data: row };
   } catch (error) {
     console.error('getActiveProject failed', error);
     return {

@@ -1,4 +1,5 @@
 import type { OctopodProject, ProjectProvider } from '../ports/project-provider';
+import { withLatency } from './with-latency';
 
 // Round-1 seed data: one project per PRD use case (avant-vente, mission),
 // each already carrying its `octopodProjectRef`/`mattermostChannelRef` so
@@ -17,13 +18,6 @@ const SEED_PROJECTS: OctopodProject[] = [
     mattermostChannelRef: 'mi-audit-interne',
   },
 ];
-
-// A believable Octopod call has network latency; a mock that resolves
-// instantly is one of the "signs the data is simulated" the epic context
-// explicitly rules out.
-function withLatency<T>(value: T): Promise<T> {
-  return new Promise((resolve) => setTimeout(() => resolve(value), 180));
-}
 
 export const mockProjectProvider: ProjectProvider = {
   async listProjects() {
