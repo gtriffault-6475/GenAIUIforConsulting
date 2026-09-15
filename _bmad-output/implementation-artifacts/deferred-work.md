@@ -9,3 +9,7 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-1-scaffolding-du-projet-et-fondations-partagees.md`
   summary: `components/OverlayProvider.tsx`'s single `openOverlayId` string has no collision guard if two independent call sites ever pass the same id.
   evidence: No consumer exists yet in this story's diff to demonstrate a real collision (maybe-false, would be medium if it occurred). Settle once Epic 2 (skill-add entry point) and Epic 4 (suggestion retravail field) add real overlay ids — either confirm ids are naturally unique per feature, or namespace them (e.g. `skill-add`, `suggestion-retravail-{suggestionId}`).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-2-selection-d-un-projet-octopod.md`
+  summary: There is no UI affordance to switch to a different active project once one is selected — the only way back to the selector is deleting `db/local.db`.
+  evidence: A real gap a consultant would hit in daily use, but excluded by this story's frozen Intent (only describes a selector when none is active and a top bar once one is) and by the epic's "un seul projet actif à la fois" framing — no switcher UX is specified anywhere in round 1's planning artifacts. Revisit once a story defines the intended UX for changing projects (e.g. a click target on the top bar reopening the selector, with a decision on what happens to any active conversation/livrable state).
