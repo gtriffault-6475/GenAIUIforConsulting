@@ -1,6 +1,8 @@
 import { listDocuments } from '@/actions/document';
+import { getLastMattermostMessage } from '@/actions/mattermost';
 import { getActiveProject, listProjects } from '@/actions/project';
 import { ContextPanel } from '@/components/ContextPanel';
+import { MattermostPanel } from '@/components/MattermostPanel';
 import { ProjectSelector } from '@/components/ProjectSelector';
 
 // Reads APP_STATE (mutable, changed by the `selectProject` Server Action)
@@ -56,13 +58,29 @@ export default async function Home() {
   const documentsResult = await listDocuments(activeProject.id);
   const documents = documentsResult.ok ? documentsResult.data : null;
 
+  // Read straight from the provider on every render (via the action),
+  // never synced into a table first — unlike documents, this preview is
+  // never reused elsewhere as context, so there's no other reader that
+  // would need a durable row to read from.
+  const mattermostResult = await getLastMattermostMessage(
+    activeProject.mattermostChannelRef,
+  );
+
   return (
     <div>
       <header className="top-bar">
         <span className="text-heading">{activeProject.name}</span>
       </header>
-      <div style={{ padding: 'var(--space-gutter)' }}>
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 'var(--space-4)',
+          padding: 'var(--space-gutter)',
+        }}
+      >
         <ContextPanel projectId={activeProject.id} documents={documents} />
+        <MattermostPanel result={mattermostResult} />
       </div>
     </div>
   );

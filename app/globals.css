@@ -293,3 +293,20 @@ textarea {
   padding: var(--space-3);
   box-shadow: var(--elevation-dropdown);
 }
+
+/* Story 1.5 — first link in the app that isn't styled by the global `a`
+   rule's plain `color: inherit` (Mattermost panel's "Ouvrir dans
+   Mattermost"). `accent` per DESIGN.md's color legend ("liens" listed
+   alongside navigation/avatar under `accent`). */
+.external-link {
+  color: var(--color-accent);
+  /* The browser's default anchor underline would otherwise make the
+     `:hover`/`:focus-visible` rule below a no-op — nothing else in this
+     file resets it (the global `a` rule only sets `color`). */
+  text-decoration: none;
+}
+
+.external-link:hover,
+.external-link:focus-visible {
+  text-decoration: underline;
+}
