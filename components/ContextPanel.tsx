@@ -48,7 +48,7 @@ export function ContextPanel({
     <section
       className="card"
       aria-label="Contexte"
-      style={{ width: 320, padding: 'var(--space-panel-padding)' }}
+      style={{ padding: 'var(--space-panel-padding)' }}
     >
       {/* `contentRef` covers the trigger button too (not just the dropdown
           form below): otherwise a click on the button while open registers

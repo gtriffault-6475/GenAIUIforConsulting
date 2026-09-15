@@ -43,8 +43,8 @@ development_status:
   1-5-panneau-mattermost: done
   epic-1-retrospective: done
 
-  epic-2: backlog
-  2-1-conversations-multiples-et-sélection-active: backlog
+  epic-2: in-progress
+  2-1-conversations-multiples-et-sélection-active: done
   2-2-création-d-une-nouvelle-conversation: backlog
   2-3-confidentialité-de-la-conversation: backlog
   2-4-panneau-skills: backlog

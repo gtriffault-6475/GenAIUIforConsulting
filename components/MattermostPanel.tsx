@@ -22,7 +22,7 @@ export function MattermostPanel({
     <section
       className="card"
       aria-label="Mattermost"
-      style={{ width: 320, padding: 'var(--space-panel-padding)' }}
+      style={{ padding: 'var(--space-panel-padding)' }}
     >
       <span className="text-label">Mattermost</span>
 

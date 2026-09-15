@@ -72,6 +72,14 @@
 
   /* Elevation — flat UI; the only exception is the model-selector dropdown */
   --elevation-dropdown: 0 6px 18px rgba(20, 22, 40, 0.12);
+
+  /* Workspace grid column widths (epic-2-context.md "Three-column
+     layout"). Story 2.1 introduces `.workspace-grid` and, in the same
+     pass, replaces `ContextPanel`/`MattermostPanel`'s hardcoded `320`
+     panel width with this shared 300px token — resolving the Epic 1
+     retrospective's finding G (the undocumented 320/300 mismatch). */
+  --width-sidebar-left: 240px;
+  --width-sidebar-right: 300px;
 }
 
 *,
@@ -194,6 +202,31 @@ a {
   background: var(--color-selected-tint);
   font-size: var(--text-body-strong-size);
   font-weight: var(--text-body-strong-weight);
+}
+
+/* Story 2.1 — three-column workspace shell below the top bar: left
+   (conversation list, fixed), center (active conversation, flexible),
+   right (Contexte/Mattermost panels, fixed). Columns don't stretch to
+   fill the viewport height — each column's content decides its own
+   height, like the single-panel stack it replaces. */
+.workspace-grid {
+  display: grid;
+  grid-template-columns: var(--width-sidebar-left) 1fr var(--width-sidebar-right);
+  align-items: start;
+  gap: var(--space-gutter);
+  padding: var(--space-gutter);
+}
+
+.workspace-sidebar-left,
+.workspace-sidebar-right,
+.workspace-center {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  /* Grid items default to `min-width: auto`, which lets long unbroken
+     text (a message, a conversation title) overflow its column instead
+     of wrapping — this restores normal wrapping behavior. */
+  min-width: 0;
 }
 
 .top-bar {
