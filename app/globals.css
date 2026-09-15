@@ -276,7 +276,16 @@ textarea {
   min-height: 96px;
 }
 
-.context-panel {
+.context-panel-header {
+  /* Positioned ancestor for `.add-document-dropdown`'s `top` (so it
+     anchors right below the header, not the whole card — see the
+     Epic 1 retrospective, finding A: putting `position: relative` on
+     `.context-panel` instead made `top: 100%` resolve against the
+     header *and* the document list below it, pushing the dropdown to
+     the bottom of the whole card). The header has no padding of its
+     own, so its box coincides exactly with the card's content-box
+     origin — `left`/`right: calc(-1 * var(--space-panel-padding))`
+     below still reaches the card's actual edges correctly. */
   position: relative;
 }
 

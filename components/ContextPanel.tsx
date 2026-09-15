@@ -46,7 +46,7 @@ export function ContextPanel({
 
   return (
     <section
-      className="card context-panel"
+      className="card"
       aria-label="Contexte"
       style={{ width: 320, padding: 'var(--space-panel-padding)' }}
     >
