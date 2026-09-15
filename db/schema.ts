@@ -6,11 +6,12 @@
 // (`source: 'drive'`) and Story 1.4's manually-added ones
 // (`source: 'manual'`) so it isn't re-shaped twice. Story 2.1
 // (Conversations multiples et sélection active) adds CONVERSATION and
-// MESSAGE. See ARCHITECTURE-SPINE.md "Structural Seed" for the full
-// eventual model (LIVRABLE, PROJECT_SKILL, …) — later stories add those
-// as they need them; do not pre-create tables speculatively here.
+// MESSAGE. Story 2.4 (Panneau Skills) adds PROJECT_SKILL. See
+// ARCHITECTURE-SPINE.md "Structural Seed" for the full eventual model
+// (LIVRABLE, …) — later stories add those as they need them; do not
+// pre-create tables speculatively here.
 import type { AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
-import { sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, unique } from 'drizzle-orm/sqlite-core';
 
 // A project connected from Octopod. `activeConversationId` is part of the
 // fixed shape from the architecture spine (AD-6: "seule source de vérité"
@@ -91,3 +92,24 @@ export const message = sqliteTable('message', {
   content: text('content').notNull(),
   model: text('model'),
 });
+
+// A skill loaded on a project (Story 2.4 — Panneau Skills). AD-4: this
+// table stores only the join itself — no name/description/instructions
+// column — because a skill's actual content lives exclusively as a fixed
+// TypeScript constant in `skills/catalog.ts`; `actions/skill.ts` resolves
+// `skillKey` against that catalog at read time. No standalone `id`/PK per
+// the architecture spine's Structural Seed: the unique constraint on the
+// pair itself is what prevents loading the same skill twice on a project
+// (AD-4) — the mechanism that would insert new rows here (an actual
+// "add a skill" feature) is explicitly deferred beyond this epic (PRD
+// OQ-6).
+export const projectSkill = sqliteTable(
+  'project_skill',
+  {
+    projectId: text('project_id')
+      .notNull()
+      .references(() => project.id),
+    skillKey: text('skill_key').notNull(),
+  },
+  (table) => [unique().on(table.projectId, table.skillKey)],
+);
