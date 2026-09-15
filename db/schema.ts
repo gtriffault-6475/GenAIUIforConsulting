@@ -72,6 +72,16 @@ export const conversation = sqliteTable('conversation', {
 // A single message within a CONVERSATION. `model` names the AI model that
 // produced an `assistant` message (e.g. "Claude Sonnet 5"); it is null
 // for `user` messages, which have no model of their own.
+//
+// FR-10 boundary (Story 2.3 — Confidentialité de la conversation): this
+// table's content never travels outside `actions/conversation.ts`, and
+// within that file, only `getActiveConversation` reads it — the sole
+// action consumed by `ConversationHistory`, the conversation's own view.
+// Every other surface that lists conversations (`ConversationList.tsx`
+// today, a future Livrables panel from Story 2.6) reads `ConversationSummary`
+// instead, which carries no content. A future Server Action reading this
+// table must stay called exclusively from a conversation's own render
+// path — never from a list/summary surface — to keep that boundary intact.
 export const message = sqliteTable('message', {
   id: text('id').primaryKey(),
   conversationId: text('conversation_id')

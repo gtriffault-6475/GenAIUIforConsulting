@@ -103,6 +103,12 @@ export default async function Home() {
         <div className="workspace-center">
           <ConversationHistory result={activeConversationResult} />
         </div>
+        {/* FR-10 boundary (Story 2.3): `activeConversationResult` carries
+            the active conversation's message content and is scoped to this
+            whole function — but it must only ever reach `ConversationHistory`
+            above. A future panel added to this right sidebar (e.g. Story
+            2.6's Livrables) must fetch its own data; never pass
+            `activeConversationResult` (or `.data.messages`) to it. */}
         <aside className="workspace-sidebar-right">
           <ContextPanel projectId={activeProject.id} documents={documents} />
           <MattermostPanel result={mattermostResult} />

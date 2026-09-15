@@ -10,12 +10,27 @@ import { conversation, message, project } from '@/db/schema';
 // CONVERSATION/MESSAGE. Components never touch `db/` directly; they call
 // these Server Actions. Mirrors `actions/project.ts`'s shape.
 
+// FR-10 boundary (Story 2.3 — Confidentialité de la conversation): this is
+// the only shape a conversation may take *outside* its own view. It is
+// consumed by every surface that lists conversations without rendering
+// them — `ConversationList.tsx` today, a future Livrables panel (Story
+// 2.6) tomorrow — so it must never gain a message/content field. Only
+// `getActiveConversation` below returns message content, and only to
+// `ConversationHistory`, the conversation's own view. A future Server
+// Action that reads MESSAGE must stay called exclusively from that
+// conversation's own render path — never from a list/summary surface.
 export type ConversationSummary = {
   id: string;
   projectId: string;
   title: string;
 };
 
+// FR-10 boundary (Story 2.3): this is the content-bearing type
+// `ConversationSummary` above is deliberately kept free of. It is produced
+// only by `getActiveConversation` and consumed only by
+// `ConversationHistory` (the conversation's own view) — never pass a
+// `MessageSummary[]` (or anything holding `.content`) to a list/summary
+// surface, a log line, or any component other than `ConversationHistory`.
 export type MessageSummary = {
   id: string;
   conversationId: string;
