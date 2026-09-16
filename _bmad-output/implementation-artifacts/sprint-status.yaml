@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-14-2026 15:47
-last_updated: 09-16-2026 19:36
+last_updated: 09-16-2026 20:46
 project: GenAI4Consulting
 project_key: NOKEY
 tracking_system: file-system
@@ -71,7 +71,7 @@ action_items:
     action: "Implémenter button-ai-primary/ai-suggestion-card ou renégocier explicitement
       l'AC de la Story 1.1 pour les retirer (epic-1 retro, finding B)"
     owner: "dev loop / product"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-09-15.md"
   - id: "epic-1-retro-item-2-paralléliser-listdocuments-getlastmatter"
     epic: 1

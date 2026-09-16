@@ -76,7 +76,7 @@ NFR5: Immédiateté perçue de l'Éditeur assisté — l'affichage des suggestio
 UX-DR1: Implémenter la palette de couleurs `DESIGN.md` (background, surface, border, text-primary/secondary/muted, accent navy `#3E4C7C`, ai-accent violet `#7C5CFC`, ai-tint, selected-tint, avatar-bg, success) comme tokens partagés.
 UX-DR2: Implémenter les deux familles typographiques — Space Grotesk (moments d'orientation : nom produit, titres, titre de document) et IBM Plex Sans (tout le reste, poids 400/600) — avec les tailles/poids du token `typography`.
 UX-DR3: Implémenter l'échelle d'espacement base 4px et la grille 3 colonnes verrouillée (sidebar gauche 240px fixe, centre flexible, sidebar droite 300px fixe) — pas de sidebar rétractable ce round.
-UX-DR4: Implémenter les 5 composants de tokens `DESIGN.md.Components` : `button-primary`, `button-ai-primary`, `card`, `ai-suggestion-card`, `nav-row-active`, avec leurs couleurs/radius exacts.
+UX-DR4: Implémenter les composants de tokens `DESIGN.md.Components` (`button-primary`, `button-ai-primary`, `card`, `ai-suggestion-card`, `nav-row-active`) avec leurs couleurs/radius exacts, chacun au moment où une story en a un consommateur réel — pas de composant construit sans rien à l'écran pour l'exercer. `button-primary`/`card`/`nav-row-active` : Story 1.1. `ai-suggestion-card` : Story 3.3. `button-ai-primary` : Epic 4.
 UX-DR5: Règle transversale — le violet (`ai-accent`) est réservé à tout ce qui vient de l'IA, jamais décoratif ; une zone IA se signale par un fond plein (`ai-tint`), jamais une bordure gauche colorée.
 UX-DR6: Composant Stepper de workflow — 4 étapes fixes (Qualification → Références → Experts → Rédaction) ; clic = étape active + changement du contexte de conversation ; états visuels distincts passé (check) / actif (plein) / à venir (neutre).
 UX-DR7: Composant Suggestion proactive — une seule visible à la fois ; "Oui, commençons" (accepte, avance le stepper) / "Plus tard" (masque sans avancer) ; état géré côté client uniquement, jamais persisté (AD-7).
@@ -161,7 +161,7 @@ So that je peux construire les fonctionnalités suivantes sur des fondations cor
 **Given** ce scaffolding
 **When** je mets en place les fondations visuelles et transversales
 **Then** les tokens de couleur, typographie (Space Grotesk / IBM Plex Sans) et espacement de `DESIGN.md` sont disponibles comme variables partagées
-**And** les 5 composants de tokens (`button-primary`, `button-ai-primary`, `card`, `ai-suggestion-card`, `nav-row-active`) sont implémentés
+**And** les composants de tokens sont implémentés au fur et à mesure des besoins réels (`button-primary`, `card`, `nav-row-active` dès ce scaffolding ; `button-ai-primary` et `ai-suggestion-card` different jusqu'à leur premier consommateur réel — Story 3.3 pour `ai-suggestion-card`, Epic 4 pour les deux — plutôt que construits sans aucun élément à l'écran pour les exercer) [renégocié le 2026-09-16, épic-1-retro-item-1 : voir `epic-1-retro-2026-09-15.md`]
 **And** la grille cible desktop ≥1280px (pas de repli mobile/tablette)
 **And** un `OverlayProvider` unique gère l'ouverture/fermeture des surfaces flottantes : `Échap` ferme systématiquement le dernier élément flottant ouvert, et ouvrir une surface ferme automatiquement la précédente
 **And** l'ordre de tabulation suit l'ordre de lecture sur chaque écran
