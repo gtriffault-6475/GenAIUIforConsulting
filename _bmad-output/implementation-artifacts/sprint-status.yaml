@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-14-2026 15:47
-last_updated: 09-15-2026 11:44
+last_updated: 09-16-2026 17:30
 project: GenAI4Consulting
 project_key: NOKEY
 tracking_system: file-system
@@ -50,7 +50,7 @@ development_status:
   2-4-panneau-skills: done
   2-5-sélection-du-modèle-et-envoi-d-un-message: done
   2-6-panneau-livrables: done
-  epic-2-retrospective: optional
+  epic-2-retrospective: done
 
   epic-3: backlog
   3-1-stepper-de-workflow-avant-vente: backlog
@@ -143,3 +143,37 @@ action_items:
     owner: "dev loop"
     status: done
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-09-15.md"
+  - id: "epic-2-retro-item-12-extraire-seedfixturesifempty-actions-con"
+    epic: 2
+    action: "Extraire seedFixturesIfEmpty (actions/conversation.ts, actions/skill.ts,
+      actions/livrable.ts) en helper partagé avant une 4e copie (epic-2 retro)"
+    owner: "dev loop"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-2-retro-2026-09-16.md"
+  - id: "epic-2-retro-item-13-scinder-actions-conversation-ts-sendmess"
+    epic: 2
+    action: "Scinder actions/conversation.ts (sendMessage vers actions/message.ts)
+      si le fichier continue de grossir (epic-2 retro)"
+    owner: "dev loop"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-2-retro-2026-09-16.md"
+  - id: "epic-2-retro-item-14-ajouter-une-colonne-d-ordre-à-project_sk"
+    epic: 2
+    action: "Ajouter une colonne d'ordre à project_skill pour garantir l'ordre de
+      chargement des skills, AD-11 (epic-2 retro)"
+    owner: "dev loop"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-2-retro-2026-09-16.md"
+  - id: "epic-2-retro-item-15-wrapper-insertmessage-qui-timbre-toujour"
+    epic: 2
+    action: "Wrapper insertMessage(...) qui timbre toujours createdAt (epic-2 retro)"
+    owner: "dev loop"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-2-retro-2026-09-16.md"
+  - id: "epic-2-retro-item-16-indicateur-durable-d-une-réponse-agent-é"
+    epic: 2
+    action: "Indicateur durable d'une réponse agent échouée dans ConversationHistory
+      (epic-2 retro)"
+    owner: "dev loop / UX"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-2-retro-2026-09-16.md"

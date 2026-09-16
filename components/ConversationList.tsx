@@ -32,7 +32,13 @@ export function ConversationList({
   const router = useRouter();
 
   function handleSelect(conversationId: string) {
-    if (conversationId === activeConversationId) return;
+    // Synchronous re-entry guard (see `handleCreate` below): without it,
+    // two rapid clicks on two different rows before React commits
+    // `disabled={isPending}` both fire `startTransition`, and the two
+    // concurrent `selectConversation` calls can resolve out of order —
+    // the highlighted active row would then disagree with the user's
+    // actual last click.
+    if (isPending || conversationId === activeConversationId) return;
 
     setError(null);
     startTransition(async () => {

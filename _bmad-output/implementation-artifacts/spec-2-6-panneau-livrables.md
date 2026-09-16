@@ -88,6 +88,8 @@ Auto-approuvé (aucun réviseur humain disponible dans cette exécution autonome
 
 ## Spec Change Log
 
+**Précision (rétrospective Epic 2, 2026-09-16) :** l'AC « une invite courte propose d'en créer un » (epics.md, Story 2.6) est satisfaite par un texte descriptif pointant vers le mécanisme réel («Demandez à l'agent d'en créer un dans une conversation.»), pas par un contrôle actionnable (bouton/lien) — interprétation délibérée puisque le mécanisme de création est exclusivement un outil d'agent différé à l'Epic 4 (AD-3), et qu'un faux bouton simulerait une action qui n'existe pas. Non tracée explicitement au moment de l'implémentation ; ajoutée ici pour qu'un futur lecteur ne conclue pas à tort que l'AC est non satisfaite.
+
 ## Review Triage Log
 
 | # | Finding | Severity | Route | Resolution |

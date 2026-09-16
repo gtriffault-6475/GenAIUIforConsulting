@@ -124,7 +124,13 @@ export default async function Home() {
         </aside>
         <div className="workspace-center">
           <ConversationHistory result={activeConversationResult} />
-          <Composer conversationId={activeConversationId} />
+          {/* `key` forces a fresh `Composer` instance per conversation — its
+              draft/error state is local `useState`, never reset by a prop
+              change alone. Without this, switching conversations kept the
+              previous conversation's typed draft and error banner, and a
+              draft could be sent into the wrong conversation (see the
+              Epic 2 retrospective). */}
+          <Composer key={activeConversationId ?? 'none'} conversationId={activeConversationId} />
         </div>
         {/* FR-10 boundary (Story 2.3): `activeConversationResult` carries
             the active conversation's message content and is scoped to this

@@ -85,15 +85,23 @@ export async function sendToAgent({
       })),
     });
 
-    const textBlock = response.content.find((block) => block.type === 'text');
-    if (!textBlock) {
+    // Concatenate every text block rather than taking only the first: with
+    // no tool use, a reply is normally one block, but nothing guarantees
+    // that — picking just `.find(...)`'s first match would silently drop
+    // any further text the model returned.
+    const text = response.content
+      .filter((block) => block.type === 'text')
+      .map((block) => block.text)
+      .join('\n\n');
+
+    if (!text) {
       return {
         ok: false,
         error: "La réponse de l'agent ne contient aucun texte exploitable.",
       };
     }
 
-    return { ok: true, content: textBlock.text };
+    return { ok: true, content: text };
   } catch (error) {
     // Deliberately generic: this catches everything from a missing/invalid
     // API key to a rate limit, a content-policy refusal, or a network

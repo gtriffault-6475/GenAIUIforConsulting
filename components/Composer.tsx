@@ -101,6 +101,14 @@ export function Composer({ conversationId }: { conversationId: string | null }) 
             : null,
         );
         router.refresh();
+      } catch (error) {
+        // `sendMessage` itself never throws (its own try/catch always
+        // returns an ActionResult) — this catches a transport-level
+        // failure of the Server Action call itself (e.g. a dropped
+        // connection), which would otherwise be an unhandled rejection
+        // inside `startTransition` with nothing shown to the user.
+        console.error('Composer: sendMessage call failed', error);
+        setSubmitError("Une erreur est survenue lors de l'envoi.");
       } finally {
         sendingRef.current = false;
       }

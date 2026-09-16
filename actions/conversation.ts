@@ -7,7 +7,7 @@ import { listLoadedSkillInstructions } from '@/actions/skill';
 import { db } from '@/db/client';
 import { conversation, message, project } from '@/db/schema';
 import { sendToAgent } from '@/skills/buildRequest';
-import { resolveModelLabel } from '@/skills/models';
+import { MODELS, resolveModelLabel } from '@/skills/models';
 
 // AD-2 — this is the only file allowed to read or write
 // CONVERSATION/MESSAGE. Components never touch `db/` directly; they call
@@ -372,6 +372,16 @@ export async function sendMessage(
     return { ok: false, error: 'Le message ne peut pas être vide.' };
   }
 
+  // Defense in depth: the composer only ever offers `MODELS`' three ids
+  // (Boundaries — "jamais un défaut caché ailleurs"), but a Server Action
+  // is a network-reachable endpoint a client-side restriction can't bind —
+  // reject an out-of-list model before it ever reaches the real, billed
+  // Anthropic API, the same way `addManualDocument` re-validates
+  // client-checked input server-side.
+  if (!MODELS.some((entry) => entry.id === model)) {
+    return { ok: false, error: 'Modèle invalide.' };
+  }
+
   let projectId: string;
   try {
     const [conversationRow] = await db
@@ -404,7 +414,18 @@ export async function sendMessage(
   // inside a *successful* ActionResult, never as `{ok:false}`.
   try {
     const loadedSkillsResult = await listLoadedSkillInstructions(projectId);
-    const loadedSkills = loadedSkillsResult.ok ? loadedSkillsResult.data : [];
+    if (!loadedSkillsResult.ok) {
+      // Distinct from "this project has zero loaded skills" (a real,
+      // empty-but-successful list): a failed read must not silently
+      // become the same `[]` an agent call proceeds on, or the consultant
+      // gets an answer that looks skill-informed but never was, with
+      // nothing surfaced to explain why.
+      return {
+        ok: true,
+        data: { assistantFailed: true, error: loadedSkillsResult.error },
+      };
+    }
+    const loadedSkills = loadedSkillsResult.data;
 
     const historyRows = await db
       .select({ role: message.role, content: message.content })
