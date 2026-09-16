@@ -1,5 +1,6 @@
 import { getActiveConversation, listConversations } from '@/actions/conversation';
 import { listDocuments } from '@/actions/document';
+import { listLivrables } from '@/actions/livrable';
 import { getLastMattermostMessage } from '@/actions/mattermost';
 import { getActiveProject, listProjects } from '@/actions/project';
 import { listProjectSkills } from '@/actions/skill';
@@ -7,6 +8,7 @@ import { Composer } from '@/components/Composer';
 import { ContextPanel } from '@/components/ContextPanel';
 import { ConversationHistory } from '@/components/ConversationHistory';
 import { ConversationList } from '@/components/ConversationList';
+import { LivrablesPanel } from '@/components/LivrablesPanel';
 import { MattermostPanel } from '@/components/MattermostPanel';
 import { ProjectSelector } from '@/components/ProjectSelector';
 import { SkillsPanel } from '@/components/SkillsPanel';
@@ -22,8 +24,9 @@ export const dynamic = 'force-dynamic';
 // Once a project is active, this is a top bar naming it plus the
 // three-column workspace grid: left (conversation list, then Skills
 // panel — Story 2.1/2.4), center (active conversation's history, then the
-// composer — Story 2.1/2.5), right (Contexte/Mattermost panels, Story
-// 1.3/1.5). The Livrables panel arrives in a later Epic 2 story (2.6).
+// composer — Story 2.1/2.5), right (Contexte, then Livrables, then
+// Mattermost panels — Story 1.3/2.6/1.5, order fixed by
+// `epic-2-context.md`).
 export default async function Home() {
   const activeProjectResult = await getActiveProject();
 
@@ -74,13 +77,16 @@ export default async function Home() {
   // reaches its own first `await` on `Promise.all`. `listProjectSkills`
   // (Story 2.4) has its own, separate idempotent seed helper over a
   // different table (`PROJECT_SKILL`) — same reasoning, no interaction
-  // with the conversation seed.
+  // with the conversation seed. `listLivrables` (Story 2.6) adds a third,
+  // equally independent idempotent seed helper over `LIVRABLE` — same
+  // reasoning again.
   const [
     conversationsResult,
     activeConversationResult,
     documentsResult,
     mattermostResult,
     skillsResult,
+    livrablesResult,
   ] = await Promise.all([
     listConversations(activeProject.id),
     getActiveConversation(activeProject.id),
@@ -91,6 +97,7 @@ export default async function Home() {
     // that would need a durable row to read from.
     getLastMattermostMessage(activeProject.mattermostChannelRef),
     listProjectSkills(activeProject.id),
+    listLivrables(activeProject.id),
   ]);
   const conversations = conversationsResult.ok ? conversationsResult.data : null;
   const activeConversationId =
@@ -99,6 +106,7 @@ export default async function Home() {
       : null;
   const documents = documentsResult.ok ? documentsResult.data : null;
   const skills = skillsResult.ok ? skillsResult.data : null;
+  const livrables = livrablesResult.ok ? livrablesResult.data : null;
 
   return (
     <div>
@@ -121,11 +129,13 @@ export default async function Home() {
         {/* FR-10 boundary (Story 2.3): `activeConversationResult` carries
             the active conversation's message content and is scoped to this
             whole function — but it must only ever reach `ConversationHistory`
-            above. A future panel added to this right sidebar (e.g. Story
-            2.6's Livrables) must fetch its own data; never pass
-            `activeConversationResult` (or `.data.messages`) to it. */}
+            above. `LivrablesPanel` below fetches its own data
+            (`listLivrables`, which never reads `MESSAGE`) and must never be
+            passed `activeConversationResult` (or `.data.messages`); any
+            future panel added to this right sidebar must do the same. */}
         <aside className="workspace-sidebar-right">
           <ContextPanel projectId={activeProject.id} documents={documents} />
+          <LivrablesPanel livrables={livrables} />
           <MattermostPanel result={mattermostResult} />
         </aside>
       </div>

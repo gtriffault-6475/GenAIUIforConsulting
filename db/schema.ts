@@ -6,10 +6,11 @@
 // (`source: 'drive'`) and Story 1.4's manually-added ones
 // (`source: 'manual'`) so it isn't re-shaped twice. Story 2.1
 // (Conversations multiples et sélection active) adds CONVERSATION and
-// MESSAGE. Story 2.4 (Panneau Skills) adds PROJECT_SKILL. See
-// ARCHITECTURE-SPINE.md "Structural Seed" for the full eventual model
-// (LIVRABLE, …) — later stories add those as they need them; do not
-// pre-create tables speculatively here.
+// MESSAGE. Story 2.4 (Panneau Skills) adds PROJECT_SKILL. Story 2.6
+// (Panneau Livrables) adds LIVRABLE. See ARCHITECTURE-SPINE.md
+// "Structural Seed" for the full eventual model (SUGGESTION, …) — later
+// stories add those as they need them; do not pre-create tables
+// speculatively here.
 import type { AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
 import { sqliteTable, text, unique } from 'drizzle-orm/sqlite-core';
 
@@ -127,3 +128,26 @@ export const projectSkill = sqliteTable(
   },
   (table) => [unique().on(table.projectId, table.skillKey)],
 );
+
+// A deliverable document being drafted on a project (Story 2.6 — Panneau
+// Livrables), per the Structural Seed. `conversationId` is nullable — the
+// conversation the livrable originated from, used by a future global
+// revision (AD-10); this round's seed rows don't set it. `content` is a
+// JSON string shaped `{blocks:[{id,text}]}` (AD-9: each block carries a
+// stable id a future anchored suggestion can target) from the moment a
+// row is created, even though nothing in this story reads or writes it
+// beyond the `title` a card displays — fixing the shape now avoids a
+// migration when Epic 4's Éditeur assisté starts reading/writing it. Both
+// FKs and `content` are brand-new columns on a brand-new table (a plain
+// `CREATE TABLE`, not an `ALTER TABLE` on a table with existing rows), so
+// none of them need a `.default(...)` the way `message.createdAt` did —
+// see that column's comment for why a default would matter there.
+export const livrable = sqliteTable('livrable', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id')
+    .notNull()
+    .references(() => project.id),
+  conversationId: text('conversation_id').references(() => conversation.id),
+  title: text('title').notNull(),
+  content: text('content').notNull(),
+});
