@@ -108,3 +108,48 @@ export async function listProjectSkills(
     };
   }
 }
+
+// Story 2.5 — Sélection du modèle et envoi d'un message. Server-only
+// counterpart to `listProjectSkills` above: same join, same catalog
+// resolution and orphan-key handling, but returns `instructions` instead
+// of `name`/`description`. `ProjectSkillSummary` (and `listProjectSkills`
+// itself) stay exactly as they are — this is a separate function, not a
+// reshape of the existing one, per the spec's Never ("ne pas modifier
+// listProjectSkills... ProjectSkillSummary reste un contrat gelé"). Not
+// exported to any client component: `skills/buildRequest.ts` (AD-11) is
+// the only intended caller, via `sendMessage` in `actions/conversation.ts`.
+// "Ordre de chargement" is the order `project_skill` rows come back in —
+// the same implicit row order `listProjectSkills` already relies on.
+export async function listLoadedSkillInstructions(
+  projectId: string,
+): Promise<ActionResult<{ skillKey: string; instructions: string }[]>> {
+  try {
+    seedFixturesIfEmpty(projectId);
+
+    const rows = await db
+      .select({ skillKey: projectSkill.skillKey })
+      .from(projectSkill)
+      .where(eq(projectSkill.projectId, projectId));
+
+    const instructions: { skillKey: string; instructions: string }[] = [];
+    for (const row of rows) {
+      const skill = SKILL_CATALOG[row.skillKey];
+      if (!skill) {
+        console.error(
+          'listLoadedSkillInstructions: PROJECT_SKILL row references an unknown catalog key',
+          row.skillKey,
+        );
+        continue;
+      }
+      instructions.push({ skillKey: skill.key, instructions: skill.instructions });
+    }
+
+    return { ok: true, data: instructions };
+  } catch (error) {
+    console.error('listLoadedSkillInstructions failed', error);
+    return {
+      ok: false,
+      error: 'Impossible de récupérer les instructions des skills chargées.',
+    };
+  }
+}

@@ -72,7 +72,12 @@ export const conversation = sqliteTable('conversation', {
 
 // A single message within a CONVERSATION. `model` names the AI model that
 // produced an `assistant` message (e.g. "Claude Sonnet 5"); it is null
-// for `user` messages, which have no model of their own.
+// for `user` messages, which have no model of their own. `createdAt`
+// (Story 2.5 — Sélection du modèle et envoi d'un message) is an ISO-8601
+// string ordering column: `actions/conversation.ts` no longer relies on
+// SQLite's implicit scan order (see `deferred-work.md`'s Story 2.1 entry)
+// now that real messages are appended one at a time instead of only ever
+// being seeded together as fixtures.
 //
 // FR-10 boundary (Story 2.3 — Confidentialité de la conversation): this
 // table's content never travels outside `actions/conversation.ts`, and
@@ -91,6 +96,15 @@ export const message = sqliteTable('message', {
   role: text('role', { enum: ['user', 'assistant'] }).notNull(),
   content: text('content').notNull(),
   model: text('model'),
+  // `.default(...)` here is a migration-time backfill value only, never
+  // relied on by the app: every insert (`actions/conversation.ts`) always
+  // supplies a real `createdAt` explicitly. Without a default, SQLite
+  // rejects `ALTER TABLE message ADD created_at text NOT NULL` outright on
+  // any table that already has rows — which every pre-existing local dev
+  // DB does, since Story 2.1's fixtures seed on first read. The epoch
+  // value sorts before every real ISO-8601 timestamp, so backfilled rows
+  // from before this column existed correctly appear first.
+  createdAt: text('created_at').notNull().default('1970-01-01T00:00:00.000Z'),
 });
 
 // A skill loaded on a project (Story 2.4 — Panneau Skills). AD-4: this

@@ -3,8 +3,11 @@
 import { eq } from 'drizzle-orm';
 
 import type { ActionResult } from '@/actions/types';
+import { listLoadedSkillInstructions } from '@/actions/skill';
 import { db } from '@/db/client';
 import { conversation, message, project } from '@/db/schema';
+import { sendToAgent } from '@/skills/buildRequest';
+import { resolveModelLabel } from '@/skills/models';
 
 // AD-2 — this is the only file allowed to read or write
 // CONVERSATION/MESSAGE. Components never touch `db/` directly; they call
@@ -37,6 +40,7 @@ export type MessageSummary = {
   role: 'user' | 'assistant';
   content: string;
   model: string | null;
+  createdAt: string;
 };
 
 type FixtureMessage = {
@@ -122,6 +126,34 @@ function seedFixturesIfEmpty(projectId: string): void {
 
     let firstConversationId: string | null = null;
 
+    // Story 2.5 — Sélection du modèle et envoi d'un message. `MESSAGE.
+    // createdAt` orders history now that real messages are appended one at
+    // a time (see the column's comment in `db/schema.ts`); fixture
+    // messages get deterministic, strictly increasing timestamps (spaced
+    // one second apart, per the spec's Code Map) rather than all sharing
+    // the instant this transaction runs, so their order is guaranteed the
+    // same way a real conversation's would be.
+    //
+    // The base anchors 5 minutes *before* this seeding instant, not at it:
+    // seeding is lazy (triggered by the first `listConversations`/
+    // `getActiveConversation` call on an empty project), and `sendMessage`
+    // can run moments later, in the same session, using the real wall
+    // clock for its own `createdAt`. Anchoring fixtures at `Date.now()`
+    // and counting forward would reserve timestamps *ahead* of that real
+    // clock — a message sent within a few seconds of seeding would then
+    // sort into the middle of the fixture conversation instead of after
+    // it (caught during this story's manual verification: a message sent
+    // ~20ms after seeding landed between fixture messages 1 and 2, whose
+    // synthetic timestamps were already 1-2 seconds "ahead"). A margin
+    // comfortably larger than any realistic fixture-message count keeps
+    // every fixture timestamp safely in the past instead.
+    let fixtureCreatedAt = Date.now() - 5 * 60 * 1000;
+    function nextFixtureCreatedAt(): string {
+      const iso = new Date(fixtureCreatedAt).toISOString();
+      fixtureCreatedAt += 1000;
+      return iso;
+    }
+
     for (const fixture of FIXTURE_CONVERSATIONS) {
       const conversationId = crypto.randomUUID();
       firstConversationId ??= conversationId;
@@ -138,6 +170,7 @@ function seedFixturesIfEmpty(projectId: string): void {
             role: fixtureMessage.role,
             content: fixtureMessage.content,
             model: fixtureMessage.model,
+            createdAt: nextFixtureCreatedAt(),
           })
           .run();
       }
@@ -239,9 +272,11 @@ export async function getActiveConversation(projectId: string): Promise<
         role: message.role,
         content: message.content,
         model: message.model,
+        createdAt: message.createdAt,
       })
       .from(message)
-      .where(eq(message.conversationId, conversationRow.id));
+      .where(eq(message.conversationId, conversationRow.id))
+      .orderBy(message.createdAt);
 
     return { ok: true, data: { conversation: conversationRow, messages } };
   } catch (error) {
@@ -313,6 +348,111 @@ export async function createConversation(
     return {
       ok: false,
       error: 'Impossible de créer une nouvelle conversation.',
+    };
+  }
+}
+
+// Story 2.5 — Sélection du modèle et envoi d'un message. The user message
+// is always persisted first, in its own `try/catch`: only a failure of
+// *that* insert returns `{ok:false,error}` (the spec's boundary — "jamais
+// perdu sur une panne réseau/clé API absente"). Everything after that
+// point (loading skills, calling `skills/buildRequest.ts`'s `sendToAgent`
+// — AD-11's single assembly point — and persisting the reply) is wrapped
+// in a second `try/catch` whose failures still resolve as `{ok:true,
+// data:{assistantFailed:true, error}}`: the caller (`Composer.tsx`) can
+// then show that error next to the (already visible, already persisted)
+// user message instead of losing it.
+export async function sendMessage(
+  conversationId: string,
+  content: string,
+  model: string,
+): Promise<ActionResult<{ assistantFailed: boolean; error?: string }>> {
+  const trimmedContent = content.trim();
+  if (!trimmedContent) {
+    return { ok: false, error: 'Le message ne peut pas être vide.' };
+  }
+
+  let projectId: string;
+  try {
+    const [conversationRow] = await db
+      .select({ projectId: conversation.projectId })
+      .from(conversation)
+      .where(eq(conversation.id, conversationId));
+
+    if (!conversationRow) {
+      return { ok: false, error: 'Cette conversation est introuvable.' };
+    }
+    projectId = conversationRow.projectId;
+
+    db.insert(message)
+      .values({
+        id: crypto.randomUUID(),
+        conversationId,
+        role: 'user',
+        content: trimmedContent,
+        model: null,
+        createdAt: new Date().toISOString(),
+      })
+      .run();
+  } catch (error) {
+    console.error('sendMessage failed to persist the user message', error);
+    return { ok: false, error: "Impossible d'envoyer ce message." };
+  }
+
+  // From here on the user message is durably saved regardless of what
+  // happens next — every remaining failure surfaces as `assistantFailed`
+  // inside a *successful* ActionResult, never as `{ok:false}`.
+  try {
+    const loadedSkillsResult = await listLoadedSkillInstructions(projectId);
+    const loadedSkills = loadedSkillsResult.ok ? loadedSkillsResult.data : [];
+
+    const historyRows = await db
+      .select({ role: message.role, content: message.content })
+      .from(message)
+      .where(eq(message.conversationId, conversationId))
+      .orderBy(message.createdAt);
+
+    const agentResult = await sendToAgent({
+      loadedSkills,
+      history: historyRows,
+      model,
+    });
+
+    if (!agentResult.ok) {
+      return {
+        ok: true,
+        data: { assistantFailed: true, error: agentResult.error },
+      };
+    }
+
+    db.insert(message)
+      .values({
+        id: crypto.randomUUID(),
+        conversationId,
+        role: 'assistant',
+        content: agentResult.content,
+        // Persist the human-readable label (e.g. "Claude Sonnet 5"), not
+        // the raw API slug (`model`, e.g. "claude-sonnet-5") — matches
+        // this file's own fixture data and keeps `ConversationHistory`
+        // free of technical identifiers. The raw `model` id is still what
+        // was actually sent to `sendToAgent` above.
+        model: resolveModelLabel(model),
+        createdAt: new Date().toISOString(),
+      })
+      .run();
+
+    return { ok: true, data: { assistantFailed: false } };
+  } catch (error) {
+    console.error(
+      'sendMessage: agent call or reply persistence failed after the user message was saved',
+      error,
+    );
+    return {
+      ok: true,
+      data: {
+        assistantFailed: true,
+        error: "Une erreur est survenue lors de l'appel à l'agent.",
+      },
     };
   }
 }

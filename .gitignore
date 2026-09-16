@@ -42,6 +42,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...except the checked-in template documenting which vars to set (Story
+# 2.5 — ANTHROPIC_API_KEY) — this one has no real secret in it.
+!.env.local.example
 
 # vercel
 .vercel

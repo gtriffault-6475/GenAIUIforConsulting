@@ -3,6 +3,7 @@ import { listDocuments } from '@/actions/document';
 import { getLastMattermostMessage } from '@/actions/mattermost';
 import { getActiveProject, listProjects } from '@/actions/project';
 import { listProjectSkills } from '@/actions/skill';
+import { Composer } from '@/components/Composer';
 import { ContextPanel } from '@/components/ContextPanel';
 import { ConversationHistory } from '@/components/ConversationHistory';
 import { ConversationList } from '@/components/ConversationList';
@@ -20,9 +21,9 @@ export const dynamic = 'force-dynamic';
 // only the selector renders (no conversation/skills/livrable surface).
 // Once a project is active, this is a top bar naming it plus the
 // three-column workspace grid: left (conversation list, then Skills
-// panel — Story 2.1/2.4), center (active conversation's history, Story
-// 2.1), right (Contexte/Mattermost panels, Story 1.3/1.5). The Livrables
-// panel arrives in a later Epic 2 story (2.6).
+// panel — Story 2.1/2.4), center (active conversation's history, then the
+// composer — Story 2.1/2.5), right (Contexte/Mattermost panels, Story
+// 1.3/1.5). The Livrables panel arrives in a later Epic 2 story (2.6).
 export default async function Home() {
   const activeProjectResult = await getActiveProject();
 
@@ -115,6 +116,7 @@ export default async function Home() {
         </aside>
         <div className="workspace-center">
           <ConversationHistory result={activeConversationResult} />
+          <Composer conversationId={activeConversationId} />
         </div>
         {/* FR-10 boundary (Story 2.3): `activeConversationResult` carries
             the active conversation's message content and is scoped to this

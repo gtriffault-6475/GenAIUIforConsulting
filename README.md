@@ -12,6 +12,8 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000). No separate services to start — the app runs as a single Next.js process, with SQLite (`node:sqlite`, no native compile step) as its only dependency.
 
+Copy `.env.local.example` to `.env.local` and set `ANTHROPIC_API_KEY` before sending a message from the workspace composer (Story 2.5) — without it, the composer still works but every reply fails with a clear error.
+
 ## Stack
 
 - **Next.js 16** (App Router, Turbopack), **React 19**, **TypeScript** (strict)
