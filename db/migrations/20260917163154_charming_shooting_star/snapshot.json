@@ -1,0 +1,551 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "id": "3b4bf46d-5eba-4ee5-b542-ea2a11bd5e0e",
+  "prevIds": [
+    "8cb78f16-339e-446f-9ce4-abf4a0684c59"
+  ],
+  "ddl": [
+    {
+      "name": "app_state",
+      "entityType": "tables"
+    },
+    {
+      "name": "conversation",
+      "entityType": "tables"
+    },
+    {
+      "name": "document",
+      "entityType": "tables"
+    },
+    {
+      "name": "livrable",
+      "entityType": "tables"
+    },
+    {
+      "name": "message",
+      "entityType": "tables"
+    },
+    {
+      "name": "project",
+      "entityType": "tables"
+    },
+    {
+      "name": "project_skill",
+      "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "app_state"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "active_project_id",
+      "entityType": "columns",
+      "table": "app_state"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "conversation"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "project_id",
+      "entityType": "columns",
+      "table": "conversation"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "title",
+      "entityType": "columns",
+      "table": "conversation"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "step_key",
+      "entityType": "columns",
+      "table": "conversation"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "document"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "project_id",
+      "entityType": "columns",
+      "table": "document"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "entityType": "columns",
+      "table": "document"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "source",
+      "entityType": "columns",
+      "table": "document"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "folder_path",
+      "entityType": "columns",
+      "table": "document"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "content",
+      "entityType": "columns",
+      "table": "document"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "livrable"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "project_id",
+      "entityType": "columns",
+      "table": "livrable"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "conversation_id",
+      "entityType": "columns",
+      "table": "livrable"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "title",
+      "entityType": "columns",
+      "table": "livrable"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "content",
+      "entityType": "columns",
+      "table": "livrable"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "message"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "conversation_id",
+      "entityType": "columns",
+      "table": "message"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "role",
+      "entityType": "columns",
+      "table": "message"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "content",
+      "entityType": "columns",
+      "table": "message"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "model",
+      "entityType": "columns",
+      "table": "message"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'1970-01-01T00:00:00.000Z'",
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "message"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "project"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "octopod_project_ref",
+      "entityType": "columns",
+      "table": "project"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "entityType": "columns",
+      "table": "project"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "mattermost_channel_ref",
+      "entityType": "columns",
+      "table": "project"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'avant-vente'",
+      "generated": null,
+      "name": "type",
+      "entityType": "columns",
+      "table": "project"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "active_conversation_id",
+      "entityType": "columns",
+      "table": "project"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "project_id",
+      "entityType": "columns",
+      "table": "project_skill"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "skill_key",
+      "entityType": "columns",
+      "table": "project_skill"
+    },
+    {
+      "columns": [
+        "active_project_id"
+      ],
+      "tableTo": "project",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_app_state_active_project_id_project_id_fk",
+      "entityType": "fks",
+      "table": "app_state"
+    },
+    {
+      "columns": [
+        "project_id"
+      ],
+      "tableTo": "project",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_conversation_project_id_project_id_fk",
+      "entityType": "fks",
+      "table": "conversation"
+    },
+    {
+      "columns": [
+        "project_id"
+      ],
+      "tableTo": "project",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_document_project_id_project_id_fk",
+      "entityType": "fks",
+      "table": "document"
+    },
+    {
+      "columns": [
+        "project_id"
+      ],
+      "tableTo": "project",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_livrable_project_id_project_id_fk",
+      "entityType": "fks",
+      "table": "livrable"
+    },
+    {
+      "columns": [
+        "conversation_id"
+      ],
+      "tableTo": "conversation",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_livrable_conversation_id_conversation_id_fk",
+      "entityType": "fks",
+      "table": "livrable"
+    },
+    {
+      "columns": [
+        "conversation_id"
+      ],
+      "tableTo": "conversation",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_message_conversation_id_conversation_id_fk",
+      "entityType": "fks",
+      "table": "message"
+    },
+    {
+      "columns": [
+        "active_conversation_id"
+      ],
+      "tableTo": "conversation",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_project_active_conversation_id_conversation_id_fk",
+      "entityType": "fks",
+      "table": "project"
+    },
+    {
+      "columns": [
+        "project_id"
+      ],
+      "tableTo": "project",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_project_skill_project_id_project_id_fk",
+      "entityType": "fks",
+      "table": "project_skill"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "app_state_pk",
+      "table": "app_state",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "conversation_pk",
+      "table": "conversation",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "document_pk",
+      "table": "document",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "livrable_pk",
+      "table": "livrable",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "message_pk",
+      "table": "message",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "project_pk",
+      "table": "project",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        {
+          "value": "project_id",
+          "isExpression": false
+        },
+        {
+          "value": "step_key",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": "\"conversation\".\"step_key\" is not null",
+      "origin": "manual",
+      "name": "conversation_project_id_step_key_unique",
+      "entityType": "indexes",
+      "table": "conversation"
+    },
+    {
+      "columns": [
+        "project_id",
+        "skill_key"
+      ],
+      "nameExplicit": false,
+      "name": "project_skill_project_id_skill_key_unique",
+      "entityType": "uniques",
+      "table": "project_skill"
+    }
+  ],
+  "renames": []
+}

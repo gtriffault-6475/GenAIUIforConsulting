@@ -10,12 +10,14 @@ const SEED_PROJECTS: OctopodProject[] = [
     octopodProjectRef: 'OCTO-AV-2847',
     name: 'Réponse RFP — Acme Corp',
     mattermostChannelRef: 'av-acme-rfp',
+    type: 'avant-vente',
   },
   {
     id: 'proj-audit-mission',
     octopodProjectRef: 'OCTO-MI-1936',
     name: 'Audit interne — Mission Client',
     mattermostChannelRef: 'mi-audit-interne',
+    type: 'mission',
   },
 ];
 

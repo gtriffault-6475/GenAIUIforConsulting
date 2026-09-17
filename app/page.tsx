@@ -126,7 +126,14 @@ export default async function Home() {
       <header className="top-bar">
         <span className="text-heading">{activeProject.name}</span>
       </header>
-      <Stepper projectId={activeProject.id} steps={steps} />
+      {/* Story 3.2 — Workflow du cas "livrable de mission" (FR-15). A
+          mission project never has a step to be active in, but the stepper
+          must not be gated on that alone: it is a UI-level concern, not a
+          consequence of `computeStepStatuses`'s own logic (which stays
+          identical for both project types, AD-5). */}
+      {activeProject.type === 'avant-vente' && (
+        <Stepper projectId={activeProject.id} steps={steps} />
+      )}
       <div className="workspace-grid">
         <aside className="workspace-sidebar-left">
           <ConversationList

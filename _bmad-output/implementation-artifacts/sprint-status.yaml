@@ -54,7 +54,7 @@ development_status:
 
   epic-3: in-progress
   3-1-stepper-de-workflow-avant-vente: done
-  3-2-workflow-du-cas-livrable-de-mission: backlog
+  3-2-workflow-du-cas-livrable-de-mission: done
   3-3-suggestion-proactive-de-démarrage: backlog
   epic-3-retrospective: optional
 

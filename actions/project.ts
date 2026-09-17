@@ -17,6 +17,32 @@ import type { OctopodProject } from '@/integrations/ports/project-provider';
 // layer.
 export type ProjectSummary = OctopodProject;
 
+// Shared by `selectProject` and `getActiveProject` — the only two places
+// that write PROJECT (AD-2). Keeping Octopod-sourced fields (including
+// `type`, Story 3.2) here once means a future field only needs a single
+// `set` clause updated, not a duplicate in each caller. Takes `db` or a
+// transaction callback's `tx` — both expose the same `.insert()` builder —
+// so `selectProject` can still land this write atomically with its
+// `appState` update.
+function syncProjectRow(
+  executor: Pick<typeof db, 'insert'>,
+  octopodProject: OctopodProject,
+): void {
+  executor
+    .insert(project)
+    .values(octopodProject)
+    .onConflictDoUpdate({
+      target: project.id,
+      set: {
+        octopodProjectRef: octopodProject.octopodProjectRef,
+        name: octopodProject.name,
+        mattermostChannelRef: octopodProject.mattermostChannelRef,
+        type: octopodProject.type,
+      },
+    })
+    .run();
+}
+
 export async function listProjects(): Promise<ActionResult<ProjectSummary[]>> {
   try {
     const projects = await projectProvider.listProjects();
@@ -61,6 +87,27 @@ export async function getActiveProject(): Promise<
       return { ok: false, error: 'Le projet actif est introuvable.' };
     }
 
+    // Refresh Octopod-sourced fields (name, refs, `type`) on every read,
+    // not just at selection time — otherwise a field added to
+    // `OctopodProject` after a project was already active (Story 3.2's
+    // `type`, backfilled to a schema-migration default for any
+    // pre-existing row) stays permanently wrong: there is no "switch
+    // project" UI yet, so nothing else would ever call `selectProject`
+    // again for an already-active project. A provider hiccup here serves
+    // the last-known local row rather than erroring the whole page for a
+    // field-refresh failure.
+    const octopodProject = await projectProvider.getProject(
+      state.activeProjectId,
+    );
+    if (octopodProject) {
+      syncProjectRow(db, octopodProject);
+      return { ok: true, data: octopodProject };
+    }
+
+    console.error(
+      'getActiveProject: projectProvider.getProject found nothing for the active project; serving the last-known local row',
+      state.activeProjectId,
+    );
     return { ok: true, data: row };
   } catch (error) {
     console.error('getActiveProject failed', error);
@@ -92,17 +139,7 @@ export async function selectProject(
       // resolves and later panels (Contexte, Mattermost) have a local
       // row to read and extend — PROJECT is the durable record, not a
       // cache.
-      tx.insert(project)
-        .values(octopodProject)
-        .onConflictDoUpdate({
-          target: project.id,
-          set: {
-            octopodProjectRef: octopodProject.octopodProjectRef,
-            name: octopodProject.name,
-            mattermostChannelRef: octopodProject.mattermostChannelRef,
-          },
-        })
-        .run();
+      syncProjectRow(tx, octopodProject);
 
       // APP_STATE is a true singleton row (fixed id): upsert, never a
       // second insert.

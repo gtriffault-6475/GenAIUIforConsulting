@@ -8,6 +8,7 @@ export type OctopodProject = {
   octopodProjectRef: string;
   name: string;
   mattermostChannelRef: string;
+  type: 'avant-vente' | 'mission';
 };
 
 export interface ProjectProvider {

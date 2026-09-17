@@ -25,6 +25,16 @@ export const project = sqliteTable('project', {
   octopodProjectRef: text('octopod_project_ref').notNull(),
   name: text('name').notNull(),
   mattermostChannelRef: text('mattermost_channel_ref').notNull(),
+  // Story 3.2 — Workflow du cas "livrable de mission". Comes from Octopod
+  // like `octopodProjectRef`/`mattermostChannelRef` above, never a
+  // locally-invented concept (AD-1). `.default('avant-vente')` is a
+  // migration-time backfill value only — `selectProject` always supplies
+  // the real value from the provider on every insert/update, exactly like
+  // `message.createdAt`'s default (Story 2.5) avoids the same NOT-NULL-
+  // without-default trap on a non-empty table.
+  type: text('type', { enum: ['avant-vente', 'mission'] })
+    .notNull()
+    .default('avant-vente'),
   activeConversationId: text('active_conversation_id').references(
     (): AnySQLiteColumn => conversation.id,
   ),
