@@ -479,3 +479,98 @@ textarea {
   padding: 0;
   list-style: none;
 }
+
+/* Story 3.1 — Stepper de workflow (avant-vente): 4 fixed steps, rendered
+   full-width between `.top-bar` and `.workspace-grid`. Three distinct
+   visual states per the spec's acceptance criteria ("l'étape active est
+   visuellement pleine, les étapes précédentes affichent un état 'terminé'
+   distinct, les suivantes restent neutres") — `--color-accent` for the
+   one active step (a full, solid fill), `--color-selected-tint` (the same
+   token `.nav-row-active` already uses) for done steps, so completion
+   reads as calmer than the active step rather than competing with it, and
+   `--color-text-muted` for upcoming steps, left neutral. Never
+   `--color-ai-accent`: this is user-driven navigation, not
+   AI-originated content (see `components/Stepper.tsx`). */
+.stepper {
+  display: flex;
+  align-items: center;
+  padding: var(--space-4) var(--space-gutter);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.stepper-item {
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.stepper-step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-body);
+  font-size: var(--text-body-size);
+  color: var(--color-text-muted);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.stepper-step:hover,
+.stepper-step:focus-visible {
+  background: var(--color-selected-tint);
+}
+
+.stepper-step:disabled {
+  cursor: default;
+}
+
+.stepper-step-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-full);
+  font-size: var(--text-caption-size);
+  font-weight: var(--text-body-strong-weight);
+  border: 1px solid var(--color-text-muted);
+  color: var(--color-text-muted);
+  background: var(--color-surface);
+}
+
+/* Active: full, solid fill — the one step "pleine" per the spec. */
+.stepper-step-active {
+  color: var(--color-text-primary);
+  font-size: var(--text-body-strong-size);
+  font-weight: var(--text-body-strong-weight);
+}
+
+.stepper-step-active .stepper-step-marker {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-accent-foreground);
+}
+
+/* Done: distinct from both active and upcoming — tinted, not muted. */
+.stepper-step-done {
+  color: var(--color-text-secondary);
+}
+
+.stepper-step-done .stepper-step-marker {
+  background: var(--color-selected-tint);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.stepper-connector {
+  flex: 1;
+  height: 2px;
+  margin: 0 var(--space-2);
+  background: var(--color-border);
+}

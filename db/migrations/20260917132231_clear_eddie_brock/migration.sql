@@ -1,0 +1,2 @@
+ALTER TABLE `conversation` ADD `step_key` text;--> statement-breakpoint
+CREATE UNIQUE INDEX `conversation_project_id_step_key_unique` ON `conversation` (`project_id`,`step_key`) WHERE "conversation"."step_key" is not null;

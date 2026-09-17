@@ -1,11 +1,12 @@
 'use server';
 
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
 import type { ActionResult } from '@/actions/types';
 import { listLoadedSkillInstructions } from '@/actions/skill';
 import { db } from '@/db/client';
 import { conversation, message, project } from '@/db/schema';
+import { STEPS } from '@/domain/workflow';
 import { sendToAgent } from '@/skills/buildRequest';
 import { MODELS, resolveModelLabel } from '@/skills/models';
 
@@ -26,6 +27,12 @@ export type ConversationSummary = {
   id: string;
   projectId: string;
   title: string;
+  // Story 3.1 — Stepper de workflow. `null` for a free conversation not
+  // attached to any stepper step (fixtures, "Nouvelle conversation").
+  // FR-10 is unaffected: this is not content, just which fixed step (if
+  // any) this conversation belongs to (see `db/schema.ts`'s comment on
+  // `conversation.stepKey`).
+  stepKey: string | null;
 };
 
 // FR-10 boundary (Story 2.3): this is the content-bearing type
@@ -197,6 +204,7 @@ export async function listConversations(
         id: conversation.id,
         projectId: conversation.projectId,
         title: conversation.title,
+        stepKey: conversation.stepKey,
       })
       .from(conversation)
       .where(eq(conversation.projectId, projectId));
@@ -237,6 +245,7 @@ export async function getActiveConversation(projectId: string): Promise<
         id: conversation.id,
         projectId: conversation.projectId,
         title: conversation.title,
+        stepKey: conversation.stepKey,
       })
       .from(conversation)
       .where(eq(conversation.id, projectRow.activeConversationId));
@@ -331,6 +340,10 @@ export async function createConversation(
       id: crypto.randomUUID(),
       projectId,
       title: 'Nouvelle conversation',
+      // A manually created conversation is always free-form, never
+      // attached to a stepper step (Story 3.1's `selectStep` below is the
+      // only path that sets `stepKey`).
+      stepKey: null,
     };
 
     db.transaction((tx) => {
@@ -349,6 +362,78 @@ export async function createConversation(
       ok: false,
       error: 'Impossible de créer une nouvelle conversation.',
     };
+  }
+}
+
+// Story 3.1 — Stepper de workflow (avant-vente). Finds the project's
+// existing CONVERSATION for `stepKey` or creates one (titled with that
+// step's French label from `domain/workflow.ts`'s `STEPS` — the only
+// place that list of labels lives), then activates it — the same
+// find-or-create-then-activate shape as `createConversation` above, in
+// one synchronous `db.transaction` callback (no `await` inside): the
+// existence check and the insert/update must stay atomic, exactly like
+// `seedFixturesIfEmpty`, so two concurrent callers can never both observe
+// "no conversation for this step yet" and both insert one — which the
+// partial unique index on `(project_id, step_key)` (`db/schema.ts`) would
+// otherwise reject as a constraint violation instead of just reusing the
+// existing row.
+export async function selectStep(
+  projectId: string,
+  stepKey: string,
+): Promise<ActionResult<void>> {
+  // Defense in depth: `Stepper.tsx` only ever sends one of `STEPS`' 4
+  // keys, but a Server Action is a network-reachable endpoint a
+  // client-side restriction can't bind — reject an out-of-list key before
+  // it ever reaches the DB, the same way `sendMessage` re-validates
+  // `model` against `MODELS`. Without this, an arbitrary `stepKey` would
+  // silently create a permanent conversation `computeStepStatuses` can
+  // never light up (unmatched key → every step stays "upcoming"),
+  // consuming a slot in the partial unique index with no way to reach or
+  // clean it up again through the UI.
+  const step = STEPS.find((candidate) => candidate.key === stepKey);
+  if (!step) {
+    return { ok: false, error: 'Étape invalide.' };
+  }
+
+  try {
+    db.transaction((tx) => {
+      const [existing] = tx
+        .select({ id: conversation.id })
+        .from(conversation)
+        .where(
+          and(
+            eq(conversation.projectId, projectId),
+            eq(conversation.stepKey, stepKey),
+          ),
+        )
+        .all();
+
+      let conversationId: string;
+      if (existing) {
+        conversationId = existing.id;
+      } else {
+        conversationId = crypto.randomUUID();
+
+        tx.insert(conversation)
+          .values({
+            id: conversationId,
+            projectId,
+            title: step.label,
+            stepKey,
+          })
+          .run();
+      }
+
+      tx.update(project)
+        .set({ activeConversationId: conversationId })
+        .where(eq(project.id, projectId))
+        .run();
+    });
+
+    return { ok: true, data: undefined };
+  } catch (error) {
+    console.error('selectStep failed', error);
+    return { ok: false, error: 'Impossible de sélectionner cette étape.' };
   }
 }
 

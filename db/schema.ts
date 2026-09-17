@@ -7,12 +7,13 @@
 // (`source: 'manual'`) so it isn't re-shaped twice. Story 2.1
 // (Conversations multiples et sélection active) adds CONVERSATION and
 // MESSAGE. Story 2.4 (Panneau Skills) adds PROJECT_SKILL. Story 2.6
-// (Panneau Livrables) adds LIVRABLE. See ARCHITECTURE-SPINE.md
-// "Structural Seed" for the full eventual model (SUGGESTION, …) — later
-// stories add those as they need them; do not pre-create tables
-// speculatively here.
+// (Panneau Livrables) adds LIVRABLE. Story 3.1 (Stepper de workflow) adds
+// CONVERSATION.stepKey. See ARCHITECTURE-SPINE.md "Structural Seed" for
+// the full eventual model (SUGGESTION, …) — later stories add those as
+// they need them; do not pre-create tables speculatively here.
+import { sql } from 'drizzle-orm';
 import type { AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
-import { sqliteTable, text, unique } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, unique, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 // A project connected from Octopod. `activeConversationId` is part of the
 // fixed shape from the architecture spine (AD-6: "seule source de vérité"
@@ -63,13 +64,33 @@ export const document = sqliteTable('document', {
 // `actions/conversation.ts`, never synced from an `integrations/*`
 // adapter. `PROJECT.activeConversationId` — not any field here — is the
 // sole source of truth for which conversation is active (AD-6).
-export const conversation = sqliteTable('conversation', {
-  id: text('id').primaryKey(),
-  projectId: text('project_id')
-    .notNull()
-    .references(() => project.id),
-  title: text('title').notNull(),
-});
+//
+// `stepKey` (Story 3.1 — Stepper de workflow) rattache une conversation à
+// une des 4 étapes fixes du stepper avant-vente (`domain/workflow.ts`'s
+// `STEPS`). Nullable: `null` means a free-form conversation not attached
+// to any step — Story 2.1's two fixture conversations and every
+// conversation created via "Nouvelle conversation" (Story 2.2) keep it
+// null, and so will Story 3.2's mission-case conversations — a valid,
+// unambiguous state, not "not yet configured" (AD-6,
+// ARCHITECTURE-SPINE.md). The partial unique index below enforces "one
+// conversation per step per project" only among non-null rows; any number
+// of rows may each hold `stepKey = null`.
+export const conversation = sqliteTable(
+  'conversation',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => project.id),
+    title: text('title').notNull(),
+    stepKey: text('step_key'),
+  },
+  (table) => [
+    uniqueIndex('conversation_project_id_step_key_unique')
+      .on(table.projectId, table.stepKey)
+      .where(sql`${table.stepKey} is not null`),
+  ],
+);
 
 // A single message within a CONVERSATION. `model` names the AI model that
 // produced an `assistant` message (e.g. "Claude Sonnet 5"); it is null

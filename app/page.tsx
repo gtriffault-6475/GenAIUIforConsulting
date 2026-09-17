@@ -12,6 +12,8 @@ import { LivrablesPanel } from '@/components/LivrablesPanel';
 import { MattermostPanel } from '@/components/MattermostPanel';
 import { ProjectSelector } from '@/components/ProjectSelector';
 import { SkillsPanel } from '@/components/SkillsPanel';
+import { Stepper } from '@/components/Stepper';
+import { computeStepStatuses } from '@/domain/workflow';
 
 // Reads APP_STATE (mutable, changed by the `selectProject` Server Action)
 // on every request — Next must not cache this as a static shell from
@@ -107,12 +109,24 @@ export default async function Home() {
   const documents = documentsResult.ok ? documentsResult.data : null;
   const skills = skillsResult.ok ? skillsResult.data : null;
   const livrables = livrablesResult.ok ? livrablesResult.data : null;
+  // Story 3.1 — Stepper de workflow. Read from the active conversation's
+  // own `stepKey` (AD-6: never the other way around) — a fixture
+  // conversation or a failed read both fall back to `null`, which
+  // `computeStepStatuses` (a pure function, `domain/workflow.ts`) turns
+  // into "every step upcoming, none active" rather than crashing or
+  // guessing.
+  const steps = computeStepStatuses(
+    activeConversationResult.ok
+      ? (activeConversationResult.data?.conversation.stepKey ?? null)
+      : null,
+  );
 
   return (
     <div>
       <header className="top-bar">
         <span className="text-heading">{activeProject.name}</span>
       </header>
+      <Stepper projectId={activeProject.id} steps={steps} />
       <div className="workspace-grid">
         <aside className="workspace-sidebar-left">
           <ConversationList
