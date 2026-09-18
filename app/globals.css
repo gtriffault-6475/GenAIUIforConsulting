@@ -642,3 +642,82 @@ textarea {
   cursor: default;
   opacity: 0.6;
 }
+
+/* Story 4.3 — Traitement d'une suggestion ancrée (FR-21, UX-DR4). First
+   real consumer of `.button-ai-primary` (DESIGN.md > Components: fond
+   `{colors.ai-accent}`, réservé aux actions qui valident/déclenchent un
+   contenu venant de l'IA — jamais une action purement utilisateur). Used
+   only for Accepter and "Envoyer la demande de retravail"
+   (`SuggestionCard.tsx`) — Rejeter and the Retravailler trigger stay
+   `.button-later`, same neutral secondary style as `ProactiveSuggestion`'s
+   "Plus tard". */
+.button-ai-primary {
+  font-family: var(--font-body);
+  font-size: var(--text-body-strong-size);
+  font-weight: var(--text-body-strong-weight);
+  background: var(--color-ai-accent);
+  color: var(--color-ai-accent-foreground);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-4);
+  cursor: pointer;
+}
+
+.button-ai-primary:hover,
+.button-ai-primary:focus-visible {
+  opacity: 0.9;
+}
+
+.button-ai-primary:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* `.rework-field` reuses `.model-selector-dropdown`/`.skill-add-overlay`'s
+   shape (`position: absolute`, `--elevation-dropdown`) — the one true
+   floating surface for "Retravailler" (AD-8), mounted only while
+   `useOverlay()` reports this suggestion's `rework-${id}` open. Anchored
+   to `.suggestion-rework-wrap` (`position: relative`, the actions row),
+   opening downward — unlike the composer's upward-opening dropdown, the
+   suggestions panel has no bottom-of-viewport constraint. */
+.suggestion-rework-wrap {
+  position: relative;
+}
+
+.rework-field {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  left: 0;
+  right: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  box-shadow: var(--elevation-dropdown);
+}
+
+/* A treated suggestion (`accepted`/`rejected`) stays in the panel but
+   s'estompe (epic-4-context.md: "texte en text-muted") rather than
+   disappearing — the card itself keeps its full `ai-suggestion-card`
+   fill, only its own text and status row dim. */
+.ai-suggestion-card-resolved-text {
+  color: var(--color-text-muted);
+}
+
+/* Accepted/rejected status row: a check icon (accepted only,
+   `--color-success` per DESIGN.md — "exclusivement pour confirmer qu'une
+   suggestion IA a été acceptée") plus a text label always present, so the
+   three suggestion states never rely on color alone
+   (EXPERIENCE.md's Accessibility Floor). */
+.ai-suggestion-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-muted);
+}
+
+.ai-suggestion-status-icon {
+  flex-shrink: 0;
+  stroke: var(--color-success);
+}

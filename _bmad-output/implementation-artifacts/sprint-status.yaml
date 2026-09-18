@@ -61,7 +61,7 @@ development_status:
   epic-4: in-progress
   4-1-ouverture-d-un-livrable: done
   4-2-génération-des-suggestions-ancrées-à-l-écriture: done
-  4-3-traitement-d-une-suggestion-ancrée: backlog
+  4-3-traitement-d-une-suggestion-ancrée: done
   4-4-révision-globale: backlog
   4-5-contrôle-du-consultant-sur-le-document-final: backlog
   epic-4-retrospective: optional

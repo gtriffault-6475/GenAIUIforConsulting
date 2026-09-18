@@ -33,3 +33,22 @@ export function resolveAnchorPosition(
   const index = blocks.findIndex((block) => block.id === anchorRef);
   return index === -1 ? null : index + 1;
 }
+
+// Story 4.3 — Traitement d'une suggestion ancrée (AD-5, AD-9). Pure: returns
+// a new blocks array where the block whose `id === anchorRef` has its
+// `text` replaced by `newText` — every other block, and that block's own
+// `id`, are carried over unchanged (Always: "seul le text du bloc change,
+// jamais son id"). Never reorders or drops a block. If no block matches
+// `anchorRef` (not reachable from `acceptSuggestion`'s own call site,
+// which always reads the anchor from the same livrable it is about to
+// update, but defensive per `resolveAnchorPosition`'s own precedent
+// above), returns `blocks` unchanged rather than throwing.
+export function applyAcceptedSuggestion(
+  blocks: { id: string; text: string }[],
+  anchorRef: string,
+  newText: string,
+): { id: string; text: string }[] {
+  return blocks.map((block) =>
+    block.id === anchorRef ? { id: block.id, text: newText } : block,
+  );
+}
