@@ -185,16 +185,19 @@ export default async function Home() {
         </aside>
         <div className="workspace-center">
           {startingSuggestionStepLabel && activeConversationData?.conversation.stepKey && (
-            // `key` = conversation id (spec's Code Map): a fresh instance
-            // mounts per conversation, so this component's own local
-            // masked/accepted state (AD-7) never survives a conversation
-            // switch — only a `router.refresh()` within the same
-            // conversation keeps it, which is what makes a treated
-            // suggestion not reappear (FR-18). `ProactiveSuggestion` itself
-            // fetches the suggestion text once on that mount — this
-            // component only decides *whether* one belongs here.
+            // `key` is namespaced (`suggestion-${id}`), not the bare
+            // conversation id: `Composer` below is a direct sibling under
+            // this same `.workspace-center` and already keys itself on that
+            // bare id (`activeConversationId ?? 'none'`) — React warns on
+            // "two children with the same key" for any two direct siblings
+            // sharing one, regardless of element type, which is exactly
+            // what a bare `id` here collided with. The remount-per-
+            // conversation behavior this key exists for (AD-7's masked/
+            // accepted state never surviving a conversation switch, FR-18)
+            // only depends on the key changing together with the id, not on
+            // its exact string — the namespace prefix preserves that.
             <ProactiveSuggestion
-              key={activeConversationData.conversation.id}
+              key={`suggestion-${activeConversationData.conversation.id}`}
               projectId={activeProject.id}
               stepKey={activeConversationData.conversation.stepKey}
               stepLabel={startingSuggestionStepLabel}
