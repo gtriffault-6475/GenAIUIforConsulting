@@ -1,13 +1,17 @@
 import Link from 'next/link';
 
 import { getLivrable } from '@/actions/livrable';
+import { listSuggestions } from '@/actions/suggestion';
+import { SuggestionsPanel } from '@/components/SuggestionsPanel';
 
 // Story 4.1 — Éditeur assisté (FR-19). First route of the app besides `/`.
-// Read-only: shows the livrable's existing content, nothing more —
-// Stories 4.2-4.5 populate this same page with anchored suggestions, the
-// suggestions panel, and the global revision field. `getLivrable` only
-// ever does a `SELECT` (`epic-4-context.md`'s Technical Decisions) so this
-// page never triggers an agent call just by being opened.
+// Story 4.2 (FR-24) adds `listSuggestions` alongside `getLivrable` and
+// renders `SuggestionsPanel` below the content card — both reads are plain
+// `SELECT`s (`epic-4-context.md`'s Technical Decisions), so this page still
+// never triggers an agent call just by being opened; suggestions already
+// persisted by `propose_livrable_content` (`actions/conversation.ts`)
+// simply appear. Stories 4.3-4.5 still populate this same page with
+// suggestion actions and the global revision field.
 //
 // Reads APP_STATE indirectly through nothing here — this page looks up
 // the livrable by `id` alone (Boundaries: mono-projet-actif this round,
@@ -23,7 +27,22 @@ export default async function LivrablePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const result = await getLivrable(id);
+  // Parallel, both plain `SELECT`s — `listSuggestions` reads by the same
+  // `id` (a LIVRABLE's id doubles as its own suggestions' `livrableId`
+  // scope), never gating one read on the other's result.
+  const [result, suggestionsResult] = await Promise.all([
+    getLivrable(id),
+    listSuggestions(id),
+  ]);
+
+  // A failed suggestions read degrades to "no suggestions shown" rather
+  // than a second visible error on this page — logged for troubleshooting,
+  // same spirit as other silent background-read failures in this app
+  // (e.g. `getStartingSuggestion`).
+  if (!suggestionsResult.ok) {
+    console.error('LivrablePage: listSuggestions failed', suggestionsResult.error);
+  }
+  const suggestions = suggestionsResult.ok ? suggestionsResult.data : [];
 
   return (
     <div>
@@ -59,39 +78,53 @@ export default async function LivrablePage({
           </p>
         ) : (
           <div
-            className="card"
             style={{
-              padding: 'var(--space-panel-padding)',
               display: 'flex',
               flexDirection: 'column',
               gap: 'var(--space-3)',
               maxWidth: '660px',
             }}
           >
-            <h1 className="text-heading">{result.data.title}</h1>
-            {/* Rendered in `content.blocks`' own array order, keyed by
-                `block.id` — never the block's text — since Story 4.2's
-                anchored suggestions will target this same stable id and it
-                must never be regenerated here (Always). Read-only: no
-                `<textarea>`/`contentEditable` anywhere on this content
-                (Never). */}
-            {result.data.blocks.length === 0 ? (
-              // A valid livrable with zero blocks — same inline-message
-              // style as the "introuvable" branch above, rather than
-              // rendering the title alone in an otherwise-empty card.
-              <p
-                className="text-body"
-                style={{ color: 'var(--color-text-secondary)' }}
-              >
-                Ce livrable ne contient aucun contenu pour le moment.
-              </p>
-            ) : (
-              result.data.blocks.map((block) => (
-                <p key={block.id} className="text-body">
-                  {block.text}
+            <div
+              className="card"
+              style={{
+                padding: 'var(--space-panel-padding)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 'var(--space-3)',
+              }}
+            >
+              <h1 className="text-heading">{result.data.title}</h1>
+              {/* Rendered in `content.blocks`' own array order, keyed by
+                  `block.id` — never the block's text — since Story 4.2's
+                  anchored suggestions target this same stable id and it
+                  must never be regenerated here (Always). Read-only: no
+                  `<textarea>`/`contentEditable` anywhere on this content
+                  (Never). */}
+              {result.data.blocks.length === 0 ? (
+                // A valid livrable with zero blocks — same inline-message
+                // style as the "introuvable" branch above, rather than
+                // rendering the title alone in an otherwise-empty card.
+                <p
+                  className="text-body"
+                  style={{ color: 'var(--color-text-secondary)' }}
+                >
+                  Ce livrable ne contient aucun contenu pour le moment.
                 </p>
-              ))
-            )}
+              ) : (
+                result.data.blocks.map((block) => (
+                  <p key={block.id} className="text-body">
+                    {block.text}
+                  </p>
+                ))
+              )}
+            </div>
+
+            {/* Story 4.2 (FR-24) — suggestions already persisted alongside
+                this livrable's creation, stacked below its content in one
+                column (Never: no dedicated side panel yet, deferred to
+                Story 4.3). */}
+            <SuggestionsPanel blocks={result.data.blocks} suggestions={suggestions} />
           </div>
         )}
       </main>

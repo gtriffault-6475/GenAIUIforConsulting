@@ -182,3 +182,46 @@ export const livrable = sqliteTable('livrable', {
   title: text('title').notNull(),
   content: text('content').notNull(),
 });
+
+// An AI-authored suggestion on a LIVRABLE (Story 4.2 — Génération des
+// suggestions ancrées à l'écriture), per the Structural Seed. `type`
+// distinguishes an `anchored` suggestion (targets one paragraph, via
+// `anchorRef`) from a `global` one (Story 4.4's whole-document revision,
+// `anchorRef` null) — both share this one table rather than two, since
+// every other column (`text`, `status`) means the same thing for both.
+// `anchorRef` holds a block *id* from the owning LIVRABLE's
+// `content.blocks` (never a position — epic-4-context.md's Technical
+// Decisions: "l'ordre des autres blocs n'affecte jamais la résolution de
+// l'ancre"), resolved to a display position only at render time by
+// `domain/suggestion.ts`'s `resolveAnchorPosition`. `status` reuses the
+// same four literals as `domain/suggestion.ts`'s `SuggestionStatus` — that
+// file is the only place this enum is *defined* (Consistency Conventions),
+// this column just repeats its values as SQLite doesn't let a `.enum(...)`
+// reference an external TS type.
+//
+// The partial unique index enforces epic-4-context.md's "une seule
+// suggestion ancrée en attente par paragraphe à la fois": at most one
+// `pending`+`anchored` row per `(livrableId, anchorRef)` pair. `global`
+// suggestions (`anchorRef` null) are excluded by the `type = 'anchored'`
+// clause — any number of pending global revisions may coexist, per the
+// same Technical Decisions.
+export const suggestion = sqliteTable(
+  'suggestion',
+  {
+    id: text('id').primaryKey(),
+    livrableId: text('livrable_id')
+      .notNull()
+      .references(() => livrable.id),
+    type: text('type', { enum: ['anchored', 'global'] }).notNull(),
+    anchorRef: text('anchor_ref'),
+    text: text('text').notNull(),
+    status: text('status', {
+      enum: ['pending', 'accepted', 'rejected', 'revising'],
+    }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('suggestion_livrable_id_anchor_ref_pending_anchored_unique')
+      .on(table.livrableId, table.anchorRef)
+      .where(sql`${table.status} = 'pending' and ${table.type} = 'anchored'`),
+  ],
+);

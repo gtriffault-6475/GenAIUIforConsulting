@@ -3,12 +3,18 @@
 import { and, eq } from 'drizzle-orm';
 
 import type { ActionResult } from '@/actions/types';
+import { createLivrableWithSuggestions } from '@/actions/livrable';
 import { listLoadedSkillInstructions } from '@/actions/skill';
 import { db } from '@/db/client';
 import { conversation, message, project } from '@/db/schema';
 import { STEPS } from '@/domain/workflow';
+import type { ExecuteToolResult } from '@/skills/buildRequest';
 import { sendToAgent } from '@/skills/buildRequest';
 import { MODELS, resolveModelLabel } from '@/skills/models';
+import {
+  PROPOSE_LIVRABLE_CONTENT_TOOL,
+  parseProposeLivrableContentInput,
+} from '@/skills/propose_livrable_content';
 import { proposeStartingPoint } from '@/skills/propose_starting_point';
 
 // AD-2 — this is the only file allowed to read or write
@@ -519,10 +525,46 @@ export async function sendMessage(
       .where(eq(message.conversationId, conversationId))
       .orderBy(message.createdAt);
 
+    // Story 4.2 — Génération des suggestions ancrées à l'écriture (AD-3).
+    // This tool is offered on *every* `sendMessage` call, never gated
+    // behind a loaded skill (Always) — only its own `description` guides
+    // the model toward using it. `executeTool` is the one point where a
+    // tool call turns into persistence, and it never touches `db` itself
+    // (AD-2): it only parses the model's input and delegates to
+    // `createLivrableWithSuggestions`, which does the actual transaction.
+    const executeTool = async (
+      input: unknown,
+    ): Promise<ExecuteToolResult> => {
+      const parsed = parseProposeLivrableContentInput(input);
+      if (!parsed.ok) {
+        return { ok: false, error: parsed.error };
+      }
+
+      const created = await createLivrableWithSuggestions(
+        projectId,
+        conversationId,
+        parsed.data,
+      );
+      if (!created.ok) {
+        return { ok: false, error: created.error };
+      }
+
+      // This text becomes the tool's `tool_result` content, read only by
+      // the model on the second call (Design Notes) — never persisted to
+      // MESSAGE itself (Always: "MESSAGE ne stocke jamais l'échange
+      // outil"), only the final natural-language reply built from it is.
+      return {
+        ok: true,
+        content: `Le livrable "${parsed.data.title}" a été créé avec ${parsed.data.suggestions.length} suggestion(s) ancrée(s).`,
+      };
+    };
+
     const agentResult = await sendToAgent({
       loadedSkills,
       history: historyRows,
       model,
+      tool: PROPOSE_LIVRABLE_CONTENT_TOOL,
+      executeTool,
     });
 
     if (!agentResult.ok) {

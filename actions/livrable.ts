@@ -4,9 +4,15 @@ import { eq } from 'drizzle-orm';
 
 import type { ActionResult } from '@/actions/types';
 import { db } from '@/db/client';
-import { livrable } from '@/db/schema';
+import { livrable, suggestion } from '@/db/schema';
+import type { ProposedLivrableContent } from '@/skills/propose_livrable_content';
 
-// AD-2 — this is the only file allowed to read or write LIVRABLE.
+// AD-2 — this is the only file allowed to read or write LIVRABLE. The one
+// exception is `SUGGESTION`: `createLivrableWithSuggestions` below inserts
+// both rows in a single transaction (the spec's Always: "LIVRABLE+SUGGESTION
+// dans une seule transaction synchrone"), so that insert lives here rather
+// than in `actions/suggestion.ts` — every other read/write of `SUGGESTION`
+// stays that file's exclusive concern (its own header comment).
 // Components never touch `db/` directly; they call this Server Action.
 
 // The shape `LivrablesPanel` sees: a livrable row reduced to the field
@@ -169,6 +175,88 @@ export async function listLivrables(
     return {
       ok: false,
       error: 'Impossible de récupérer les livrables du projet.',
+    };
+  }
+}
+
+// Story 4.2 — Génération des suggestions ancrées à l'écriture (AD-2, AD-9).
+// Called from `actions/conversation.ts`'s `sendMessage`, via the
+// `executeTool` closure it hands to `skills/buildRequest.ts`'s
+// `sendToAgent` — the model's validated tool input
+// (`ProposedLivrableContent`, from `parseProposeLivrableContentInput`)
+// becomes one new LIVRABLE row plus its `SUGGESTION` rows, in a single
+// synchronous `db.transaction`, same shape as `selectStep`/`selectProject`
+// (Always). Always inserts a brand-new LIVRABLE — never updates an
+// existing row (Never: "jamais de mise à jour d'un livrable existant ici",
+// régénération deferred to Story 4.4).
+//
+// Block ids are generated here, server-side, one per `proposal.blocks`
+// entry (Always: "Ids de bloc toujours générés côté serveur") — the model
+// never sees or invents one. Each `proposal.suggestions[].blockIndex` is
+// then resolved against that same freshly generated array to find the
+// block id it anchors to, before the SUGGESTION row is inserted — a
+// `blockIndex` out of range at this point would be a defense-in-depth gap
+// even though `parseProposeLivrableContentInput` already rejects it, so it
+// is still checked here rather than trusted blindly.
+export async function createLivrableWithSuggestions(
+  projectId: string,
+  conversationId: string,
+  proposal: ProposedLivrableContent,
+): Promise<ActionResult<{ livrableId: string }>> {
+  try {
+    const livrableId = crypto.randomUUID();
+
+    const blocks = proposal.blocks.map((text) => ({
+      id: crypto.randomUUID(),
+      text,
+    }));
+
+    const content = JSON.stringify({ blocks });
+
+    db.transaction((tx) => {
+      tx.insert(livrable)
+        .values({
+          id: livrableId,
+          projectId,
+          conversationId,
+          title: proposal.title,
+          content,
+        })
+        .run();
+
+      for (const item of proposal.suggestions) {
+        const block = blocks[item.blockIndex];
+        if (!block) {
+          // Defense in depth only — `parseProposeLivrableContentInput`
+          // already rejects any out-of-range `blockIndex` before this
+          // function is ever called. Skip rather than throw mid-transaction
+          // so one bad entry never orphans the LIVRABLE row itself.
+          console.error(
+            'createLivrableWithSuggestions: suggestion blockIndex out of range',
+            item.blockIndex,
+          );
+          continue;
+        }
+
+        tx.insert(suggestion)
+          .values({
+            id: crypto.randomUUID(),
+            livrableId,
+            type: 'anchored',
+            anchorRef: block.id,
+            text: item.text,
+            status: 'pending',
+          })
+          .run();
+      }
+    });
+
+    return { ok: true, data: { livrableId } };
+  } catch (error) {
+    console.error('createLivrableWithSuggestions failed', error);
+    return {
+      ok: false,
+      error: 'Impossible de créer ce livrable.',
     };
   }
 }
