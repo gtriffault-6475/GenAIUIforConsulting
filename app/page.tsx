@@ -10,10 +10,11 @@ import { ConversationHistory } from '@/components/ConversationHistory';
 import { ConversationList } from '@/components/ConversationList';
 import { LivrablesPanel } from '@/components/LivrablesPanel';
 import { MattermostPanel } from '@/components/MattermostPanel';
+import { ProactiveSuggestion } from '@/components/ProactiveSuggestion';
 import { ProjectSelector } from '@/components/ProjectSelector';
 import { SkillsPanel } from '@/components/SkillsPanel';
 import { Stepper } from '@/components/Stepper';
-import { computeStepStatuses } from '@/domain/workflow';
+import { computeStepStatuses, STEPS } from '@/domain/workflow';
 
 // Reads APP_STATE (mutable, changed by the `selectProject` Server Action)
 // on every request — Next must not cache this as a static shell from
@@ -121,6 +122,45 @@ export default async function Home() {
       : null,
   );
 
+  // Story 3.3 — Suggestion proactive de démarrage (FR-17/FR-18). Single
+  // display condition, per the spec's Boundaries: avant-vente project AND
+  // active conversation attached to a step (`stepKey !== null`) AND that
+  // conversation has zero messages — covers both "ouverture de projet" et
+  // "passage à une nouvelle étape" without a dedicated code path for
+  // either, since both land on the same "step conversation, no message"
+  // state. A failed or absent active conversation (`ok:false` or `null`)
+  // simply never satisfies this condition, same fallback as `steps` above.
+  const activeConversationData = activeConversationResult.ok
+    ? activeConversationResult.data
+    : null;
+  const showStartingSuggestion =
+    activeProject.type === 'avant-vente' &&
+    activeConversationData !== null &&
+    activeConversationData.conversation.stepKey !== null &&
+    activeConversationData.messages.length === 0;
+
+  // Generating a suggestion is a real, billed Anthropic API call
+  // (`skills/propose_starting_point.ts` → AD-11's `sendToAgent`) — this
+  // Server Component only resolves the step's French label here; it must
+  // never call `getStartingSuggestion` itself. Doing so here would block
+  // this render (and every other panel on the page) behind a live agent
+  // call, and would re-run that call on every unrelated `router.refresh()`
+  // (e.g. another panel refreshing the page) for as long as the
+  // conversation stays empty. `ProactiveSuggestion` calls it exactly once,
+  // client-side, on its own mount instead (see that component).
+  let startingSuggestionStepLabel: string | null = null;
+  if (showStartingSuggestion && activeConversationData) {
+    const stepKey = activeConversationData.conversation.stepKey;
+    const step = STEPS.find((candidate) => candidate.key === stepKey);
+    // `selectStep` (Story 3.1) only ever writes one of `STEPS`' 4 keys, so
+    // this should always match — but the suggestion needs a French label
+    // to build its prompt from, and silently skipping an unmatched key is
+    // the safer fallback over passing a garbage label to the agent.
+    if (step) {
+      startingSuggestionStepLabel = step.label;
+    }
+  }
+
   return (
     <div>
       <header className="top-bar">
@@ -144,6 +184,22 @@ export default async function Home() {
           <SkillsPanel projectId={activeProject.id} skills={skills} />
         </aside>
         <div className="workspace-center">
+          {startingSuggestionStepLabel && activeConversationData?.conversation.stepKey && (
+            // `key` = conversation id (spec's Code Map): a fresh instance
+            // mounts per conversation, so this component's own local
+            // masked/accepted state (AD-7) never survives a conversation
+            // switch — only a `router.refresh()` within the same
+            // conversation keeps it, which is what makes a treated
+            // suggestion not reappear (FR-18). `ProactiveSuggestion` itself
+            // fetches the suggestion text once on that mount — this
+            // component only decides *whether* one belongs here.
+            <ProactiveSuggestion
+              key={activeConversationData.conversation.id}
+              projectId={activeProject.id}
+              stepKey={activeConversationData.conversation.stepKey}
+              stepLabel={startingSuggestionStepLabel}
+            />
+          )}
           <ConversationHistory result={activeConversationResult} />
           {/* `key` forces a fresh `Composer` instance per conversation — its
               draft/error state is local `useState`, never reset by a prop

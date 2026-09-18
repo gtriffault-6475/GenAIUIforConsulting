@@ -9,6 +9,7 @@ import { conversation, message, project } from '@/db/schema';
 import { STEPS } from '@/domain/workflow';
 import { sendToAgent } from '@/skills/buildRequest';
 import { MODELS, resolveModelLabel } from '@/skills/models';
+import { proposeStartingPoint } from '@/skills/propose_starting_point';
 
 // AD-2 — this is the only file allowed to read or write
 // CONVERSATION/MESSAGE. Components never touch `db/` directly; they call
@@ -559,6 +560,54 @@ export async function sendMessage(
         assistantFailed: true,
         error: "Une erreur est survenue lors de l'appel à l'agent.",
       },
+    };
+  }
+}
+
+// Story 3.3 — Suggestion proactive de démarrage. Called by `app/page.tsx`
+// only when its display condition is already true (avant-vente project,
+// `stepKey` non-null active conversation, zero messages) — this function
+// itself does not re-check that condition, it only generates the text.
+// Loads the project's skills the same way `sendMessage` does
+// (`listLoadedSkillInstructions`, already used there) so the suggestion
+// is informed by the same skills a real message would be, then delegates
+// to `skills/propose_starting_point.ts` (AD-11's `sendToAgent`, via that
+// dedicated assembly point). Nothing here is persisted (AD-7): the result
+// is either shown once or discarded, never written to MESSAGE or any
+// other table. Per the spec's Boundaries ("un échec de génération reste
+// silencieux"), a failure is only logged here — `app/page.tsx` simply
+// does not render `ProactiveSuggestion` when this returns `{ok:false}`,
+// never a visible error.
+export async function getStartingSuggestion(
+  projectId: string,
+  stepLabel: string,
+): Promise<ActionResult<string>> {
+  try {
+    const loadedSkillsResult = await listLoadedSkillInstructions(projectId);
+    if (!loadedSkillsResult.ok) {
+      console.error(
+        'getStartingSuggestion: failed to load skills',
+        loadedSkillsResult.error,
+      );
+      return { ok: false, error: loadedSkillsResult.error };
+    }
+
+    const result = await proposeStartingPoint({
+      stepLabel,
+      loadedSkills: loadedSkillsResult.data,
+    });
+
+    if (!result.ok) {
+      console.error('getStartingSuggestion: proposeStartingPoint failed', result.error);
+      return { ok: false, error: result.error };
+    }
+
+    return { ok: true, data: result.content };
+  } catch (error) {
+    console.error('getStartingSuggestion failed', error);
+    return {
+      ok: false,
+      error: "Impossible de générer une suggestion de démarrage.",
     };
   }
 }

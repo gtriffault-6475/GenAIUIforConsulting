@@ -574,3 +574,55 @@ textarea {
   margin: 0 var(--space-2);
   background: var(--color-border);
 }
+
+/* Story 3.3 — Suggestion proactive de démarrage: first real consumer of
+   `ai-suggestion-card` (UX-DR4, DESIGN.md > Components — deferred since
+   Epic 1's retro, `epic-1-retro-item-1`). Full `ai-tint` fill, explicitly
+   `border: none` per DESIGN.md — never the colored-left-border treatment
+   some suggestion UIs default to; that distinction is the whole point of
+   this token (the violet stays reserved for AI-originated content, never
+   decorative). Rendered above `ConversationHistory` in `.workspace-center`
+   (`app/page.tsx`), so it inherits that container's `gap` instead of
+   adding its own margin. */
+.ai-suggestion-card {
+  background: var(--color-ai-tint);
+  border: none;
+  border-radius: var(--radius-md);
+  padding: var(--space-panel-padding);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.ai-suggestion-card-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* "Plus tard" — deliberately minimal (spec's Code Map): this dismisses
+   the suggestion without acting on it, so it must read as clearly
+   secondary to `button-primary`'s "Oui, commençons" rather than competing
+   with it. No fill, no border — text-only, same interactive affordance
+   `.nav-row` already uses for its hover/focus state. */
+.button-later {
+  font-family: var(--font-body);
+  font-size: var(--text-body-strong-size);
+  font-weight: var(--text-body-strong-weight);
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-4);
+  cursor: pointer;
+}
+
+.button-later:hover,
+.button-later:focus-visible {
+  color: var(--color-text-primary);
+}
+
+.button-later:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
