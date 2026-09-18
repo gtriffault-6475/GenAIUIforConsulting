@@ -88,6 +88,70 @@ function seedFixturesIfEmpty(projectId: string): void {
   });
 }
 
+// The shape the Éditeur assisté (Story 4.1, `app/livrables/[id]/page.tsx`)
+// reads: unlike `LivrableSummary`, this carries `content.blocks` — each
+// block keeps its stable `id` (AD-9, `crypto.randomUUID()` at creation,
+// never regenerated) since Story 4.2's anchored suggestions will target it
+// as `anchorRef`. Still never carries `conversationId` — nothing in this
+// story needs it, and exposing it here would be the same FR-10-adjacent
+// leak `LivrableSummary`'s comment already rules out for the panel.
+export type LivrableDetail = {
+  id: string;
+  title: string;
+  blocks: { id: string; text: string }[];
+};
+
+// Reads a single LIVRABLE row by id alone, no project filter (Boundaries:
+// this round is mono-projet-actif, `APP_STATE` singleton, and `id` is an
+// opaque, non-guessable UUID — nothing in `epic-4-context.md` asks for a
+// project check on top of that, and "Ouvrir l'Éditeur assisté ne fait
+// qu'un SELECT" per its Technical Decisions). `data: null` means "no row
+// for this id" — distinct from `{ok:false}` (a read failure), same
+// convention as `getActiveConversation`/`getActiveProject`: the page must
+// never confuse the two.
+export async function getLivrable(
+  id: string,
+): Promise<ActionResult<LivrableDetail | null>> {
+  try {
+    const [row] = await db.select().from(livrable).where(eq(livrable.id, id));
+
+    if (!row) {
+      return { ok: true, data: null };
+    }
+
+    const content = JSON.parse(row.content) as { blocks?: unknown };
+
+    // `JSON.parse` only guarantees valid JSON, not the expected shape — a
+    // bare type assertion here would let a malformed `content` (e.g. `{}`)
+    // through as `{ok:true, data:{...,blocks:undefined}}`, a silent
+    // success the caller has no way to distinguish from a real empty
+    // livrable. Validate before trusting it, same as the catch branch
+    // below treats any other read failure.
+    if (!Array.isArray(content?.blocks)) {
+      console.error('getLivrable: malformed content.blocks', id);
+      return {
+        ok: false,
+        error: 'Impossible de récupérer ce livrable.',
+      };
+    }
+
+    return {
+      ok: true,
+      data: {
+        id: row.id,
+        title: row.title,
+        blocks: content.blocks as { id: string; text: string }[],
+      },
+    };
+  } catch (error) {
+    console.error('getLivrable failed', error);
+    return {
+      ok: false,
+      error: 'Impossible de récupérer ce livrable.',
+    };
+  }
+}
+
 export async function listLivrables(
   projectId: string,
 ): Promise<ActionResult<LivrableSummary[]>> {

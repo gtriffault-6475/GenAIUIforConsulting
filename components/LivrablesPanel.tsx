@@ -1,13 +1,14 @@
+import Link from 'next/link';
+
 import type { LivrableSummary } from '@/actions/livrable';
 
 // Right-sidebar Livrables panel (Story 2.6 — Panneau Livrables), rendered
 // between `ContextPanel` and `MattermostPanel` in `workspace-sidebar-right`
 // (order fixed by `epic-2-context.md`'s UX pattern). Server Component —
 // like `MattermostPanel.tsx`: no mutation, no overlay, no client-side
-// state. Cards are deliberately not clickable in this story — the
-// click-through to the Éditeur assisté is Story 4.1's concern (explicit
-// note on this story's AC in `epics.md`), not this one's, so no `<a>`/
-// `<button>`/click handler appears anywhere below.
+// state. Cards are now a `<Link>` to the Éditeur assisté (Story 4.1) —
+// the click-through this story's own comment had deferred — wrapping the
+// same icon+title content rather than changing the card's look.
 //
 // Reuses `.card`/`.skill-card`/`.skill-card-icon` from Story 2.4 rather
 // than introducing a livrable-specific class (Code Map: "réutilise .card,
@@ -66,23 +67,34 @@ export function LivrablesPanel({
           }}
         >
           {livrables.map((item) => (
-            // A plain, non-interactive `<li>` — not a `<button>`/`<a>` —
-            // since this story's Never is explicit: no click-through, no
-            // simulated interactivity.
-            <li key={item.id} className="card skill-card">
-              <svg
-                className="skill-card-icon"
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                strokeWidth="2"
-                aria-hidden="true"
+            // `<li>` keeps its list semantics; the `<Link>` inside carries
+            // the actual card look (`card skill-card`) and all the
+            // interactivity — same icon+title content as before, just now
+            // clickable (Story 4.1).
+            <li key={item.id}>
+              <Link
+                href={`/livrables/${item.id}`}
+                className="card skill-card"
+                // The global `a { color: inherit }` rule already keeps the
+                // card's text color; only the browser's default underline
+                // needs resetting here, same as every other place in this
+                // app that turns a styled block into a link.
+                style={{ textDecoration: 'none' }}
               >
-                <path d="M6 2h9l5 5v13a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2z" />
-                <path d="M15 2v5h5" />
-              </svg>
-              <span className="text-body-strong">{item.title}</span>
+                <svg
+                  className="skill-card-icon"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  strokeWidth="2"
+                  aria-hidden="true"
+                >
+                  <path d="M6 2h9l5 5v13a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2z" />
+                  <path d="M15 2v5h5" />
+                </svg>
+                <span className="text-body-strong">{item.title}</span>
+              </Link>
             </li>
           ))}
         </ul>

@@ -413,6 +413,22 @@ textarea {
   text-decoration: underline;
 }
 
+/* Story 4.1 — Éditeur assisté's fil d'Ariane (`<Link href="/">` back to
+   the workspace, `app/livrables/[id]/page.tsx`). Same visual treatment as
+   `.external-link` above (accent color, no default underline, underline
+   on hover/focus) — this is an in-app navigation link rather than an
+   external one, hence its own class name, but nothing about the
+   treatment itself differs. */
+.breadcrumb-link {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+.breadcrumb-link:hover,
+.breadcrumb-link:focus-visible {
+  text-decoration: underline;
+}
+
 /* Story 2.5 — Composer: text field + closed model dropdown + send button,
    below `ConversationHistory` in the center column. The dropdown reuses
    `--elevation-dropdown` (same pattern as `.project-selector-dropdown`/
