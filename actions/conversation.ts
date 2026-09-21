@@ -3,10 +3,13 @@
 import { and, eq } from 'drizzle-orm';
 
 import type { ActionResult } from '@/actions/types';
-import { createLivrableWithSuggestions } from '@/actions/livrable';
+import {
+  createLivrableWithSuggestions,
+  updateLivrableWithSuggestions,
+} from '@/actions/livrable';
 import { listLoadedSkillInstructions } from '@/actions/skill';
 import { db } from '@/db/client';
-import { conversation, message, project } from '@/db/schema';
+import { conversation, livrable, message, project } from '@/db/schema';
 import { STEPS } from '@/domain/workflow';
 import type { ExecuteToolResult } from '@/skills/buildRequest';
 import { sendToAgent } from '@/skills/buildRequest';
@@ -531,13 +534,50 @@ export async function sendMessage(
     // the model toward using it. `executeTool` is the one point where a
     // tool call turns into persistence, and it never touches `db` itself
     // (AD-2): it only parses the model's input and delegates to
-    // `createLivrableWithSuggestions`, which does the actual transaction.
+    // `createLivrableWithSuggestions`/`updateLivrableWithSuggestions`,
+    // which do the actual transaction.
+    //
+    // Story 4.4 — Révision globale (AD-10). Before creating, this now
+    // checks whether a LIVRABLE already exists for this conversation: a
+    // global revision is always posted into the livrable's own origin
+    // conversation (never a new one, `actions/livrable.ts`'s
+    // `requestGlobalRevision`), so the agent replying here — via this same
+    // `propose_livrable_content` tool — must update that existing livrable
+    // rather than create a second one for the same conversation. No
+    // existing row: unchanged creation behavior (Story 4.2).
     const executeTool = async (
       input: unknown,
     ): Promise<ExecuteToolResult> => {
       const parsed = parseProposeLivrableContentInput(input);
       if (!parsed.ok) {
         return { ok: false, error: parsed.error };
+      }
+
+      const [existingLivrable] = await db
+        .select({ id: livrable.id })
+        .from(livrable)
+        .where(eq(livrable.conversationId, conversationId));
+
+      if (existingLivrable) {
+        const updated = await updateLivrableWithSuggestions(
+          existingLivrable.id,
+          parsed.data,
+        );
+        if (!updated.ok) {
+          return { ok: false, error: updated.error };
+        }
+
+        // Same rule as the creation branch below: this text is only the
+        // tool's `tool_result`, read by the model on the second call, never
+        // persisted to MESSAGE itself. No title clause here, unlike the
+        // creation branch: `updateLivrableWithSuggestions` never writes
+        // `LIVRABLE.title` back (it only replaces `content`), so echoing
+        // `parsed.data.title` would tell the model a rename took effect
+        // when it never did.
+        return {
+          ok: true,
+          content: `Le livrable a été mis à jour avec ${parsed.data.suggestions.length} suggestion(s) ancrée(s).`,
+        };
       }
 
       const created = await createLivrableWithSuggestions(

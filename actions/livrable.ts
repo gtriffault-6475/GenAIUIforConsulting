@@ -1,10 +1,12 @@
 'use server';
 
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 
 import type { ActionResult } from '@/actions/types';
+import { sendMessage } from '@/actions/conversation';
 import { db } from '@/db/client';
 import { livrable, suggestion } from '@/db/schema';
+import { MODELS } from '@/skills/models';
 import type { ProposedLivrableContent } from '@/skills/propose_livrable_content';
 
 // AD-2 — this is the only file allowed to read or write LIVRABLE. The one
@@ -257,6 +259,141 @@ export async function createLivrableWithSuggestions(
     return {
       ok: false,
       error: 'Impossible de créer ce livrable.',
+    };
+  }
+}
+
+// Story 4.4 — Révision globale (FR-23, AD-9, AD-10). Called from
+// `actions/conversation.ts`'s `executeTool` when a LIVRABLE already exists
+// for the conversation the agent is replying in — the regeneration
+// counterpart to `createLivrableWithSuggestions` above, same synchronous
+// `db.transaction` shape. Only `content` is replaced (Boundaries: "remplace
+// tout content.blocks... et insère les nouvelles SUGGESTION ancrées") — the
+// livrable's `title` is left untouched, unlike creation.
+//
+// New block ids are generated here exactly like creation (AD-9: never
+// reused) — every previous block, and therefore every SUGGESTION still
+// anchored to one, is stale the instant this transaction commits. Before
+// inserting the new suggestions, every `anchored` suggestion already on
+// this livrable that has not yet resolved to `accepted`/`rejected` —
+// `pending` or mid-rework `revising` alike — is transitioned to
+// `rejected`: its targeted block disappears with the regeneration, and
+// this state/label ("Rejetée") is already supported by
+// `SuggestionCard.tsx` (Story 4.3). `revising` must be included here too:
+// left untouched, it would later resolve back to `pending` carrying a
+// stale `anchorRef` from before the regeneration, and `acceptSuggestion`
+// would then silently "succeed" against a block that no longer means what
+// it did. This also preemptively closes Story 4.3's deferred finding #2 —
+// `acceptSuggestion` can no longer ever meet an `anchorRef` that doesn't
+// resolve to a current block, since nothing pending or revising+anchored
+// survives a regeneration.
+export async function updateLivrableWithSuggestions(
+  livrableId: string,
+  proposal: ProposedLivrableContent,
+): Promise<ActionResult<{ livrableId: string }>> {
+  try {
+    const blocks = proposal.blocks.map((text) => ({
+      id: crypto.randomUUID(),
+      text,
+    }));
+
+    const content = JSON.stringify({ blocks });
+
+    db.transaction((tx) => {
+      tx.update(livrable)
+        .set({ content })
+        .where(eq(livrable.id, livrableId))
+        .run();
+
+      tx.update(suggestion)
+        .set({ status: 'rejected' })
+        .where(
+          and(
+            eq(suggestion.livrableId, livrableId),
+            inArray(suggestion.status, ['pending', 'revising']),
+            eq(suggestion.type, 'anchored'),
+          ),
+        )
+        .run();
+
+      for (const item of proposal.suggestions) {
+        const block = blocks[item.blockIndex];
+        if (!block) {
+          // Defense in depth only, same reasoning as
+          // `createLivrableWithSuggestions` above — not reachable via
+          // `parseProposeLivrableContentInput`'s own validation.
+          console.error(
+            'updateLivrableWithSuggestions: suggestion blockIndex out of range',
+            item.blockIndex,
+          );
+          continue;
+        }
+
+        tx.insert(suggestion)
+          .values({
+            id: crypto.randomUUID(),
+            livrableId,
+            type: 'anchored',
+            anchorRef: block.id,
+            text: item.text,
+            status: 'pending',
+          })
+          .run();
+      }
+    });
+
+    return { ok: true, data: { livrableId } };
+  } catch (error) {
+    console.error('updateLivrableWithSuggestions failed', error);
+    return {
+      ok: false,
+      error: 'Impossible de mettre à jour ce livrable.',
+    };
+  }
+}
+
+// Story 4.4 — Révision globale (FR-23, AD-10). Called by
+// `components/GlobalRevisionField.tsx`. Never creates a `global` SUGGESTION
+// row itself (Always: "seul un MESSAGE est produit") — it only posts the
+// consultant's instructions as a user message into the livrable's own
+// origin conversation (AD-10: never a new one), via `sendMessage`
+// (`actions/conversation.ts`), which is what actually drives the agent
+// back through `propose_livrable_content` and, from there,
+// `updateLivrableWithSuggestions` above. Whatever `sendMessage` returns —
+// success, `assistantFailed`, or an outright failure — is relayed as-is;
+// this function's own `{ok:false}` branches are reserved for the one thing
+// `sendMessage` cannot check itself: whether this livrable even has an
+// origin conversation to post into.
+export async function requestGlobalRevision(
+  livrableId: string,
+  instructions: string,
+): Promise<ActionResult<{ assistantFailed: boolean; error?: string }>> {
+  try {
+    const [row] = await db
+      .select({ conversationId: livrable.conversationId })
+      .from(livrable)
+      .where(eq(livrable.id, livrableId));
+
+    if (!row) {
+      return { ok: false, error: 'Ce livrable est introuvable.' };
+    }
+
+    if (row.conversationId === null) {
+      // Fixture livrable (Story 2.6) with no real origin conversation —
+      // refuse with a clear message rather than attempting to post
+      // anywhere (Always).
+      return {
+        ok: false,
+        error: "Ce livrable n'a pas de conversation d'origine.",
+      };
+    }
+
+    return await sendMessage(row.conversationId, instructions, MODELS[0].id);
+  } catch (error) {
+    console.error('requestGlobalRevision failed', error);
+    return {
+      ok: false,
+      error: 'Impossible de soumettre cette révision globale.',
     };
   }
 }

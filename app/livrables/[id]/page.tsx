@@ -2,6 +2,7 @@ import Link from 'next/link';
 
 import { getLivrable } from '@/actions/livrable';
 import { listSuggestions } from '@/actions/suggestion';
+import { GlobalRevisionField } from '@/components/GlobalRevisionField';
 import { SuggestionsPanel } from '@/components/SuggestionsPanel';
 
 // Story 4.1 — Éditeur assisté (FR-19). First route of the app besides `/`.
@@ -125,6 +126,11 @@ export default async function LivrablePage({
                 column (Never: no dedicated side panel yet, deferred to
                 Story 4.3). */}
             <SuggestionsPanel blocks={result.data.blocks} suggestions={suggestions} />
+
+            {/* Story 4.4 (FR-23, UX-DR15) — révision globale, distincte des
+                suggestions ancrées ci-dessus, toujours en bas de la
+                colonne. */}
+            <GlobalRevisionField livrableId={result.data.id} />
           </div>
         )}
       </main>
