@@ -1,6 +1,6 @@
 'use server';
 
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
 import type { ActionResult } from '@/actions/types';
 import { listLoadedSkillInstructions } from '@/actions/skill';
@@ -228,6 +228,18 @@ export async function rejectSuggestion(
 //    project's skills, calling the agent) is wrapped so that *any* failure
 //    — not just the agent call itself — restores `pending` with the
 //    original text rather than leaving the row stuck on `revising`.
+//
+// Fiabilité de la révision globale et de la concurrence des suggestions
+// (spec-fiabilite-revision-suggestions, CAP-2): all 3 writes back to
+// `pending` below (success, agent failure, unexpected error) are guarded by
+// `AND status = 'revising'`, the same guard-then-write shape already used
+// by `acceptSuggestion`/`rejectSuggestion`. A concurrent global revision
+// (`updateLivrableWithSuggestions`) can flip this row to `rejected` while
+// the agent call above is still in flight — once that happens, none of
+// these 3 writes may resurrect it as `pending` with a now-stale
+// `anchorRef`. Guarded, so a write with a stale condition simply matches
+// zero rows — a silent no-op, never a thrown error, never a block (Always:
+// "jamais bloqué sur revising").
 export async function reworkSuggestion(
   suggestionId: string,
   instructions: string,
@@ -340,10 +352,27 @@ export async function reworkSuggestion(
 
     if (!reworkResult.ok) {
       try {
-        db.update(suggestion)
+        const revert = db
+          .update(suggestion)
           .set({ status: 'pending' })
-          .where(eq(suggestion.id, suggestionId))
+          .where(
+            and(
+              eq(suggestion.id, suggestionId),
+              eq(suggestion.status, 'revising'),
+            ),
+          )
           .run();
+        if (revert.changes === 0) {
+          // The row already moved on (e.g. a concurrent global revision
+          // rejected it) — the revert is a no-op, not a failure of this
+          // branch. Logged only: the error already being returned below is
+          // what actually went wrong, unaffected by whether the revert
+          // itself found a row to touch.
+          console.error(
+            'reworkSuggestion: revert to pending no-op’d, suggestion already moved on',
+            suggestionId,
+          );
+        }
       } catch (revertError) {
         // Never let a failure to *revert* mask or replace the agent
         // failure already being reported below, and never let it escape
@@ -357,10 +386,28 @@ export async function reworkSuggestion(
       return { ok: false, error: reworkResult.error };
     }
 
-    db.update(suggestion)
+    const applied = db
+      .update(suggestion)
       .set({ status: 'pending', text: reworkResult.content })
-      .where(eq(suggestion.id, suggestionId))
+      .where(
+        and(
+          eq(suggestion.id, suggestionId),
+          eq(suggestion.status, 'revising'),
+        ),
+      )
       .run();
+
+    if (applied.changes === 0) {
+      // The guard missed — a concurrent global revision already moved this
+      // row on (e.g. to `rejected`) while the agent call above was in
+      // flight. Returning `{ok:true}` here would silently discard the
+      // consultant's newly reworked text with no explanation; report it
+      // instead of pretending the rework landed.
+      return {
+        ok: false,
+        error: 'Cette suggestion a été traitée entre-temps.',
+      };
+    }
 
     return { ok: true, data: undefined };
   } catch (error) {
@@ -374,10 +421,25 @@ export async function reworkSuggestion(
     // that separately, but the caller still gets a well-formed
     // `ActionResult` instead of a rejected promise.
     try {
-      db.update(suggestion)
+      const revert = db
+        .update(suggestion)
         .set({ status: 'pending' })
-        .where(eq(suggestion.id, suggestionId))
+        .where(
+          and(
+            eq(suggestion.id, suggestionId),
+            eq(suggestion.status, 'revising'),
+          ),
+        )
         .run();
+      if (revert.changes === 0) {
+        // Same reasoning as the agent-failure branch above: the row already
+        // moved on, so this revert is a no-op, not a new failure — logged
+        // only, the error returned below is unaffected.
+        console.error(
+          'reworkSuggestion: revert to pending no-op’d, suggestion already moved on',
+          suggestionId,
+        );
+      }
     } catch (revertError) {
       console.error(
         'reworkSuggestion: failed to revert status to pending after an unexpected error',

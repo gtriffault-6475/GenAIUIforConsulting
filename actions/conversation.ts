@@ -599,8 +599,71 @@ export async function sendMessage(
       };
     };
 
+    // Fiabilité de la révision globale et de la concurrence des suggestions
+    // (spec-fiabilite-revision-suggestions, CAP-1). `MESSAGE` never stores
+    // the tool exchange itself (Always, Story 4.2) — only the model's short
+    // confirmation text is persisted, never the real document. Without
+    // this, a later call on this same conversation (in particular a global
+    // revision, which resends the *entire* `blocks` array, no partial/diff
+    // mode — `skills/propose_livrable_content.ts`) would have the model
+    // regenerate the whole document from its own unverified memory of an
+    // earlier turn, risking fabricated or silently dropped paragraphs the
+    // revision never intended to touch. So: read the livrable's current,
+    // real content here and, only when one already exists for this
+    // conversation (never on the very first creation — Always), push it as
+    // a synthetic `loadedSkills` entry, the same system-prompt assembly
+    // mechanism every other loaded skill already goes through (AD-11), with
+    // zero change to `skills/buildRequest.ts` itself. Read-only for the
+    // model: this entry is assembled fresh on every call, never persisted
+    // or made into an object something else could write back to.
+    //
+    // A failure reading or parsing that content must not regress today's
+    // behavior (I/O matrix: "comportement identique à aujourd'hui -- pas de
+    // régression") — logged only, falling back to no injection, exactly as
+    // if no livrable existed yet for this conversation.
+    let effectiveLoadedSkills = loadedSkills;
+    try {
+      const [existingLivrableForContext] = await db
+        .select({ content: livrable.content })
+        .from(livrable)
+        .where(eq(livrable.conversationId, conversationId));
+
+      if (existingLivrableForContext) {
+        const parsedContent = JSON.parse(
+          existingLivrableForContext.content,
+        ) as { blocks?: { text?: unknown }[] };
+
+        if (Array.isArray(parsedContent?.blocks)) {
+          const paragraphs = parsedContent.blocks
+            .map((block, index) => `${index + 1}. ${String(block?.text ?? '')}`)
+            .join('\n');
+
+          effectiveLoadedSkills = [
+            ...loadedSkills,
+            {
+              skillKey: '__current_livrable_context',
+              instructions:
+                'Contenu actuel du livrable pour cette conversation (avant toute révision) ' +
+                '-- chaque paragraphe non concerné par la demande en cours doit revenir ' +
+                `inchangé dans le document régénéré :\n${paragraphs}`,
+            },
+          ];
+        } else {
+          console.error(
+            'sendMessage: malformed existing livrable content, skipping context injection',
+            conversationId,
+          );
+        }
+      }
+    } catch (error) {
+      console.error(
+        'sendMessage: failed to read existing livrable content for context injection',
+        error,
+      );
+    }
+
     const agentResult = await sendToAgent({
-      loadedSkills,
+      loadedSkills: effectiveLoadedSkills,
       history: historyRows,
       model,
       tool: PROPOSE_LIVRABLE_CONTENT_TOOL,
