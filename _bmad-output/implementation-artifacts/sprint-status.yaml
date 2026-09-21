@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-14-2026 15:47
-last_updated: 09-21-2026 12:48
+last_updated: 09-21-2026 17:15
 project: GenAI4Consulting
 project_key: NOKEY
 tracking_system: file-system
@@ -58,13 +58,13 @@ development_status:
   3-3-suggestion-proactive-de-démarrage: done
   epic-3-retrospective: optional
 
-  epic-4: in-progress
+  epic-4: done
   4-1-ouverture-d-un-livrable: done
   4-2-génération-des-suggestions-ancrées-à-l-écriture: done
   4-3-traitement-d-une-suggestion-ancrée: done
   4-4-révision-globale: done
   4-5-contrôle-du-consultant-sur-le-document-final: done
-  epic-4-retrospective: optional
+  epic-4-retrospective: done
 action_items:
   - id: "epic-1-retro-item-1-implémenter-button-ai-primary-ai-suggest"
     epic: 1
@@ -177,3 +177,45 @@ action_items:
     owner: "dev loop / UX"
     status: open
     ref: "_bmad-output/implementation-artifacts/epic-2-retro-2026-09-16.md"
+  - id: "epic-4-retro-item-17-redonner-au-modèle-un-accès-fiable-au-co"
+    epic: 4
+    action: "Redonner au modèle un accès fiable au contenu réel du livrable avant
+      toute révision globale (epic-4 retro, finding #1)"
+    owner: "dev loop"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-4-retro-2026-09-21.md"
+  - id: "epic-4-retro-item-18-garder-reworksuggestion-contre-une-résur"
+    epic: 4
+    action: "Garder reworkSuggestion contre une résurrection après régénération concurrente
+      (WHERE status='revising') (epic-4 retro, finding #2)"
+    owner: "dev loop"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-4-retro-2026-09-21.md"
+  - id: "epic-4-retro-item-19-éviter-de-régénérer-l-id-de-chaque-bloc"
+    epic: 4
+    action: "Éviter de régénérer l'id de chaque bloc sur toute révision globale, ne
+      minter un nouvel id que si le texte change (epic-4 retro, finding #3)"
+    owner: "dev loop"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-4-retro-2026-09-21.md"
+  - id: "epic-4-retro-item-20-appliquer-le-fond-ai-tint-au-paragraphe"
+    epic: 4
+    action: "Appliquer le fond ai-tint au paragraphe ciblé dans le document, pas seulement
+      à la carte de suggestion (epic-4 retro, finding #4)"
+    owner: "dev loop / UX"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-4-retro-2026-09-21.md"
+  - id: "epic-4-retro-item-21-scinder-actions-conversation-ts-avant-qu"
+    epic: 4
+    action: "Scinder actions/conversation.ts avant qu'un nouvel épic n'y ajoute encore
+      (epic-2-retro-item-13 non suivi, epic-4 retro)"
+    owner: "product"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-4-retro-2026-09-21.md"
+  - id: "epic-4-retro-item-22-étendre-epic-2-retro-item-12-au-motif-de"
+    epic: 4
+    action: "Étendre epic-2-retro-item-12 au motif de garde pending dupliqué dans
+      actions/suggestion.ts (epic-4 retro)"
+    owner: "dev loop"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-4-retro-2026-09-21.md"
