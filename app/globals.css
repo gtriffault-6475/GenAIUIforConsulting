@@ -275,6 +275,32 @@ a {
   margin: var(--space-2) 0 0;
 }
 
+/* spec-changement-de-projet-a-la-volee.md. Top-bar variant of the
+   trigger above: the active project's name (already `.text-heading` from
+   the top bar it replaces) plus a chevron, never the `button-primary`
+   fill — this opens the same dropdown, but it isn't the primary
+   first-launch call to action Story 1.2's button is. */
+.project-selector-trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: inherit;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+  cursor: pointer;
+}
+
+.project-selector-trigger:hover,
+.project-selector-trigger:focus-visible {
+  background: var(--color-selected-tint);
+}
+
+.project-selector-trigger-chevron {
+  flex-shrink: 0;
+}
+
 /* Story 1.4 — first text-field tokens the app needs (name/folder/content
    inputs of the add-document form). `{rounded.sm}` per DESIGN.md ("rounded.sm
    pour les boutons et champs"). */

@@ -90,6 +90,7 @@ export default async function Home() {
     mattermostResult,
     skillsResult,
     livrablesResult,
+    projectsResult,
   ] = await Promise.all([
     listConversations(activeProject.id),
     getActiveConversation(activeProject.id),
@@ -101,6 +102,12 @@ export default async function Home() {
     getLastMattermostMessage(activeProject.mattermostChannelRef),
     listProjectSkills(activeProject.id),
     listLivrables(activeProject.id),
+    // spec-changement-de-projet-a-la-volee.md. Fetched here (rather
+    // than only on demand when the top-bar trigger is clicked) so the
+    // reopened dropdown never blocks on its own request — same
+    // parallelization reasoning as every other read in this
+    // `Promise.all`, independent of them all.
+    listProjects(),
   ]);
   const conversations = conversationsResult.ok ? conversationsResult.data : null;
   const activeConversationId =
@@ -110,6 +117,7 @@ export default async function Home() {
   const documents = documentsResult.ok ? documentsResult.data : null;
   const skills = skillsResult.ok ? skillsResult.data : null;
   const livrables = livrablesResult.ok ? livrablesResult.data : null;
+  const projects = projectsResult.ok ? projectsResult.data : null;
   // Story 3.1 — Stepper de workflow. Read from the active conversation's
   // own `stepKey` (AD-6: never the other way around) — a fixture
   // conversation or a failed read both fall back to `null`, which
@@ -164,7 +172,7 @@ export default async function Home() {
   return (
     <div>
       <header className="top-bar">
-        <span className="text-heading">{activeProject.name}</span>
+        <ProjectSelector projects={projects} activeProject={activeProject} />
       </header>
       {/* Story 3.2 — Workflow du cas "livrable de mission" (FR-15). A
           mission project never has a step to be active in, but the stepper
