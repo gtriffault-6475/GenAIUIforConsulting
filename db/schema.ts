@@ -153,9 +153,29 @@ export const message = sqliteTable('message', {
 // `skillKey` against that catalog at read time. No standalone `id`/PK per
 // the architecture spine's Structural Seed: the unique constraint on the
 // pair itself is what prevents loading the same skill twice on a project
-// (AD-4) — the mechanism that would insert new rows here (an actual
-// "add a skill" feature) is explicitly deferred beyond this epic (PRD
-// OQ-6).
+// (AD-4). The real "add a skill" feature is explicitly deferred beyond
+// this epic (PRD OQ-6) — the only mechanism inserting rows here today is
+// `actions/skill.ts`'s own `seedFixturesIfEmpty`.
+//
+// `position` (epic-2-retro-item-14, AD-11: "garantir l'ordre de
+// chargement des skills"): without it, `listProjectSkills`/
+// `listLoadedSkillInstructions` relied on SQLite's own unspecified row
+// order, which turned out to already diverge from insertion order in
+// practice — the unique index on `(project_id, skill_key)` above makes
+// SQLite satisfy a `WHERE project_id = ?` scan via that index (a real,
+// verified query plan: `SEARCH ... USING COVERING INDEX`), returning rows
+// sorted by `skill_key` rather than by insertion, which flips the two
+// fixture skills' order for `proj-audit-mission` today: `references` is
+// inserted first (`FIXTURE_PROJECT_SKILLS`, `actions/skill.ts`), but
+// `mission-scoping` sorts alphabetically before it, so it comes back
+// first instead. Nullable, like `suggestion.resolvedPosition` below,
+// rather than `message.createdAt`'s `.notNull().default(...)`: a single literal
+// default cannot express the real, distinct per-row backfill value this
+// column needs (0, 1, 0, 1... per project), so the migration backfills it
+// with a real per-project sequence instead (see its `migration.sql`) and
+// every future insert sets it explicitly (`actions/skill.ts`'s
+// `seedFixturesIfEmpty`, the sole writer, AD-2) — never actually `null`
+// on any row this app itself ever produces.
 export const projectSkill = sqliteTable(
   'project_skill',
   {
@@ -163,6 +183,7 @@ export const projectSkill = sqliteTable(
       .notNull()
       .references(() => project.id),
     skillKey: text('skill_key').notNull(),
+    position: integer('position'),
   },
   (table) => [unique().on(table.projectId, table.skillKey)],
 );

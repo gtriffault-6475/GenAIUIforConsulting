@@ -162,7 +162,7 @@ action_items:
     action: "Ajouter une colonne d'ordre à project_skill pour garantir l'ordre de
       chargement des skills, AD-11 (epic-2 retro)"
     owner: "dev loop"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-2-retro-2026-09-16.md"
   - id: "epic-2-retro-item-15-wrapper-insertmessage-qui-timbre-toujour"
     epic: 2

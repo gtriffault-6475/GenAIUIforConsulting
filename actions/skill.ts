@@ -1,6 +1,6 @@
 'use server';
 
-import { eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 
 import type { ActionResult } from '@/actions/types';
 import { seedIfEmpty } from '@/actions/seed-if-empty';
@@ -64,9 +64,9 @@ function seedFixturesIfEmpty(projectId: string): void {
         return existing.length > 0;
       },
       () => {
-        for (const skillKey of fixtureSkillKeys) {
-          tx.insert(projectSkill).values({ projectId, skillKey }).run();
-        }
+        fixtureSkillKeys.forEach((skillKey, position) => {
+          tx.insert(projectSkill).values({ projectId, skillKey, position }).run();
+        });
       },
     );
   });
@@ -81,7 +81,8 @@ export async function listProjectSkills(
     const rows = await db
       .select({ skillKey: projectSkill.skillKey })
       .from(projectSkill)
-      .where(eq(projectSkill.projectId, projectId));
+      .where(eq(projectSkill.projectId, projectId))
+      .orderBy(asc(projectSkill.position));
 
     const skills: ProjectSkillSummary[] = [];
     for (const row of rows) {
@@ -124,8 +125,10 @@ export async function listProjectSkills(
 // listProjectSkills... ProjectSkillSummary reste un contrat gelé"). Not
 // exported to any client component: `skills/buildRequest.ts` (AD-11) is
 // the only intended caller, via `sendMessage` in `actions/message.ts`.
-// "Ordre de chargement" is the order `project_skill` rows come back in —
-// the same implicit row order `listProjectSkills` already relies on.
+// "Ordre de chargement" (AD-11) est désormais `projectSkill.position`
+// (epic-2-retro-item-14), pas un ordre de lignes implicite -- ce dernier
+// s'est avéré diverger silencieusement de l'ordre d'insertion en pratique
+// (voir le commentaire de `position` dans `db/schema.ts`).
 export async function listLoadedSkillInstructions(
   projectId: string,
 ): Promise<ActionResult<{ skillKey: string; instructions: string }[]>> {
@@ -135,7 +138,8 @@ export async function listLoadedSkillInstructions(
     const rows = await db
       .select({ skillKey: projectSkill.skillKey })
       .from(projectSkill)
-      .where(eq(projectSkill.projectId, projectId));
+      .where(eq(projectSkill.projectId, projectId))
+      .orderBy(asc(projectSkill.position));
 
     const instructions: { skillKey: string; instructions: string }[] = [];
     for (const row of rows) {
