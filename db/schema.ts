@@ -106,20 +106,26 @@ export const conversation = sqliteTable(
 // produced an `assistant` message (e.g. "Claude Sonnet 5"); it is null
 // for `user` messages, which have no model of their own. `createdAt`
 // (Story 2.5 — Sélection du modèle et envoi d'un message) is an ISO-8601
-// string ordering column: `actions/conversation.ts` no longer relies on
-// SQLite's implicit scan order (see `deferred-work.md`'s Story 2.1 entry)
-// now that real messages are appended one at a time instead of only ever
-// being seeded together as fixtures.
+// string ordering column: neither `actions/conversation.ts` (fixture
+// seeding) nor `actions/message.ts` (`sendMessage`, real messages) relies
+// on SQLite's implicit scan order (see `deferred-work.md`'s Story 2.1
+// entry) now that real messages are appended one at a time via
+// `sendMessage` instead of only ever being seeded together as fixtures.
 //
 // FR-10 boundary (Story 2.3 — Confidentialité de la conversation): this
-// table's content never travels outside `actions/conversation.ts`, and
-// within that file, only `getActiveConversation` reads it — the sole
-// action consumed by `ConversationHistory`, the conversation's own view.
-// Every other surface that lists conversations (`ConversationList.tsx`
-// today, a future Livrables panel from Story 2.6) reads `ConversationSummary`
-// instead, which carries no content. A future Server Action reading this
-// table must stay called exclusively from a conversation's own render
-// path — never from a list/summary surface — to keep that boundary intact.
+// table's content never reaches a list/summary surface. Exactly two
+// Server Actions read it, both internal to a conversation's own flow,
+// never a list/summary one: `getActiveConversation`
+// (`actions/conversation.ts`), the sole action consumed by
+// `ConversationHistory` (the conversation's own view), and `sendMessage`
+// (`actions/message.ts`, epic-2-retro-item-13), which reads this
+// conversation's own history to build the agent's request and appends to
+// it — never to serve any other surface. Every other surface that lists
+// conversations (`ConversationList.tsx` today, a future Livrables panel
+// from Story 2.6) reads `ConversationSummary` instead, which carries no
+// content. A future Server Action reading this table must stay called
+// exclusively from a conversation's own render/send path — never from a
+// list/summary surface — to keep that boundary intact.
 export const message = sqliteTable('message', {
   id: text('id').primaryKey(),
   conversationId: text('conversation_id')
@@ -129,7 +135,8 @@ export const message = sqliteTable('message', {
   content: text('content').notNull(),
   model: text('model'),
   // `.default(...)` here is a migration-time backfill value only, never
-  // relied on by the app: every insert (`actions/conversation.ts`) always
+  // relied on by the app: every insert (`actions/conversation.ts`'s
+  // fixture seeding, `actions/message.ts`'s `sendMessage`) always
   // supplies a real `createdAt` explicitly. Without a default, SQLite
   // rejects `ALTER TABLE message ADD created_at text NOT NULL` outright on
   // any table that already has rows — which every pre-existing local dev

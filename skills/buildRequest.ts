@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 
 // AD-11 — the single assembly point for every `@anthropic-ai/sdk` Messages
 // API call. No other Server Action may instantiate an Anthropic client —
-// `actions/conversation.ts`'s `sendMessage` is the only caller today, and
+// `actions/message.ts`'s `sendMessage` is the only caller today, and
 // any future caller (Epic 4's tool-using skills) must route through here
 // too, so the system prompt and history are always assembled the same way
 // regardless of which Server Action triggered the call.
@@ -29,7 +29,7 @@ export type SendToAgentResult =
 // Story 4.2 — Génération des suggestions ancrées à l'écriture (AD-11,
 // Design Notes). The result of running a tool the model asked for — never
 // touches `db` itself (AD-2): the caller supplies a closure
-// (`actions/conversation.ts`'s `sendMessage` builds one around
+// (`actions/message.ts`'s `sendMessage` builds one around
 // `actions/livrable.ts`'s `createLivrableWithSuggestions`) that does the
 // actual persistence and reports back only success/failure plus the text
 // to hand the model as its `tool_result`.

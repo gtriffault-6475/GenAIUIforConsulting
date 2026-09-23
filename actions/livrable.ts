@@ -3,7 +3,8 @@
 import { and, eq, inArray } from 'drizzle-orm';
 
 import type { ActionResult } from '@/actions/types';
-import { sendMessage } from '@/actions/conversation';
+import { sendMessage } from '@/actions/message';
+import { seedIfEmpty } from '@/actions/seed-if-empty';
 import { db } from '@/db/client';
 import { livrable, suggestion } from '@/db/schema';
 import { resolveAnchorPosition } from '@/domain/suggestion';
@@ -70,30 +71,36 @@ function seedFixturesIfEmpty(projectId: string): void {
   if (!fixture) return;
 
   db.transaction((tx) => {
-    const existing = tx
-      .select({ id: livrable.id })
-      .from(livrable)
-      .where(eq(livrable.projectId, projectId))
-      .all();
+    seedIfEmpty(
+      () => {
+        const existing = tx
+          .select({ id: livrable.id })
+          .from(livrable)
+          .where(eq(livrable.projectId, projectId))
+          .all();
 
-    if (existing.length > 0) return;
+        return existing.length > 0;
+      },
+      () => {
+        // AD-9's minimal-but-valid shape: one block, a stable id assigned
+        // at creation and never reused — nothing reads this content yet,
+        // but the shape must already be correct so Epic 4 never has to
+        // migrate it.
+        const content = JSON.stringify({
+          blocks: [{ id: crypto.randomUUID(), text: fixture.blockText }],
+        });
 
-    // AD-9's minimal-but-valid shape: one block, a stable id assigned at
-    // creation and never reused — nothing reads this content yet, but the
-    // shape must already be correct so Epic 4 never has to migrate it.
-    const content = JSON.stringify({
-      blocks: [{ id: crypto.randomUUID(), text: fixture.blockText }],
-    });
-
-    tx.insert(livrable)
-      .values({
-        id: crypto.randomUUID(),
-        projectId,
-        conversationId: null,
-        title: fixture.title,
-        content,
-      })
-      .run();
+        tx.insert(livrable)
+          .values({
+            id: crypto.randomUUID(),
+            projectId,
+            conversationId: null,
+            title: fixture.title,
+            content,
+          })
+          .run();
+      },
+    );
   });
 }
 
@@ -183,7 +190,7 @@ export async function listLivrables(
 }
 
 // Story 4.2 — Génération des suggestions ancrées à l'écriture (AD-2, AD-9).
-// Called from `actions/conversation.ts`'s `sendMessage`, via the
+// Called from `actions/message.ts`'s `sendMessage`, via the
 // `executeTool` closure it hands to `skills/buildRequest.ts`'s
 // `sendToAgent` — the model's validated tool input
 // (`ProposedLivrableContent`, from `parseProposeLivrableContentInput`)
@@ -265,7 +272,7 @@ export async function createLivrableWithSuggestions(
 }
 
 // Story 4.4 — Révision globale (FR-23, AD-9, AD-10). Called from
-// `actions/conversation.ts`'s `executeTool` when a LIVRABLE already exists
+// `actions/message.ts`'s `executeTool` when a LIVRABLE already exists
 // for the conversation the agent is replying in — the regeneration
 // counterpart to `createLivrableWithSuggestions` above, same synchronous
 // `db.transaction` shape. Only `content` is replaced (Boundaries: "remplace
@@ -421,7 +428,7 @@ export async function updateLivrableWithSuggestions(
 // row itself (Always: "seul un MESSAGE est produit") — it only posts the
 // consultant's instructions as a user message into the livrable's own
 // origin conversation (AD-10: never a new one), via `sendMessage`
-// (`actions/conversation.ts`), which is what actually drives the agent
+// (`actions/message.ts`), which is what actually drives the agent
 // back through `propose_livrable_content` and, from there,
 // `updateLivrableWithSuggestions` above. Whatever `sendMessage` returns —
 // success, `assistantFailed`, or an outright failure — is relayed as-is;

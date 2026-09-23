@@ -4,7 +4,7 @@ import { MODELS } from '@/skills/models';
 
 // Story 3.3 — Suggestion proactive de démarrage. Second real caller of
 // `skills/buildRequest.ts`'s `sendToAgent` (AD-11) alongside `sendMessage`
-// (`actions/conversation.ts`) — every `@anthropic-ai/sdk` call still goes
+// (`actions/message.ts`) — every `@anthropic-ai/sdk` call still goes
 // through that single assembly point, this file only shapes the prompt
 // and picks the model. Never persists anything (AD-7): the caller
 // (`actions/conversation.ts`'s `getStartingSuggestion`) hands the result

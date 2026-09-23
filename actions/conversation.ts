@@ -3,26 +3,21 @@
 import { and, eq } from 'drizzle-orm';
 
 import type { ActionResult } from '@/actions/types';
-import {
-  createLivrableWithSuggestions,
-  updateLivrableWithSuggestions,
-} from '@/actions/livrable';
+import { seedIfEmpty } from '@/actions/seed-if-empty';
 import { listLoadedSkillInstructions } from '@/actions/skill';
 import { db } from '@/db/client';
-import { conversation, livrable, message, project } from '@/db/schema';
+import { conversation, message, project } from '@/db/schema';
 import { STEPS } from '@/domain/workflow';
-import type { ExecuteToolResult } from '@/skills/buildRequest';
-import { sendToAgent } from '@/skills/buildRequest';
-import { MODELS, resolveModelLabel } from '@/skills/models';
-import {
-  PROPOSE_LIVRABLE_CONTENT_TOOL,
-  parseProposeLivrableContentInput,
-} from '@/skills/propose_livrable_content';
 import { proposeStartingPoint } from '@/skills/propose_starting_point';
 
-// AD-2 — this is the only file allowed to read or write
-// CONVERSATION/MESSAGE. Components never touch `db/` directly; they call
-// these Server Actions. Mirrors `actions/project.ts`'s shape.
+// AD-2 — this is the only file allowed to read or write CONVERSATION.
+// MESSAGE is owned by `actions/message.ts` (`sendMessage` moved there,
+// epic-2-retro-item-13) — the one exception is `seedFixturesIfEmpty`
+// below, which still inserts fixture MESSAGE rows alongside their owning
+// CONVERSATION in the same transaction; every other MESSAGE read/write
+// stays `actions/message.ts`'s exclusive concern. Components never touch
+// `db/` directly; they call these Server Actions. Mirrors
+// `actions/project.ts`'s shape.
 
 // FR-10 boundary (Story 2.3 — Confidentialité de la conversation): this is
 // the only shape a conversation may take *outside* its own view. It is
@@ -133,73 +128,80 @@ const FIXTURE_CONVERSATIONS: FixtureConversation[] = [
 // observe zero rows and both insert.
 function seedFixturesIfEmpty(projectId: string): void {
   db.transaction((tx) => {
-    const existing = tx
-      .select({ id: conversation.id })
-      .from(conversation)
-      .where(eq(conversation.projectId, projectId))
-      .all();
+    seedIfEmpty(
+      () => {
+        const existing = tx
+          .select({ id: conversation.id })
+          .from(conversation)
+          .where(eq(conversation.projectId, projectId))
+          .all();
 
-    if (existing.length > 0) return;
+        return existing.length > 0;
+      },
+      () => {
+        let firstConversationId: string | null = null;
 
-    let firstConversationId: string | null = null;
+        // Story 2.5 — Sélection du modèle et envoi d'un message. `MESSAGE.
+        // createdAt` orders history now that real messages are appended one
+        // at a time (see the column's comment in `db/schema.ts`); fixture
+        // messages get deterministic, strictly increasing timestamps
+        // (spaced one second apart, per the spec's Code Map) rather than
+        // all sharing the instant this transaction runs, so their order is
+        // guaranteed the same way a real conversation's would be.
+        //
+        // The base anchors 5 minutes *before* this seeding instant, not at
+        // it: seeding is lazy (triggered by the first `listConversations`/
+        // `getActiveConversation` call on an empty project), and
+        // `sendMessage` (`actions/message.ts`) can run moments later, in
+        // the same session, using the real wall clock for its own
+        // `createdAt`. Anchoring fixtures at `Date.now()` and counting
+        // forward would reserve timestamps *ahead* of that real clock — a
+        // message sent within a few seconds of seeding would then sort
+        // into the middle of the fixture conversation instead of after it
+        // (caught during this story's manual verification: a message sent
+        // ~20ms after seeding landed between fixture messages 1 and 2,
+        // whose synthetic timestamps were already 1-2 seconds "ahead"). A
+        // margin comfortably larger than any realistic fixture-message
+        // count keeps every fixture timestamp safely in the past instead.
+        let fixtureCreatedAt = Date.now() - 5 * 60 * 1000;
+        function nextFixtureCreatedAt(): string {
+          const iso = new Date(fixtureCreatedAt).toISOString();
+          fixtureCreatedAt += 1000;
+          return iso;
+        }
 
-    // Story 2.5 — Sélection du modèle et envoi d'un message. `MESSAGE.
-    // createdAt` orders history now that real messages are appended one at
-    // a time (see the column's comment in `db/schema.ts`); fixture
-    // messages get deterministic, strictly increasing timestamps (spaced
-    // one second apart, per the spec's Code Map) rather than all sharing
-    // the instant this transaction runs, so their order is guaranteed the
-    // same way a real conversation's would be.
-    //
-    // The base anchors 5 minutes *before* this seeding instant, not at it:
-    // seeding is lazy (triggered by the first `listConversations`/
-    // `getActiveConversation` call on an empty project), and `sendMessage`
-    // can run moments later, in the same session, using the real wall
-    // clock for its own `createdAt`. Anchoring fixtures at `Date.now()`
-    // and counting forward would reserve timestamps *ahead* of that real
-    // clock — a message sent within a few seconds of seeding would then
-    // sort into the middle of the fixture conversation instead of after
-    // it (caught during this story's manual verification: a message sent
-    // ~20ms after seeding landed between fixture messages 1 and 2, whose
-    // synthetic timestamps were already 1-2 seconds "ahead"). A margin
-    // comfortably larger than any realistic fixture-message count keeps
-    // every fixture timestamp safely in the past instead.
-    let fixtureCreatedAt = Date.now() - 5 * 60 * 1000;
-    function nextFixtureCreatedAt(): string {
-      const iso = new Date(fixtureCreatedAt).toISOString();
-      fixtureCreatedAt += 1000;
-      return iso;
-    }
+        for (const fixture of FIXTURE_CONVERSATIONS) {
+          const conversationId = crypto.randomUUID();
+          firstConversationId ??= conversationId;
 
-    for (const fixture of FIXTURE_CONVERSATIONS) {
-      const conversationId = crypto.randomUUID();
-      firstConversationId ??= conversationId;
+          tx.insert(conversation)
+            .values({ id: conversationId, projectId, title: fixture.title })
+            .run();
 
-      tx.insert(conversation)
-        .values({ id: conversationId, projectId, title: fixture.title })
-        .run();
+          for (const fixtureMessage of fixture.messages) {
+            tx.insert(message)
+              .values({
+                id: crypto.randomUUID(),
+                conversationId,
+                role: fixtureMessage.role,
+                content: fixtureMessage.content,
+                model: fixtureMessage.model,
+                createdAt: nextFixtureCreatedAt(),
+              })
+              .run();
+          }
+        }
 
-      for (const fixtureMessage of fixture.messages) {
-        tx.insert(message)
-          .values({
-            id: crypto.randomUUID(),
-            conversationId,
-            role: fixtureMessage.role,
-            content: fixtureMessage.content,
-            model: fixtureMessage.model,
-            createdAt: nextFixtureCreatedAt(),
-          })
+        // Only this first-ever seed defaults `activeConversationId` — a
+        // real selection (`selectConversation`) always overwrites it
+        // afterwards, and this branch never runs again once the project
+        // has rows.
+        tx.update(project)
+          .set({ activeConversationId: firstConversationId })
+          .where(eq(project.id, projectId))
           .run();
-      }
-    }
-
-    // Only this first-ever seed defaults `activeConversationId` — a real
-    // selection (`selectConversation`) always overwrites it afterwards,
-    // and this branch never runs again once the project has rows.
-    tx.update(project)
-      .set({ activeConversationId: firstConversationId })
-      .where(eq(project.id, projectId))
-      .run();
+      },
+    );
   });
 }
 
@@ -444,268 +446,6 @@ export async function selectStep(
   } catch (error) {
     console.error('selectStep failed', error);
     return { ok: false, error: 'Impossible de sélectionner cette étape.' };
-  }
-}
-
-// Story 2.5 — Sélection du modèle et envoi d'un message. The user message
-// is always persisted first, in its own `try/catch`: only a failure of
-// *that* insert returns `{ok:false,error}` (the spec's boundary — "jamais
-// perdu sur une panne réseau/clé API absente"). Everything after that
-// point (loading skills, calling `skills/buildRequest.ts`'s `sendToAgent`
-// — AD-11's single assembly point — and persisting the reply) is wrapped
-// in a second `try/catch` whose failures still resolve as `{ok:true,
-// data:{assistantFailed:true, error}}`: the caller (`Composer.tsx`) can
-// then show that error next to the (already visible, already persisted)
-// user message instead of losing it.
-export async function sendMessage(
-  conversationId: string,
-  content: string,
-  model: string,
-): Promise<ActionResult<{ assistantFailed: boolean; error?: string }>> {
-  const trimmedContent = content.trim();
-  if (!trimmedContent) {
-    return { ok: false, error: 'Le message ne peut pas être vide.' };
-  }
-
-  // Defense in depth: the composer only ever offers `MODELS`' three ids
-  // (Boundaries — "jamais un défaut caché ailleurs"), but a Server Action
-  // is a network-reachable endpoint a client-side restriction can't bind —
-  // reject an out-of-list model before it ever reaches the real, billed
-  // Anthropic API, the same way `addManualDocument` re-validates
-  // client-checked input server-side.
-  if (!MODELS.some((entry) => entry.id === model)) {
-    return { ok: false, error: 'Modèle invalide.' };
-  }
-
-  let projectId: string;
-  try {
-    const [conversationRow] = await db
-      .select({ projectId: conversation.projectId })
-      .from(conversation)
-      .where(eq(conversation.id, conversationId));
-
-    if (!conversationRow) {
-      return { ok: false, error: 'Cette conversation est introuvable.' };
-    }
-    projectId = conversationRow.projectId;
-
-    db.insert(message)
-      .values({
-        id: crypto.randomUUID(),
-        conversationId,
-        role: 'user',
-        content: trimmedContent,
-        model: null,
-        createdAt: new Date().toISOString(),
-      })
-      .run();
-  } catch (error) {
-    console.error('sendMessage failed to persist the user message', error);
-    return { ok: false, error: "Impossible d'envoyer ce message." };
-  }
-
-  // From here on the user message is durably saved regardless of what
-  // happens next — every remaining failure surfaces as `assistantFailed`
-  // inside a *successful* ActionResult, never as `{ok:false}`.
-  try {
-    const loadedSkillsResult = await listLoadedSkillInstructions(projectId);
-    if (!loadedSkillsResult.ok) {
-      // Distinct from "this project has zero loaded skills" (a real,
-      // empty-but-successful list): a failed read must not silently
-      // become the same `[]` an agent call proceeds on, or the consultant
-      // gets an answer that looks skill-informed but never was, with
-      // nothing surfaced to explain why.
-      return {
-        ok: true,
-        data: { assistantFailed: true, error: loadedSkillsResult.error },
-      };
-    }
-    const loadedSkills = loadedSkillsResult.data;
-
-    const historyRows = await db
-      .select({ role: message.role, content: message.content })
-      .from(message)
-      .where(eq(message.conversationId, conversationId))
-      .orderBy(message.createdAt);
-
-    // Story 4.2 — Génération des suggestions ancrées à l'écriture (AD-3).
-    // This tool is offered on *every* `sendMessage` call, never gated
-    // behind a loaded skill (Always) — only its own `description` guides
-    // the model toward using it. `executeTool` is the one point where a
-    // tool call turns into persistence, and it never touches `db` itself
-    // (AD-2): it only parses the model's input and delegates to
-    // `createLivrableWithSuggestions`/`updateLivrableWithSuggestions`,
-    // which do the actual transaction.
-    //
-    // Story 4.4 — Révision globale (AD-10). Before creating, this now
-    // checks whether a LIVRABLE already exists for this conversation: a
-    // global revision is always posted into the livrable's own origin
-    // conversation (never a new one, `actions/livrable.ts`'s
-    // `requestGlobalRevision`), so the agent replying here — via this same
-    // `propose_livrable_content` tool — must update that existing livrable
-    // rather than create a second one for the same conversation. No
-    // existing row: unchanged creation behavior (Story 4.2).
-    const executeTool = async (
-      input: unknown,
-    ): Promise<ExecuteToolResult> => {
-      const parsed = parseProposeLivrableContentInput(input);
-      if (!parsed.ok) {
-        return { ok: false, error: parsed.error };
-      }
-
-      const [existingLivrable] = await db
-        .select({ id: livrable.id })
-        .from(livrable)
-        .where(eq(livrable.conversationId, conversationId));
-
-      if (existingLivrable) {
-        const updated = await updateLivrableWithSuggestions(
-          existingLivrable.id,
-          parsed.data,
-        );
-        if (!updated.ok) {
-          return { ok: false, error: updated.error };
-        }
-
-        // Same rule as the creation branch below: this text is only the
-        // tool's `tool_result`, read by the model on the second call, never
-        // persisted to MESSAGE itself. No title clause here, unlike the
-        // creation branch: `updateLivrableWithSuggestions` never writes
-        // `LIVRABLE.title` back (it only replaces `content`), so echoing
-        // `parsed.data.title` would tell the model a rename took effect
-        // when it never did.
-        return {
-          ok: true,
-          content: `Le livrable a été mis à jour avec ${parsed.data.suggestions.length} suggestion(s) ancrée(s).`,
-        };
-      }
-
-      const created = await createLivrableWithSuggestions(
-        projectId,
-        conversationId,
-        parsed.data,
-      );
-      if (!created.ok) {
-        return { ok: false, error: created.error };
-      }
-
-      // This text becomes the tool's `tool_result` content, read only by
-      // the model on the second call (Design Notes) — never persisted to
-      // MESSAGE itself (Always: "MESSAGE ne stocke jamais l'échange
-      // outil"), only the final natural-language reply built from it is.
-      return {
-        ok: true,
-        content: `Le livrable "${parsed.data.title}" a été créé avec ${parsed.data.suggestions.length} suggestion(s) ancrée(s).`,
-      };
-    };
-
-    // Fiabilité de la révision globale et de la concurrence des suggestions
-    // (spec-fiabilite-revision-suggestions, CAP-1). `MESSAGE` never stores
-    // the tool exchange itself (Always, Story 4.2) — only the model's short
-    // confirmation text is persisted, never the real document. Without
-    // this, a later call on this same conversation (in particular a global
-    // revision, which resends the *entire* `blocks` array, no partial/diff
-    // mode — `skills/propose_livrable_content.ts`) would have the model
-    // regenerate the whole document from its own unverified memory of an
-    // earlier turn, risking fabricated or silently dropped paragraphs the
-    // revision never intended to touch. So: read the livrable's current,
-    // real content here and, only when one already exists for this
-    // conversation (never on the very first creation — Always), push it as
-    // a synthetic `loadedSkills` entry, the same system-prompt assembly
-    // mechanism every other loaded skill already goes through (AD-11), with
-    // zero change to `skills/buildRequest.ts` itself. Read-only for the
-    // model: this entry is assembled fresh on every call, never persisted
-    // or made into an object something else could write back to.
-    //
-    // A failure reading or parsing that content must not regress today's
-    // behavior (I/O matrix: "comportement identique à aujourd'hui -- pas de
-    // régression") — logged only, falling back to no injection, exactly as
-    // if no livrable existed yet for this conversation.
-    let effectiveLoadedSkills = loadedSkills;
-    try {
-      const [existingLivrableForContext] = await db
-        .select({ content: livrable.content })
-        .from(livrable)
-        .where(eq(livrable.conversationId, conversationId));
-
-      if (existingLivrableForContext) {
-        const parsedContent = JSON.parse(
-          existingLivrableForContext.content,
-        ) as { blocks?: { text?: unknown }[] };
-
-        if (Array.isArray(parsedContent?.blocks)) {
-          const paragraphs = parsedContent.blocks
-            .map((block, index) => `${index + 1}. ${String(block?.text ?? '')}`)
-            .join('\n');
-
-          effectiveLoadedSkills = [
-            ...loadedSkills,
-            {
-              skillKey: '__current_livrable_context',
-              instructions:
-                'Contenu actuel du livrable pour cette conversation (avant toute révision) ' +
-                '-- chaque paragraphe non concerné par la demande en cours doit revenir ' +
-                `inchangé dans le document régénéré :\n${paragraphs}`,
-            },
-          ];
-        } else {
-          console.error(
-            'sendMessage: malformed existing livrable content, skipping context injection',
-            conversationId,
-          );
-        }
-      }
-    } catch (error) {
-      console.error(
-        'sendMessage: failed to read existing livrable content for context injection',
-        error,
-      );
-    }
-
-    const agentResult = await sendToAgent({
-      loadedSkills: effectiveLoadedSkills,
-      history: historyRows,
-      model,
-      tool: PROPOSE_LIVRABLE_CONTENT_TOOL,
-      executeTool,
-    });
-
-    if (!agentResult.ok) {
-      return {
-        ok: true,
-        data: { assistantFailed: true, error: agentResult.error },
-      };
-    }
-
-    db.insert(message)
-      .values({
-        id: crypto.randomUUID(),
-        conversationId,
-        role: 'assistant',
-        content: agentResult.content,
-        // Persist the human-readable label (e.g. "Claude Sonnet 5"), not
-        // the raw API slug (`model`, e.g. "claude-sonnet-5") — matches
-        // this file's own fixture data and keeps `ConversationHistory`
-        // free of technical identifiers. The raw `model` id is still what
-        // was actually sent to `sendToAgent` above.
-        model: resolveModelLabel(model),
-        createdAt: new Date().toISOString(),
-      })
-      .run();
-
-    return { ok: true, data: { assistantFailed: false } };
-  } catch (error) {
-    console.error(
-      'sendMessage: agent call or reply persistence failed after the user message was saved',
-      error,
-    );
-    return {
-      ok: true,
-      data: {
-        assistantFailed: true,
-        error: "Une erreur est survenue lors de l'appel à l'agent.",
-      },
-    };
   }
 }
 

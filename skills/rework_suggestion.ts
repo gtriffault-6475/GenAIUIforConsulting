@@ -4,7 +4,7 @@ import { MODELS } from '@/skills/models';
 
 // Story 4.3 — Traitement d'une suggestion ancrée (AD-11). Third real caller
 // of `skills/buildRequest.ts`'s `sendToAgent`, alongside `sendMessage`
-// (`actions/conversation.ts`) and `proposeStartingPoint`
+// (`actions/message.ts`) and `proposeStartingPoint`
 // (`skills/propose_starting_point.ts`) — every `@anthropic-ai/sdk` call
 // still goes through that single assembly point. Neither `tool` nor
 // `executeTool` is passed (the spec's Always: "sans outil, juste une

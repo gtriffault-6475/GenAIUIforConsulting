@@ -10,7 +10,7 @@ import { SuggestionsPanel } from '@/components/SuggestionsPanel';
 // renders `SuggestionsPanel` below the content card — both reads are plain
 // `SELECT`s (`epic-4-context.md`'s Technical Decisions), so this page still
 // never triggers an agent call just by being opened; suggestions already
-// persisted by `propose_livrable_content` (`actions/conversation.ts`)
+// persisted by `propose_livrable_content` (`actions/message.ts`)
 // simply appear. Stories 4.3-4.5 still populate this same page with
 // suggestion actions and the global revision field.
 //

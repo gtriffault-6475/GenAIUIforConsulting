@@ -2,7 +2,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 
 // Story 4.2 — Génération des suggestions ancrées à l'écriture (AD-3). The
 // agent's first real `@anthropic-ai/sdk` tool. Available on *every*
-// `sendMessage` call (`actions/conversation.ts`), never gated behind a
+// `sendMessage` call (`actions/message.ts`), never gated behind a
 // loaded skill the way `skills/catalog.ts`'s entries are — this tool lives
 // outside `SKILL_CATALOG` entirely, and only its own `description` below
 // guides the model toward calling it. Per this spec's Boundaries, block
@@ -66,7 +66,7 @@ export type ParseProposeLivrableContentInputResult =
 // is typed `unknown` by the SDK itself, and nothing guarantees a model's
 // tool call actually matches `input_schema` above at runtime. Returns
 // `{ok:false}` on any mismatch rather than throwing, so the caller
-// (`actions/conversation.ts`'s `executeTool`, via `skills/buildRequest.ts`)
+// (`actions/message.ts`'s `executeTool`, via `skills/buildRequest.ts`)
 // can turn a malformed call into a `tool_result` with `is_error: true`
 // instead of an uncaught exception reaching `sendMessage`.
 export function parseProposeLivrableContentInput(

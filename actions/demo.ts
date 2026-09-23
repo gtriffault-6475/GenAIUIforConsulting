@@ -14,8 +14,10 @@ import { STEPS } from '@/domain/workflow';
 // (`actions/livrable.ts`) and `acceptSuggestion` (`actions/suggestion.ts`)
 // — a demo-only tool, not a consultant-facing feature. This file (and
 // `actions/conversation.ts` itself, via `selectStep` below) is the only
-// place outside `actions/conversation.ts`/`actions/suggestion.ts` allowed
-// to write CONVERSATION/MESSAGE/SUGGESTION. LIVRABLE itself is still never
+// place outside `actions/conversation.ts`/`actions/message.ts`/
+// `actions/suggestion.ts` allowed to write CONVERSATION/MESSAGE/SUGGESTION
+// (MESSAGE is `actions/message.ts`'s exclusive concern since
+// epic-2-retro-item-13's split). LIVRABLE itself is still never
 // deleted (see the spec's Spec Change Log): wiping it only fought a
 // preexisting fixture-reseed mechanism in `actions/livrable.ts` that
 // immediately undid the deletion on the very `router.refresh()` this

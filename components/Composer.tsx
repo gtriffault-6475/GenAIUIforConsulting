@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useRef, useState, useTransition, type FormEvent } from 'react';
 
-import { sendMessage } from '@/actions/conversation';
+import { sendMessage } from '@/actions/message';
 import { useOverlay } from '@/components/OverlayProvider';
 import { MODELS } from '@/skills/models';
 

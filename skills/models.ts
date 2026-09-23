@@ -6,8 +6,8 @@
 // `id`, so a real reply reads consistently with `actions/conversation.ts`'s
 // fixture data — e.g. `'Claude Sonnet 5'`, not `'claude-sonnet-5'`).
 // Shared by `components/Composer.tsx` (client, for the dropdown) and
-// `actions/conversation.ts` (server, to resolve `label` before persisting)
-// so the id→label mapping exists in exactly one place.
+// `actions/message.ts` (server, to resolve `label` before persisting) so
+// the id→label mapping exists in exactly one place.
 export type ModelOption = {
   id: string;
   label: string;

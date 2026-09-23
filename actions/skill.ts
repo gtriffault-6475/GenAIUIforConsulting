@@ -3,6 +3,7 @@
 import { eq } from 'drizzle-orm';
 
 import type { ActionResult } from '@/actions/types';
+import { seedIfEmpty } from '@/actions/seed-if-empty';
 import { db } from '@/db/client';
 import { projectSkill } from '@/db/schema';
 import { SKILL_CATALOG } from '@/skills/catalog';
@@ -52,17 +53,22 @@ function seedFixturesIfEmpty(projectId: string): void {
   if (!fixtureSkillKeys) return;
 
   db.transaction((tx) => {
-    const existing = tx
-      .select({ projectId: projectSkill.projectId })
-      .from(projectSkill)
-      .where(eq(projectSkill.projectId, projectId))
-      .all();
+    seedIfEmpty(
+      () => {
+        const existing = tx
+          .select({ projectId: projectSkill.projectId })
+          .from(projectSkill)
+          .where(eq(projectSkill.projectId, projectId))
+          .all();
 
-    if (existing.length > 0) return;
-
-    for (const skillKey of fixtureSkillKeys) {
-      tx.insert(projectSkill).values({ projectId, skillKey }).run();
-    }
+        return existing.length > 0;
+      },
+      () => {
+        for (const skillKey of fixtureSkillKeys) {
+          tx.insert(projectSkill).values({ projectId, skillKey }).run();
+        }
+      },
+    );
   });
 }
 
@@ -117,7 +123,7 @@ export async function listProjectSkills(
 // reshape of the existing one, per the spec's Never ("ne pas modifier
 // listProjectSkills... ProjectSkillSummary reste un contrat gelé"). Not
 // exported to any client component: `skills/buildRequest.ts` (AD-11) is
-// the only intended caller, via `sendMessage` in `actions/conversation.ts`.
+// the only intended caller, via `sendMessage` in `actions/message.ts`.
 // "Ordre de chargement" is the order `project_skill` rows come back in —
 // the same implicit row order `listProjectSkills` already relies on.
 export async function listLoadedSkillInstructions(
