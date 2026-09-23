@@ -6,7 +6,7 @@ import type { ActionResult } from '@/actions/types';
 import { listLoadedSkillInstructions } from '@/actions/skill';
 import { db } from '@/db/client';
 import { livrable, suggestion } from '@/db/schema';
-import { applyAcceptedSuggestion } from '@/domain/suggestion';
+import { applyAcceptedSuggestion, resolveAnchorPosition } from '@/domain/suggestion';
 import type { SuggestionStatus } from '@/domain/suggestion';
 import { reworkSuggestionContent } from '@/skills/rework_suggestion';
 
@@ -21,7 +21,10 @@ import { reworkSuggestionContent } from '@/skills/rework_suggestion';
 // transaction as the SUGGESTION row it accepts (the spec's Always: "même
 // exception documentée qu'actions/livrable.ts, en sens inverse") — every
 // other read/write of LIVRABLE stays `actions/livrable.ts`'s exclusive
-// concern.
+// concern. spec-position-figee-suggestions-resolues extends this:
+// `rejectSuggestion` now also *reads* LIVRABLE (to freeze `resolvedPosition`
+// against the current blocks) — it still never writes LIVRABLE's content,
+// same boundary as before, just no longer blind to the table.
 
 // The shape `SuggestionsPanel` (Story 4.2) reads: an anchored suggestion
 // reduced to what a read-only `ai-suggestion-card` renders.
@@ -30,11 +33,18 @@ import { reworkSuggestionContent } from '@/skills/rework_suggestion';
 // resolution happens at render time against the livrable's current
 // blocks, not here, so this type keeps the raw id rather than a
 // precomputed position.
+// `resolvedPosition` (spec-position-figee-suggestions-resolues): the `¶N`
+// position frozen at the moment this suggestion became `accepted`/
+// `rejected` — `null` while still `pending`/`revising`, and also `null` for
+// a suggestion resolved before this column existed (no backfill). Consumers
+// (`SuggestionCard.tsx`) prefer this value over live resolution once it is
+// non-null.
 export type SuggestionSummary = {
   id: string;
   anchorRef: string | null;
   text: string;
   status: SuggestionStatus;
+  resolvedPosition: number | null;
 };
 
 // Reads every SUGGESTION row for one livrable — the "instant" read Story
@@ -54,6 +64,7 @@ export async function listSuggestions(
         anchorRef: suggestion.anchorRef,
         text: suggestion.text,
         status: suggestion.status,
+        resolvedPosition: suggestion.resolvedPosition,
       })
       .from(suggestion)
       .where(eq(suggestion.livrableId, livrableId));
@@ -148,13 +159,28 @@ export async function acceptSuggestion(
         suggestionRow.text,
       );
 
+      // spec-position-figee-suggestions-resolues: frozen once, here, in the
+      // same transaction as the `accepted` write — computed against the
+      // blocks as they stood *before* this suggestion's own edit is applied
+      // (the position it occupied when the consultant made the decision),
+      // never recomputed after a later global revision regenerates block
+      // ids. `resolveAnchorPosition` already degrades to `null` if the
+      // anchor is somehow unresolvable — not reachable today (this
+      // suggestion's `anchorRef` was just read from a block in these same
+      // `blocks`), but no less defensive than `resolveAnchorPosition`'s own
+      // existing contract.
+      const resolvedPosition = resolveAnchorPosition(
+        blocks,
+        suggestionRow.anchorRef,
+      );
+
       tx.update(livrable)
         .set({ content: JSON.stringify({ blocks: nextBlocks }) })
         .where(eq(livrable.id, livrableRow.id))
         .run();
 
       tx.update(suggestion)
-        .set({ status: 'accepted' })
+        .set({ status: 'accepted', resolvedPosition })
         .where(eq(suggestion.id, suggestionId))
         .run();
 
@@ -168,10 +194,12 @@ export async function acceptSuggestion(
   }
 }
 
-// Story 4.3 — Traitement d'une suggestion ancrée (FR-21). Never touches
-// LIVRABLE (Always: "document inchangé") — the transaction below exists
-// only to make the pending-check-then-write atomic (same reasoning as
-// `acceptSuggestion`), not to couple two tables.
+// Story 4.3 — Traitement d'une suggestion ancrée (FR-21). Never writes
+// `LIVRABLE.content` (Always: "document inchangé") — the transaction below
+// still reads LIVRABLE (spec-position-figee-suggestions-resolues: needed to
+// freeze `resolvedPosition` at the same moment as the `rejected` write) and
+// exists to make the pending-check-then-write atomic (same reasoning as
+// `acceptSuggestion`), not to couple the two tables' writes.
 export async function rejectSuggestion(
   suggestionId: string,
 ): Promise<ActionResult<void>> {
@@ -180,7 +208,7 @@ export async function rejectSuggestion(
 
     db.transaction((tx) => {
       const [suggestionRow] = tx
-        .select({ status: suggestion.status })
+        .select({ status: suggestion.status, anchorRef: suggestion.anchorRef, livrableId: suggestion.livrableId })
         .from(suggestion)
         .where(eq(suggestion.id, suggestionId))
         .all();
@@ -198,8 +226,64 @@ export async function rejectSuggestion(
         return;
       }
 
+      // spec-position-figee-suggestions-resolues: same freeze as
+      // `acceptSuggestion`, computed here so a later global revision can
+      // regenerate every block id without degrading this suggestion's
+      // already-decided `¶N`. `anchorRef` is only ever null for a `global`
+      // suggestion (not reachable via this UI today, `SuggestionCard`'s only
+      // caller — defensive, mirroring `acceptSuggestion`'s own guard) — in
+      // that case there is no paragraph to resolve a position for, so
+      // `resolvedPosition` simply stays `null`, same as an unresolvable
+      // anchor.
+      let resolvedPosition: number | null = null;
+      if (suggestionRow.anchorRef !== null) {
+        const [livrableRow] = tx
+          .select({ content: livrable.content })
+          .from(livrable)
+          .where(eq(livrable.id, suggestionRow.livrableId))
+          .all();
+
+        if (livrableRow) {
+          // Review finding (spec-position-figee-suggestions-resolues,
+          // review_loop_iteration 1): this `JSON.parse` must never abort the
+          // rejection itself — before this spec, `rejectSuggestion` never
+          // touched LIVRABLE at all and could not fail this way. A malformed
+          // `content` (not reachable today, every write goes through
+          // `JSON.stringify`, same defensive posture as `acceptSuggestion`)
+          // now only degrades `resolvedPosition` to `null`, exactly like an
+          // unresolvable anchor — the `status: 'rejected'` write below still
+          // goes through.
+          try {
+            const content = JSON.parse(livrableRow.content) as { blocks?: unknown };
+            if (Array.isArray(content?.blocks)) {
+              const blocks = content.blocks as { id: string; text: string }[];
+              resolvedPosition = resolveAnchorPosition(
+                blocks,
+                suggestionRow.anchorRef,
+              );
+            } else {
+              console.error(
+                'rejectSuggestion: malformed content.blocks',
+                suggestionRow.livrableId,
+              );
+            }
+          } catch (error) {
+            console.error(
+              'rejectSuggestion: failed to parse livrable content',
+              suggestionRow.livrableId,
+              error,
+            );
+          }
+        } else {
+          console.error(
+            'rejectSuggestion: owning livrable not found',
+            suggestionRow.livrableId,
+          );
+        }
+      }
+
       tx.update(suggestion)
-        .set({ status: 'rejected' })
+        .set({ status: 'rejected', resolvedPosition })
         .where(eq(suggestion.id, suggestionId))
         .run();
 

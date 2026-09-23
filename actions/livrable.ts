@@ -6,6 +6,7 @@ import type { ActionResult } from '@/actions/types';
 import { sendMessage } from '@/actions/conversation';
 import { db } from '@/db/client';
 import { livrable, suggestion } from '@/db/schema';
+import { resolveAnchorPosition } from '@/domain/suggestion';
 import { MODELS } from '@/skills/models';
 import type { ProposedLivrableContent } from '@/skills/propose_livrable_content';
 
@@ -287,6 +288,21 @@ export async function createLivrableWithSuggestions(
 // `acceptSuggestion` can no longer ever meet an `anchorRef` that doesn't
 // resolve to a current block, since nothing pending or revising+anchored
 // survives a regeneration.
+//
+// spec-position-figee-suggestions-resolues (Boundaries — Révision après
+// revue, `review_loop_iteration: 1`): this mass `pending`/`revising` ->
+// `rejected` transition is a second write path to the same status as
+// `actions/suggestion.ts`'s manual `rejectSuggestion`, and the spec's own
+// Acceptance Criteria ("toute suggestion... acceptée ou rejetée") does not
+// distinguish how a suggestion became `rejected`. So this path must also
+// freeze `resolvedPosition` — computed against the blocks as they stood
+// *before* this same function regenerates them below, read here while they
+// are still the current row, never against the freshly-minted `blocks`
+// array a few lines down (that would already be the wrong, post-
+// regeneration answer). Everything else about this function — the id
+// regeneration itself, `createLivrableWithSuggestions`'s counterpart shape
+// — stays untouched, per the Boundaries' own "seul ce point précis... reste
+// inchangé".
 export async function updateLivrableWithSuggestions(
   livrableId: string,
   proposal: ProposedLivrableContent,
@@ -300,13 +316,44 @@ export async function updateLivrableWithSuggestions(
     const content = JSON.stringify({ blocks });
 
     db.transaction((tx) => {
-      tx.update(livrable)
-        .set({ content })
+      // Read the *old* blocks and the suggestions about to be auto-rejected
+      // before `content` below overwrites them — same defensive JSON
+      // handling as `acceptSuggestion`/`rejectSuggestion`
+      // (`actions/suggestion.ts`): a malformed pre-existing `content` only
+      // degrades every `resolvedPosition` in this batch to `null`, it never
+      // blocks the regeneration itself.
+      let oldBlocks: { id: string; text: string }[] = [];
+      const [existingLivrableRow] = tx
+        .select({ content: livrable.content })
+        .from(livrable)
         .where(eq(livrable.id, livrableId))
-        .run();
+        .all();
 
-      tx.update(suggestion)
-        .set({ status: 'rejected' })
+      if (existingLivrableRow) {
+        try {
+          const existingContent = JSON.parse(existingLivrableRow.content) as {
+            blocks?: unknown;
+          };
+          if (Array.isArray(existingContent?.blocks)) {
+            oldBlocks = existingContent.blocks as { id: string; text: string }[];
+          } else {
+            console.error(
+              'updateLivrableWithSuggestions: malformed content.blocks before regeneration',
+              livrableId,
+            );
+          }
+        } catch (error) {
+          console.error(
+            'updateLivrableWithSuggestions: failed to parse pre-regeneration content',
+            livrableId,
+            error,
+          );
+        }
+      }
+
+      const toReject = tx
+        .select({ id: suggestion.id, anchorRef: suggestion.anchorRef })
+        .from(suggestion)
         .where(
           and(
             eq(suggestion.livrableId, livrableId),
@@ -314,7 +361,24 @@ export async function updateLivrableWithSuggestions(
             eq(suggestion.type, 'anchored'),
           ),
         )
+        .all();
+
+      tx.update(livrable)
+        .set({ content })
+        .where(eq(livrable.id, livrableId))
         .run();
+
+      for (const item of toReject) {
+        const resolvedPosition =
+          item.anchorRef !== null
+            ? resolveAnchorPosition(oldBlocks, item.anchorRef)
+            : null;
+
+        tx.update(suggestion)
+          .set({ status: 'rejected', resolvedPosition })
+          .where(eq(suggestion.id, item.id))
+          .run();
+      }
 
       for (const item of proposal.suggestions) {
         const block = blocks[item.blockIndex];

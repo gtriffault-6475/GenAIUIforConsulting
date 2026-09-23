@@ -13,7 +13,7 @@
 // they need them; do not pre-create tables speculatively here.
 import { sql } from 'drizzle-orm';
 import type { AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
-import { sqliteTable, text, unique, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { integer, sqliteTable, text, unique, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 // A project connected from Octopod. `activeConversationId` is part of the
 // fixed shape from the architecture spine (AD-6: "seule source de vérité"
@@ -205,6 +205,18 @@ export const livrable = sqliteTable('livrable', {
 // suggestions (`anchorRef` null) are excluded by the `type = 'anchored'`
 // clause — any number of pending global revisions may coexist, per the
 // same Technical Decisions.
+//
+// `resolvedPosition` (spec-position-figee-suggestions-resolues, epic-4-retro
+// finding #3): the 1-based `¶N` position computed once, via
+// `domain/suggestion.ts`'s `resolveAnchorPosition`, at the exact moment an
+// `accepted`/`rejected` transition is written (`actions/suggestion.ts`) —
+// never recomputed afterwards, even if a later global revision regenerates
+// every block id in this livrable. Nullable, no default: rows already
+// `accepted`/`rejected` before this migration keep `resolvedPosition: null`
+// forever (no backfill, per the spec's Always) and fall back to today's
+// live resolution, unchanged. Still `null` while a suggestion is
+// `pending`/`revising` — those statuses never set this column, they keep
+// resolving live via `resolveAnchorPosition` against the current blocks.
 export const suggestion = sqliteTable(
   'suggestion',
   {
@@ -218,6 +230,7 @@ export const suggestion = sqliteTable(
     status: text('status', {
       enum: ['pending', 'accepted', 'rejected', 'revising'],
     }).notNull(),
+    resolvedPosition: integer('resolved_position'),
   },
   (table) => [
     uniqueIndex('suggestion_livrable_id_anchor_ref_pending_anchored_unique')

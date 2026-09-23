@@ -49,18 +49,27 @@ export function SuggestionCard({
   const overlayId = `rework-${suggestion.id}`;
   const isReworkOpen = isOverlayOpen(overlayId);
 
-  // `anchorRef` is a block id, never a position (epic-4-context.md's
-  // Technical Decisions) — resolved to a display position only here, at
-  // render time, against the livrable's current blocks. Falls back to a
-  // bare `¶` if the anchor cannot be resolved, same as Story 4.2's
-  // `SuggestionsPanel` did before this story moved that logic here.
-  const position = suggestion.anchorRef
-    ? resolveAnchorPosition(blocks, suggestion.anchorRef)
-    : null;
-  const anchorLabel = position !== null ? `¶${position}` : '¶';
-
   const isResolved =
     suggestion.status === 'accepted' || suggestion.status === 'rejected';
+
+  // `anchorRef` is a block id, never a position (epic-4-context.md's
+  // Technical Decisions) — resolved to a display position at render time
+  // against the livrable's current blocks. spec-position-figee-suggestions-
+  // resolues: once a suggestion is `accepted`/`rejected`, prefer the
+  // `resolvedPosition` frozen at that transition — it never degrades even
+  // after a global revision regenerates every block id, unlike live
+  // resolution below. Falls back to live resolution (via `anchorRef`) for
+  // `pending`/`revising` suggestions (unchanged behavior), and also for an
+  // already-resolved suggestion whose `resolvedPosition` is still `null`
+  // (resolved before this column existed — no backfill, same degrade-to-
+  // live-then-possibly-bare-`¶` behavior as before this feature).
+  const position =
+    isResolved && suggestion.resolvedPosition !== null
+      ? suggestion.resolvedPosition
+      : suggestion.anchorRef
+        ? resolveAnchorPosition(blocks, suggestion.anchorRef)
+        : null;
+  const anchorLabel = position !== null ? `¶${position}` : '¶';
 
   function handleAccept() {
     if (isPending || busyRef.current) return;
