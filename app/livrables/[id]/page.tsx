@@ -45,6 +45,23 @@ export default async function LivrablePage({
   }
   const suggestions = suggestionsResult.ok ? suggestionsResult.data : [];
 
+  // spec-ai-tint-paragraphe-cible.md (epic-4-context.md: "le paragraphe
+  // ciblé... utilise aussi le fond ai-tint pour se signaler comme zone
+  // IA"). Only `pending`/`revising` — an unresolved, still-actionable
+  // suggestion — count as "targeting" a paragraph; `accepted`/`rejected`
+  // are already settled (their own card fades, per the same UX pattern)
+  // and have no reason to keep flagging the paragraph as an active AI
+  // zone.
+  const activeAnchorRefs = new Set(
+    suggestions
+      .filter(
+        (suggestion) =>
+          suggestion.anchorRef !== null &&
+          (suggestion.status === 'pending' || suggestion.status === 'revising'),
+      )
+      .map((suggestion) => suggestion.anchorRef),
+  );
+
   return (
     <div>
       {/* Fil d'Ariane — stays visible regardless of what `result` holds
@@ -113,11 +130,34 @@ export default async function LivrablePage({
                   Ce livrable ne contient aucun contenu pour le moment.
                 </p>
               ) : (
-                result.data.blocks.map((block) => (
-                  <p key={block.id} className="text-body">
-                    {block.text}
-                  </p>
-                ))
+                result.data.blocks.map((block) => {
+                  const isActiveTarget = activeAnchorRefs.has(block.id);
+                  return (
+                    <p
+                      key={block.id}
+                      className={
+                        isActiveTarget ? 'text-body ai-tint-block' : 'text-body'
+                      }
+                    >
+                      {block.text}
+                      {/* Non-visual counterpart to the tint (bmad-review
+                          blind-hunter finding, oneshot pass): the color
+                          alone conveys nothing to a screen reader, and the
+                          suggestion's own card is a separate DOM subtree
+                          below this one with no structural link back here.
+                          A child span (not `aria-label` on the `<p>`
+                          itself, which would replace the paragraph's own
+                          text as its accessible name instead of adding to
+                          it) appends this without being seen. */}
+                      {isActiveTarget && (
+                        <span className="sr-only">
+                          {' '}
+                          (suggestion IA en attente)
+                        </span>
+                      )}
+                    </p>
+                  );
+                })
               )}
             </div>
 

@@ -647,6 +647,22 @@ textarea {
   gap: var(--space-3);
 }
 
+/* spec-ai-tint-paragraphe-cible.md (epic-4-context.md: "le paragraphe
+   ciblé dans le document utilise aussi le fond ai-tint"). Same token as
+   `.ai-suggestion-card` above, but a plain-paragraph scale (`--radius-sm`,
+   tighter padding) rather than a full card — this sits inline with plain
+   `.text-body` blocks in `app/livrables/[id]/page.tsx`, not as its own
+   panel. Negative horizontal margin matching the padding keeps the text's
+   own left edge aligned with its untinted `.text-body` siblings above/
+   below — only the background extends past it, not the text (bmad-review
+   blind-hunter finding, oneshot pass). */
+.ai-tint-block {
+  background: var(--color-ai-tint);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  margin: 0 calc(-1 * var(--space-3));
+}
+
 .ai-suggestion-card-actions {
   display: flex;
   align-items: center;
@@ -757,4 +773,22 @@ textarea {
 .ai-suggestion-status-icon {
   flex-shrink: 0;
   stroke: var(--color-success);
+}
+
+/* spec-ai-tint-paragraphe-cible.md. Standard visually-hidden pattern
+   (clipped to 1px, not `display:none`/`visibility:hidden`, which would
+   also remove it from the accessibility tree) — first use in this
+   project. Announces the `.ai-tint-block` paragraph's own AI-suggestion
+   state to screen readers without a redundant `aria-label` overriding the
+   paragraph's real text as its accessible name. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
