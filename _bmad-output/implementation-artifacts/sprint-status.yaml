@@ -217,7 +217,7 @@ action_items:
     action: "Étendre epic-2-retro-item-12 au motif de garde pending dupliqué dans
       actions/suggestion.ts (epic-4 retro)"
     owner: "dev loop"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-4-retro-2026-09-21.md"
   - id: "epic-4-retro-item-23-supprimer-les-suggestion-du-livrable-orp"
     epic: 4

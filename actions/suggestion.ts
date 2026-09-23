@@ -83,6 +83,49 @@ export async function listSuggestions(
   }
 }
 
+// epic-4-retro-item-22 ("étendre epic-2-retro-item-12 au motif de garde
+// 'pending' dupliqué dans actions/suggestion.ts"). Contrairement à
+// `seedIfEmpty` (`actions/seed-if-empty.ts`), qui reste volontairement
+// table-agnostique pour respecter AD-2 entre fichiers, cette garde est
+// spécifique à SUGGESTION et reste donc privée à ce fichier -- son seul
+// propriétaire. Prend le `tx` déjà ouvert par l'appelante (jamais son
+// propre `db.transaction`), lit la ligne complète (comme `acceptSuggestion`/
+// `reworkSuggestion` le faisaient déjà -- la sélection partielle que
+// `rejectSuggestion` faisait avant ce refactor n'exploitait aucune
+// restriction, donc rien d'observable ne change), et centralise les deux
+// vérifications répétées 3x : introuvable, puis `status !== 'pending'`. Le
+// message "déjà traitée" reste paramétrable : `reworkSuggestion` en gardait
+// un texte différent des deux autres, préservé via `alreadyProcessedError`.
+// Renvoie `ActionResult<typeof suggestion.$inferSelect>` (même convention
+// que le reste du fichier) plutôt qu'une union ad hoc -- la ligne chargée
+// est dans `.data`, pas `.row`, comme n'importe quel autre `ActionResult`
+// de ce fichier.
+type SuggestionTransaction = Parameters<
+  Parameters<typeof db.transaction>[0]
+>[0];
+
+function loadPendingSuggestion(
+  tx: SuggestionTransaction,
+  suggestionId: string,
+  alreadyProcessedError: string = 'Cette suggestion a déjà été traitée.',
+): ActionResult<typeof suggestion.$inferSelect> {
+  const [row] = tx
+    .select()
+    .from(suggestion)
+    .where(eq(suggestion.id, suggestionId))
+    .all();
+
+  if (!row) {
+    return { ok: false, error: 'Cette suggestion est introuvable.' };
+  }
+
+  if (row.status !== 'pending') {
+    return { ok: false, error: alreadyProcessedError };
+  }
+
+  return { ok: true, data: row };
+}
+
 // Story 4.3 — Traitement d'une suggestion ancrée (FR-21, AD-2, AD-9). Reads
 // the SUGGESTION row and its owning LIVRABLE, applies
 // `applyAcceptedSuggestion` (`domain/suggestion.ts`, pure) to the
@@ -103,24 +146,12 @@ export async function acceptSuggestion(
     let result: ActionResult<void> | null = null;
 
     db.transaction((tx) => {
-      const [suggestionRow] = tx
-        .select()
-        .from(suggestion)
-        .where(eq(suggestion.id, suggestionId))
-        .all();
-
-      if (!suggestionRow) {
-        result = { ok: false, error: 'Cette suggestion est introuvable.' };
+      const guard = loadPendingSuggestion(tx, suggestionId);
+      if (!guard.ok) {
+        result = { ok: false, error: guard.error };
         return;
       }
-
-      if (suggestionRow.status !== 'pending') {
-        result = {
-          ok: false,
-          error: 'Cette suggestion a déjà été traitée.',
-        };
-        return;
-      }
+      const suggestionRow = guard.data;
 
       if (suggestionRow.anchorRef === null) {
         // Not reachable via this story's own write path (every suggestion
@@ -211,24 +242,12 @@ export async function rejectSuggestion(
     let result: ActionResult<void> | null = null;
 
     db.transaction((tx) => {
-      const [suggestionRow] = tx
-        .select({ status: suggestion.status, anchorRef: suggestion.anchorRef, livrableId: suggestion.livrableId })
-        .from(suggestion)
-        .where(eq(suggestion.id, suggestionId))
-        .all();
-
-      if (!suggestionRow) {
-        result = { ok: false, error: 'Cette suggestion est introuvable.' };
+      const guard = loadPendingSuggestion(tx, suggestionId);
+      if (!guard.ok) {
+        result = { ok: false, error: guard.error };
         return;
       }
-
-      if (suggestionRow.status !== 'pending') {
-        result = {
-          ok: false,
-          error: 'Cette suggestion a déjà été traitée.',
-        };
-        return;
-      }
+      const suggestionRow = guard.data;
 
       // spec-position-figee-suggestions-resolues: same freeze as
       // `acceptSuggestion`, computed here so a later global revision can
@@ -357,22 +376,16 @@ export async function reworkSuggestion(
 
   try {
     db.transaction((tx) => {
-      const [suggestionRow] = tx
-        .select()
-        .from(suggestion)
-        .where(eq(suggestion.id, suggestionId))
-        .all();
-
-      if (!suggestionRow) {
-        guardError = 'Cette suggestion est introuvable.';
+      const guard = loadPendingSuggestion(
+        tx,
+        suggestionId,
+        'Cette suggestion est déjà en cours de retravail ou a déjà été traitée.',
+      );
+      if (!guard.ok) {
+        guardError = guard.error;
         return;
       }
-
-      if (suggestionRow.status !== 'pending') {
-        guardError =
-          'Cette suggestion est déjà en cours de retravail ou a déjà été traitée.';
-        return;
-      }
+      const suggestionRow = guard.data;
 
       captured = {
         livrableId: suggestionRow.livrableId,
