@@ -11,9 +11,13 @@ import type { SuggestionStatus } from '@/domain/suggestion';
 import { reworkSuggestionContent } from '@/skills/rework_suggestion';
 
 // AD-2 — this is the only file allowed to read or write SUGGESTION, with
-// one exception: `actions/livrable.ts`'s `createLivrableWithSuggestions`
-// inserts SUGGESTION rows too, but only inside the same atomic transaction
-// as the LIVRABLE row they belong to (the spec's Always) — every other
+// two exceptions: `actions/livrable.ts`'s `createLivrableWithSuggestions`/
+// `updateLivrableWithSuggestions` insert and reject SUGGESTION rows too,
+// but only inside the same atomic transaction as the LIVRABLE row they
+// belong to (the spec's Always); and `actions/demo.ts`'s
+// `resetAvantVenteWorkflow` (Epic 4 retrospective follow-up, 2026-09-23)
+// deletes every SUGGESTION row belonging to a livrable it is about to
+// orphan — a demo-only tool, not a normal product write path. Every other
 // read/write of this table stays exclusively here.
 //
 // Story 4.3 adds the reverse exception for LIVRABLE: `acceptSuggestion`

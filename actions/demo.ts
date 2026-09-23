@@ -5,23 +5,28 @@ import { eq, inArray } from 'drizzle-orm';
 import type { ActionResult } from '@/actions/types';
 import { selectStep } from '@/actions/conversation';
 import { db } from '@/db/client';
-import { conversation, livrable, message, project } from '@/db/schema';
+import { APP_STATE_ID, appState, conversation, livrable, message, project, suggestion } from '@/db/schema';
 import { STEPS } from '@/domain/workflow';
 
-// spec-simulation-demarrage-avant-vente.md. AD-2 exception, same rationale
+// spec-simulation-demarrage-avant-vente.md, extended by the Epic 4
+// retrospective's follow-up (2026-09-23). AD-2 exception, same rationale
 // already established by `createLivrableWithSuggestions`
 // (`actions/livrable.ts`) and `acceptSuggestion` (`actions/suggestion.ts`)
 // — a demo-only tool, not a consultant-facing feature. This file (and
 // `actions/conversation.ts` itself, via `selectStep` below) is the only
-// place outside `actions/conversation.ts` allowed to write CONVERSATION/
-// MESSAGE. Unlike this spec's first iteration, LIVRABLE is never deleted
-// and SUGGESTION is never touched at all (see the spec's Spec Change Log):
-// wiping LIVRABLE only fought a preexisting fixture-reseed mechanism in
-// `actions/livrable.ts` that immediately undid the deletion on the very
-// `router.refresh()` this action's own caller triggers, with no real
-// benefit. The one LIVRABLE field this file does write —
-// `conversationId`, cleared below, never `title`/`content` — exists only
-// to unblock the CONVERSATION delete, not to modify the livrable itself.
+// place outside `actions/conversation.ts`/`actions/suggestion.ts` allowed
+// to write CONVERSATION/MESSAGE/SUGGESTION. LIVRABLE itself is still never
+// deleted (see the spec's Spec Change Log): wiping it only fought a
+// preexisting fixture-reseed mechanism in `actions/livrable.ts` that
+// immediately undid the deletion on the very `router.refresh()` this
+// action's own caller triggers, with no real benefit. The one LIVRABLE
+// field this file writes — `conversationId`, cleared below, never
+// `title`/`content` — exists only to unblock the CONVERSATION delete, not
+// to modify the livrable itself. SUGGESTION rows belonging to a livrable
+// this reset orphans are deleted outright (retrospective finding #1,
+// below) — the one exception to "LIVRABLE's own data stays untouched",
+// justified by what leaving them live would mean for a supposedly-reset
+// document.
 //
 // No table here has an `ON DELETE CASCADE` (`db/schema.ts`), so every FK
 // into CONVERSATION.id must be cleared before that row is deleted, or the
@@ -78,6 +83,53 @@ export async function resetAvantVenteWorkflow(
       if (projectRow.type !== 'avant-vente') {
         guardError = "Cette action n'est disponible que pour une avant-vente.";
         return;
+      }
+
+      // Epic 4 retrospective (follow-up, 2026-09-23), finding #2: before the
+      // project switcher existed, no code path could ever make a rendered
+      // project "not the active one" — only one project could ever be
+      // selected, so this check was unreachable and never needed. A stale
+      // tab left open on this avant-vente project while another tab (or the
+      // same one, via `ProjectSelector`) switches the active project away
+      // from it must not be able to wipe a project's history it can no
+      // longer even see refreshed.
+      const [appStateRow] = tx
+        .select({ activeProjectId: appState.activeProjectId })
+        .from(appState)
+        .where(eq(appState.id, APP_STATE_ID))
+        .all();
+
+      if (appStateRow?.activeProjectId !== projectId) {
+        guardError = "Ce projet n'est pas (ou plus) le projet actif.";
+        return;
+      }
+
+      // Epic 4 retrospective (follow-up, 2026-09-23), finding #1 (Option A,
+      // validated): a livrable this reset is about to orphan (its
+      // `conversationId` nulled below) keeps its own `SUGGESTION` rows
+      // otherwise untouched — any still `pending`/`revising` one stayed
+      // fully actionable (accept/reject/rework) on a document the consultant
+      // believed had just been wiped. Deleting them here closes that gap
+      // without touching `LIVRABLE` itself (still never deleted, still never
+      // re-triggers `actions/livrable.ts`'s fixture-reseed condition — that
+      // only fires when the `livrable` table itself is empty for the
+      // project, which it never becomes here). `accepted`/`rejected`
+      // suggestions are deleted too, same as `pending`/`revising`: they
+      // belong to a livrable this reset is severing from the conversation
+      // that produced them, and only this demo tool needs an opinion on
+      // what happens next — a real product feature would need a different
+      // answer, but nothing here is that.
+      const orphanedLivrableRows = tx
+        .select({ id: livrable.id })
+        .from(livrable)
+        .where(eq(livrable.projectId, projectId))
+        .all();
+      const orphanedLivrableIds = orphanedLivrableRows.map((row) => row.id);
+
+      if (orphanedLivrableIds.length > 0) {
+        tx.delete(suggestion)
+          .where(inArray(suggestion.livrableId, orphanedLivrableIds))
+          .run();
       }
 
       const conversationRows = tx

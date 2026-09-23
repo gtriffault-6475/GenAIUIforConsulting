@@ -52,6 +52,17 @@ export default async function LivrablePage({
   // are already settled (their own card fades, per the same UX pattern)
   // and have no reason to keep flagging the paragraph as an active AI
   // zone.
+  //
+  // Epic 4 retrospective (follow-up, 2026-09-23), finding #5: this filter
+  // implicitly trusts that no `pending`/`revising` anchored suggestion ever
+  // holds an `anchorRef` pointing at a block id absent from the current
+  // `blocks` array. That invariant is enforced elsewhere, not here —
+  // `actions/suggestion.ts`'s `reworkSuggestion` (its three guarded
+  // `WHERE status = 'revising'` write-backs) and `actions/livrable.ts`'s
+  // `updateLivrableWithSuggestions` (its `rejected` transition on
+  // regeneration) are what keep it true. If either guard is ever weakened,
+  // this line degrades silently (`activeAnchorRefs.has(block.id)` just
+  // stops matching) rather than failing loudly.
   const activeAnchorRefs = new Set(
     suggestions
       .filter(

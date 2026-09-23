@@ -5,20 +5,22 @@ import { useRef, useState, useTransition } from 'react';
 
 import { resetAvantVenteWorkflow } from '@/actions/demo';
 
-// spec-simulation-demarrage-avant-vente.md. Demo-only tool, mounted by
+// spec-simulation-demarrage-avant-vente.md, extended by the Epic 4
+// retrospective's follow-up (2026-09-23). Demo-only tool, mounted by
 // `app/page.tsx` right after `<Stepper />`, under the same
 // `activeProject.type === 'avant-vente'` condition — never rendered for a
 // `mission` project. Destructive and irreversible (wipes this project's
-// CONVERSATION/MESSAGE rows, then immediately recreates a first-step
-// conversation — `actions/demo.ts`'s `resetAvantVenteWorkflow`), so it is
-// the app's first flow that needs a confirmation step before acting: no
-// existing confirmation surface to reuse (no other action in this app is
+// CONVERSATION/MESSAGE rows and any SUGGESTION belonging to one of its
+// livrables, then immediately recreates a first-step conversation —
+// `actions/demo.ts`'s `resetAvantVenteWorkflow`), so it is the app's first
+// flow that needs a confirmation step before acting: no existing
+// confirmation surface to reuse (no other action in this app is
 // destructive), so a native `window.confirm()` is enough for a demo tool —
 // not `OverlayProvider` (AD-8 governs floating surfaces this app renders
 // itself, not the browser's own native dialog). Its text enumerates
-// exactly what gets erased (conversations and messages only, per this
-// spec's revised Décision — never "livrables"/"suggestions", which this
-// action no longer touches at all).
+// exactly what gets erased — conversations, messages, and (since the
+// retrospective follow-up) suggestions; never the livrable itself, still
+// left in place per this spec's revised Décision.
 //
 // Same shape as `Stepper.tsx`/`GlobalRevisionField.tsx`: `useTransition` +
 // a synchronous `busyRef` re-entrancy guard (closes the window
@@ -37,9 +39,9 @@ export function DemoResetAvantVente({ projectId }: { projectId: string }) {
 
     const confirmed = window.confirm(
       'Réinitialiser cette avant-vente supprime définitivement ses ' +
-        'conversations et ses messages, puis recrée immédiatement la ' +
-        'conversation de la première étape. Cette action est ' +
-        'irréversible. Continuer ?',
+        'conversations, ses messages, et les suggestions de ses ' +
+        'livrables, puis recrée immédiatement la conversation de la ' +
+        'première étape. Cette action est irréversible. Continuer ?',
     );
     if (!confirmed) return;
 
