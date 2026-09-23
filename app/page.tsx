@@ -8,6 +8,7 @@ import { Composer } from '@/components/Composer';
 import { ContextPanel } from '@/components/ContextPanel';
 import { ConversationHistory } from '@/components/ConversationHistory';
 import { ConversationList } from '@/components/ConversationList';
+import { DemoResetAvantVente } from '@/components/DemoResetAvantVente';
 import { LivrablesPanel } from '@/components/LivrablesPanel';
 import { MattermostPanel } from '@/components/MattermostPanel';
 import { ProactiveSuggestion } from '@/components/ProactiveSuggestion';
@@ -180,7 +181,10 @@ export default async function Home() {
           consequence of `computeStepStatuses`'s own logic (which stays
           identical for both project types, AD-5). */}
       {activeProject.type === 'avant-vente' && (
-        <Stepper projectId={activeProject.id} steps={steps} />
+        <>
+          <Stepper projectId={activeProject.id} steps={steps} />
+          <DemoResetAvantVente projectId={activeProject.id} />
+        </>
       )}
       <div className="workspace-grid">
         <aside className="workspace-sidebar-left">

@@ -617,6 +617,17 @@ textarea {
   background: var(--color-border);
 }
 
+/* spec-simulation-demarrage-avant-vente.md. Sits directly below
+   `.stepper`, full width — same horizontal gutter as `.stepper`/
+   `.workspace-grid` so this discreet demo control aligns with its
+   neighbors instead of sitting flush against the viewport edge (Review
+   Triage Log finding #5). No background/border of its own, unlike
+   `.stepper`: this isn't a distinct visual band, just a quiet control
+   tucked under it. */
+.demo-reset-avant-vente {
+  padding: var(--space-2) var(--space-gutter);
+}
+
 /* Story 3.3 — Suggestion proactive de démarrage: first real consumer of
    `ai-suggestion-card` (UX-DR4, DESIGN.md > Components — deferred since
    Epic 1's retro, `epic-1-retro-item-1`). Full `ai-tint` fill, explicitly
