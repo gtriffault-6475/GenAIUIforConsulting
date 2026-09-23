@@ -3,6 +3,7 @@
 import { and, eq } from 'drizzle-orm';
 
 import type { ActionResult } from '@/actions/types';
+import { insertMessage } from '@/actions/insert-message';
 import { seedIfEmpty } from '@/actions/seed-if-empty';
 import { listLoadedSkillInstructions } from '@/actions/skill';
 import { db } from '@/db/client';
@@ -179,16 +180,14 @@ function seedFixturesIfEmpty(projectId: string): void {
             .run();
 
           for (const fixtureMessage of fixture.messages) {
-            tx.insert(message)
-              .values({
-                id: crypto.randomUUID(),
-                conversationId,
-                role: fixtureMessage.role,
-                content: fixtureMessage.content,
-                model: fixtureMessage.model,
-                createdAt: nextFixtureCreatedAt(),
-              })
-              .run();
+            insertMessage(tx, {
+              id: crypto.randomUUID(),
+              conversationId,
+              role: fixtureMessage.role,
+              content: fixtureMessage.content,
+              model: fixtureMessage.model,
+              createdAt: nextFixtureCreatedAt(),
+            });
           }
         }
 

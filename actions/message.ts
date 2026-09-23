@@ -3,6 +3,7 @@
 import { eq } from 'drizzle-orm';
 
 import type { ActionResult } from '@/actions/types';
+import { insertMessage } from '@/actions/insert-message';
 import {
   createLivrableWithSuggestions,
   updateLivrableWithSuggestions,
@@ -28,7 +29,12 @@ import {
 // moved here unchanged (signature, logic, internal comments), only its own
 // file-location references and its 2 callers' import paths changed
 // (`components/Composer.tsx`, `actions/livrable.ts`). Components never
-// touch `db/` directly; they call this Server Action.
+// touch `db/` directly; they call this Server Action. Both inserts below
+// go through `actions/insert-message.ts`'s shared `insertMessage`
+// (epic-2-retro-item-15) rather than a raw `db.insert(message)` — the
+// AD-2 exclusivity above is unaffected: that file exists only so this file
+// and `actions/conversation.ts`'s fixture-seeding exception can share one
+// write path, never a third table owner.
 
 // Story 2.5 — Sélection du modèle et envoi d'un message. The user message
 // is always persisted first, in its own `try/catch`: only a failure of
@@ -72,16 +78,13 @@ export async function sendMessage(
     }
     projectId = conversationRow.projectId;
 
-    db.insert(message)
-      .values({
-        id: crypto.randomUUID(),
-        conversationId,
-        role: 'user',
-        content: trimmedContent,
-        model: null,
-        createdAt: new Date().toISOString(),
-      })
-      .run();
+    insertMessage(db, {
+      id: crypto.randomUUID(),
+      conversationId,
+      role: 'user',
+      content: trimmedContent,
+      model: null,
+    });
   } catch (error) {
     console.error('sendMessage failed to persist the user message', error);
     return { ok: false, error: "Impossible d'envoyer ce message." };
@@ -260,21 +263,18 @@ export async function sendMessage(
       };
     }
 
-    db.insert(message)
-      .values({
-        id: crypto.randomUUID(),
-        conversationId,
-        role: 'assistant',
-        content: agentResult.content,
-        // Persist the human-readable label (e.g. "Claude Sonnet 5"), not
-        // the raw API slug (`model`, e.g. "claude-sonnet-5") — matches
-        // `actions/conversation.ts`'s fixture data and keeps
-        // `ConversationHistory` free of technical identifiers. The raw
-        // `model` id is still what was actually sent to `sendToAgent` above.
-        model: resolveModelLabel(model),
-        createdAt: new Date().toISOString(),
-      })
-      .run();
+    insertMessage(db, {
+      id: crypto.randomUUID(),
+      conversationId,
+      role: 'assistant',
+      content: agentResult.content,
+      // Persist the human-readable label (e.g. "Claude Sonnet 5"), not
+      // the raw API slug (`model`, e.g. "claude-sonnet-5") — matches
+      // `actions/conversation.ts`'s fixture data and keeps
+      // `ConversationHistory` free of technical identifiers. The raw
+      // `model` id is still what was actually sent to `sendToAgent` above.
+      model: resolveModelLabel(model),
+    });
 
     return { ok: true, data: { assistantFailed: false } };
   } catch (error) {

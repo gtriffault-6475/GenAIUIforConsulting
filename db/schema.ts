@@ -135,9 +135,12 @@ export const message = sqliteTable('message', {
   content: text('content').notNull(),
   model: text('model'),
   // `.default(...)` here is a migration-time backfill value only, never
-  // relied on by the app: every insert (`actions/conversation.ts`'s
-  // fixture seeding, `actions/message.ts`'s `sendMessage`) always
-  // supplies a real `createdAt` explicitly. Without a default, SQLite
+  // relied on by the app: every real insert always gets a real `createdAt`
+  // (epic-2-retro-item-15) via `actions/insert-message.ts`'s shared
+  // `insertMessage` — real messages (`actions/message.ts`'s `sendMessage`)
+  // let it default to `new Date().toISOString()`, `actions/conversation.ts`'s
+  // fixture seeding always overrides it with its own deliberately backdated
+  // sequence — never this DB-level default. Without a default, SQLite
   // rejects `ALTER TABLE message ADD created_at text NOT NULL` outright on
   // any table that already has rows — which every pre-existing local dev
   // DB does, since Story 2.1's fixtures seed on first read. The epoch

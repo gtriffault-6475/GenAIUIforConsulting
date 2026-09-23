@@ -168,7 +168,7 @@ action_items:
     epic: 2
     action: "Wrapper insertMessage(...) qui timbre toujours createdAt (epic-2 retro)"
     owner: "dev loop"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-2-retro-2026-09-16.md"
   - id: "epic-2-retro-item-16-indicateur-durable-d-une-réponse-agent-é"
     epic: 2
