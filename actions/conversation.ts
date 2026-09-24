@@ -54,6 +54,23 @@ export type MessageSummary = {
   content: string;
   model: string | null;
   createdAt: string;
+  // epic-2-retro-item-16 — durable failed-response indicator. Always a
+  // real boolean here (never `null`): `getActiveConversation` below
+  // coalesces MESSAGE's nullable `assistant_failed` column with `?? false`
+  // the same way this file already treats other nullable-in-DB,
+  // never-null-in-this-type fields. Only ever `true` on a `role:'user'`
+  // row `actions/message.ts`'s `sendMessage` itself marked after a real
+  // agent-call failure — never on `assistant` rows, and never on any row
+  // from this file's own fixture seeding below.
+  assistantFailed: boolean;
+  // The real error text `sendMessage` persisted alongside `assistantFailed`
+  // (which of its 3 failure branches actually ran). `null` is a legitimate
+  // value here — no failure, or a pre-existing row from before this column
+  // existed — never coalesced to a placeholder string the way
+  // `assistantFailed` is; `components/ConversationHistory.tsx` supplies its
+  // own fallback sentence only when this is `null` but `assistantFailed` is
+  // `true`.
+  assistantErrorText: string | null;
 };
 
 type FixtureMessage = {
@@ -285,7 +302,7 @@ export async function getActiveConversation(projectId: string): Promise<
       return { ok: false, error: 'La conversation active est introuvable.' };
     }
 
-    const messages = await db
+    const rawMessages = await db
       .select({
         id: message.id,
         conversationId: message.conversationId,
@@ -293,10 +310,21 @@ export async function getActiveConversation(projectId: string): Promise<
         content: message.content,
         model: message.model,
         createdAt: message.createdAt,
+        assistantFailed: message.assistantFailed,
+        assistantErrorText: message.assistantErrorText,
       })
       .from(message)
       .where(eq(message.conversationId, conversationRow.id))
       .orderBy(message.createdAt);
+
+    // `message.assistantFailed` is nullable in the DB (backfill/fixtures
+    // leave it `NULL`) — `MessageSummary.assistantFailed` is always a real
+    // boolean, never `null`. `assistantErrorText` is left as-is: `null` is
+    // a legitimate value there, not one to coalesce away.
+    const messages = rawMessages.map((row) => ({
+      ...row,
+      assistantFailed: row.assistantFailed ?? false,
+    }));
 
     return { ok: true, data: { conversation: conversationRow, messages } };
   } catch (error) {

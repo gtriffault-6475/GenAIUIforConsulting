@@ -175,7 +175,7 @@ action_items:
     action: "Indicateur durable d'une réponse agent échouée dans ConversationHistory
       (epic-2 retro)"
     owner: "dev loop / UX"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-2-retro-2026-09-16.md"
   - id: "epic-4-retro-item-17-redonner-au-modèle-un-accès-fiable-au-co"
     epic: 4

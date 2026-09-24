@@ -147,6 +147,36 @@ export const message = sqliteTable('message', {
   // value sorts before every real ISO-8601 timestamp, so backfilled rows
   // from before this column existed correctly appear first.
   createdAt: text('created_at').notNull().default('1970-01-01T00:00:00.000Z'),
+  // epic-2-retro-item-16 ("indicateur durable, pas seulement transitoire,
+  // d'une réponse agent échouée"). Set only by `actions/message.ts`'s
+  // `sendMessage`, via an `UPDATE` after the fact, on a `role:'user'` row
+  // whose agent call actually failed (never on `assistant` rows, and never
+  // at insert time — the user message is always persisted *before*
+  // `sendMessage` knows whether the agent call will succeed). Nullable,
+  // like `projectSkill.position`/`suggestion.resolvedPosition` declared
+  // below in this file — a single literal default can't express "true/set
+  // only on a real failure" — `NULL`/`false` is the correct, implicit
+  // backfill for every pre-existing row, none of which is a known failure.
+  // `actions/conversation.ts`'s fixture seeding never sets this column
+  // (Boundaries: the seed has no notion of failure), including on the
+  // "Cadrage de la note de mission" fixture's deliberately unanswered last
+  // `user` message — that omission, not a derived heuristic, is what keeps
+  // this flag from false-positiving on it.
+  assistantFailed: integer('assistant_failed', { mode: 'boolean' }),
+  // The real error text from whichever of `sendMessage`'s 3 failure
+  // branches set `assistantFailed` above, persisted alongside it in the
+  // same `UPDATE` (bad-spec finding #2/#3, Spec Change Log: a single fixed
+  // generic sentence would lose real diagnostic detail 2 of the 3 branches
+  // already have). The 3rd branch (the outer `catch`, which also covers
+  // exceptions unrelated to persisting the reply — e.g. a `historyRows`
+  // read failure — not only that one case) keeps its own pre-existing,
+  // already-generic-but-honest text unchanged: it never claimed "the agent
+  // couldn't respond" the way the old single fixed sentence did, so this
+  // change doesn't need to sharpen it further to stop misdescribing
+  // anything. `null` exactly when `assistantFailed` is `null`/`false` — a
+  // legitimate value, not a missing one, never coalesced to a placeholder
+  // the way `assistantFailed` is.
+  assistantErrorText: text('assistant_error_text'),
 });
 
 // A skill loaded on a project (Story 2.4 — Panneau Skills). AD-4: this

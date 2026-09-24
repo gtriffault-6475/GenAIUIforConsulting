@@ -15,9 +15,14 @@ const OVERLAY_ID = 'model-selector';
 // through the shared `OverlayProvider` (AD-8), mirroring
 // `ConversationList.tsx`'s `useTransition` + `router.refresh()` shape and
 // `ProjectSelector.tsx`'s dropdown/`contentRef` pattern. `ConversationHistory`
-// itself is unchanged (still read-only) — a failed agent call is shown
-// here, next to the composer, never injected into the persisted message
-// list.
+// stays read-only (no interactivity added), but is no longer blind to a
+// failed agent call: `assistantError` below is this composer's own
+// transient copy (cleared on the next submit, gone on reload) — since
+// epic-2-retro-item-16, the same failure also lands durably on the
+// MESSAGE row itself (`MESSAGE.assistantFailed`/`assistantErrorText`,
+// `actions/message.ts`'s `sendMessage`) and `ConversationHistory` renders
+// it from there too, so the two can appear at once right after a failed
+// send — a known, accepted redundancy (`deferred-work.md`), not a bug.
 export function Composer({ conversationId }: { conversationId: string | null }) {
   const { openOverlay, closeOverlay, isOverlayOpen, contentRef } = useOverlay();
   const [content, setContent] = useState('');

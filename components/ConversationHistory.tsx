@@ -62,6 +62,33 @@ export function ConversationHistory({
                   <p className="text-body" style={{ margin: 0 }}>
                     {msg.content}
                   </p>
+                  {msg.role === 'user' && msg.assistantFailed && (
+                    // epic-2-retro-item-16 — durable, not just transient,
+                    // failed-response indicator, sourced from the persisted
+                    // `MESSAGE.assistantFailed`/`assistantErrorText` columns
+                    // instead of local React state, so it survives a
+                    // conversation switch, a page reload, or a return days
+                    // later. The real error text of whichever `sendMessage`
+                    // failure branch set it (Spec Change Log: a single fixed
+                    // generic sentence lost real diagnostic detail and was
+                    // factually wrong for the "reply persistence failed"
+                    // branch) — a JS expression, never raw JSX text with
+                    // hand-escaped entities, same convention as
+                    // `Composer.tsx`'s `{assistantError}`. `role="status"`,
+                    // not `role="alert"`: fits both ways this can appear —
+                    // present at initial SSR render (a reload, a return days
+                    // later) where `alert` would never be announced at all
+                    // (only on a post-load change), and freshly inserted by
+                    // `Composer.tsx`'s own `router.refresh()` right after a
+                    // failed send, where `status`'s polite live-region
+                    // semantics still announce it correctly. Passive only —
+                    // no retry action (Boundaries: out of scope for this
+                    // item).
+                    <p className="text-caption" role="status" style={{ margin: 0 }}>
+                      {msg.assistantErrorText ??
+                        "L'agent n'a pas pu répondre à ce message."}
+                    </p>
+                  )}
                 </div>
               ))}
             </div>

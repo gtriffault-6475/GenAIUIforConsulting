@@ -67,6 +67,7 @@ export async function sendMessage(
   }
 
   let projectId: string;
+  const userMessageId = crypto.randomUUID();
   try {
     const [conversationRow] = await db
       .select({ projectId: conversation.projectId })
@@ -79,7 +80,7 @@ export async function sendMessage(
     projectId = conversationRow.projectId;
 
     insertMessage(db, {
-      id: crypto.randomUUID(),
+      id: userMessageId,
       conversationId,
       role: 'user',
       content: trimmedContent,
@@ -88,6 +89,50 @@ export async function sendMessage(
   } catch (error) {
     console.error('sendMessage failed to persist the user message', error);
     return { ok: false, error: "Impossible d'envoyer ce message." };
+  }
+
+  // epic-2-retro-item-16 — durable, not just transient, failure indicator.
+  // `Composer.tsx`'s `assistantError` state (below, via `data.assistantFailed`/
+  // `data.error`) is lost on the next navigation/refresh/tab close; this
+  // `UPDATE` marks the already-persisted user message itself, with the real
+  // error text of whichever branch below calls it, so `ConversationHistory`
+  // (`actions/conversation.ts`'s `getActiveConversation`) still shows it
+  // afterwards. Only this function ever calls it, only on `userMessageId`
+  // (this call's own user message, never any other row), and only from a
+  // real failure path below — never from fixture seeding
+  // (`actions/conversation.ts`'s `seedFixturesIfEmpty`), which has no
+  // notion of failure and never touches these columns.
+  function markAssistantFailed(errorText: string): void {
+    try {
+      const result = db
+        .update(message)
+        .set({ assistantFailed: true, assistantErrorText: errorText })
+        .where(eq(message.id, userMessageId))
+        .run();
+
+      if (result.changes === 0) {
+        // A concurrent deletion of this row (or its whole conversation) —
+        // `actions/demo.ts`'s `resetAvantVenteWorkflow` deletes MESSAGE rows
+        // for a project — could race between this call's own insert above
+        // and this `UPDATE`. Never silent: the transient `assistantFailed`
+        // already returned to the caller below still displays once in
+        // `Composer.tsx`, but the durable indicator this was meant to leave
+        // behind never landed, which is worth knowing about even though it
+        // isn't this function's job to recover from.
+        console.error(
+          'sendMessage: markAssistantFailed UPDATE matched 0 rows (message deleted concurrently?)',
+          userMessageId,
+        );
+      }
+    } catch (updateError) {
+      // Same reasoning as the 0-row case above: only log. Never let a
+      // failure of this secondary write turn an otherwise-successful
+      // `ActionResult` into `{ok:false}`.
+      console.error(
+        'sendMessage: failed to persist assistantFailed on the user message',
+        updateError,
+      );
+    }
   }
 
   // From here on the user message is durably saved regardless of what
@@ -101,6 +146,7 @@ export async function sendMessage(
       // become the same `[]` an agent call proceeds on, or the consultant
       // gets an answer that looks skill-informed but never was, with
       // nothing surfaced to explain why.
+      markAssistantFailed(loadedSkillsResult.error);
       return {
         ok: true,
         data: { assistantFailed: true, error: loadedSkillsResult.error },
@@ -257,6 +303,7 @@ export async function sendMessage(
     });
 
     if (!agentResult.ok) {
+      markAssistantFailed(agentResult.error);
       return {
         ok: true,
         data: { assistantFailed: true, error: agentResult.error },
@@ -282,11 +329,13 @@ export async function sendMessage(
       'sendMessage: agent call or reply persistence failed after the user message was saved',
       error,
     );
+    const errorText = "Une erreur est survenue lors de l'appel à l'agent.";
+    markAssistantFailed(errorText);
     return {
       ok: true,
       data: {
         assistantFailed: true,
-        error: "Une erreur est survenue lors de l'appel à l'agent.",
+        error: errorText,
       },
     };
   }
