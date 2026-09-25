@@ -1,5 +1,14 @@
 import Anthropic from '@anthropic-ai/sdk';
 
+import {
+  DEMO_FALLBACK_REPLY,
+  DEMO_REWORK_REPLY,
+  isDemoModeActive,
+  isDemoReworkPrompt,
+  matchDemoChatEntry,
+  matchDemoStepSuggestion,
+} from '@/skills/demoScript';
+
 // AD-11 — the single assembly point for every `@anthropic-ai/sdk` Messages
 // API call. No other Server Action may instantiate an Anthropic client —
 // `actions/message.ts`'s `sendMessage` is the only caller today, and
@@ -89,6 +98,84 @@ export async function sendToAgent({
   tool?: Anthropic.Tool;
   executeTool?: (input: unknown) => Promise<ExecuteToolResult>;
 }): Promise<SendToAgentResult> {
+  // Mode démo scripté (spec-mode-demo-scripte.md) — interception tout en
+  // haut du corps de la fonction, avant toute construction de client
+  // Anthropic (Code Map: "avant `new Anthropic()`"), donc avant même le
+  // calcul de `systemPrompt`/`turns` ci-dessous qui n'a de sens que pour un
+  // vrai appel. `isDemoModeActive` (`skills/demoScript.ts`) est le seul
+  // point de lecture de `DEMO_MODE` : explicite uniquement, jamais une
+  // bascule automatique sur simple absence de clé API (Décisions,
+  // Checkpoint 1) — une vraie panne de clé dans un déploiement mal
+  // configuré reste donc un vrai échec visible (Boundaries: Always),
+  // inchangée par ce bloc puisqu'il ne s'exécute jamais dans ce cas.
+  if (isDemoModeActive()) {
+    try {
+      // Chemin chat (`sendMessage`, Design Notes) : `tool`/`executeTool`
+      // sont toujours fournis ensemble par cet appelant, jamais l'un sans
+      // l'autre. `matchDemoChatEntry` cherche sur le dernier tour `user`
+      // de `history` (jamais `turns`, qui n'existe pas dans cette branche).
+      if (tool && executeTool) {
+        const latestUserTurn = [...history]
+          .reverse()
+          .find((entry) => entry.role === 'user');
+        const entry = latestUserTurn
+          ? matchDemoChatEntry(latestUserTurn.content)
+          : null;
+
+        if (!entry) {
+          return { ok: true, content: DEMO_FALLBACK_REPLY };
+        }
+
+        if (entry.toolCall) {
+          // Même closure que le chemin réel (Design Notes) — vraie
+          // transaction DB, AD-2 inchangé : le livrable/les suggestions
+          // créés sont de vraies lignes, seul l'appel API est simulé. Le
+          // contenu scripté est entièrement maîtrisé par ce fichier, donc
+          // une vraie panne ici (ex. une erreur DB) n'est pas "l'absence de
+          // clé API" que le mode démo simule — un bug réel mérite de rester
+          // visible (Tour 2, findings convergents blind-hunter/edge-case-
+          // hunter) exactement comme le chemin réel ci-dessous le fait déjà
+          // pour son propre échec d'outil, plutôt que d'afficher une
+          // réponse canned qui prétendrait à tort qu'un livrable a été créé.
+          const toolResult = await executeTool(entry.toolCall);
+          if (!toolResult.ok) {
+            console.error(
+              'sendToAgent (mode démo) : executeTool a échoué sur une entrée scriptée',
+              toolResult.error,
+            );
+            return { ok: false, error: toolResult.error };
+          }
+        }
+
+        return { ok: true, content: entry.reply };
+      }
+
+      // Deux appelants réels partagent cette même forme d'appel (ni `tool`
+      // ni `executeTool`, un seul tour `history`) : `proposeStartingPoint`
+      // et `reworkSuggestionContent` (Tour 2, bad_spec -- oublié par
+      // l'Intent d'origine, voir Spec Change Log). `isDemoReworkPrompt`
+      // vérifie d'abord un marqueur exact du prompt de ce dernier avant de
+      // retomber sur la correspondance par étape, sans quoi une demande de
+      // retravail recevait par erreur une suggestion de démarrage d'étape
+      // sans rapport (le bug trouvé par la lentille verification-gap).
+      const promptText = history[0]?.content ?? '';
+      if (isDemoReworkPrompt(promptText)) {
+        return { ok: true, content: DEMO_REWORK_REPLY };
+      }
+      return { ok: true, content: matchDemoStepSuggestion(promptText) };
+    } catch (error) {
+      // Même filet de sécurité que le chemin réel ci-dessous : une panne
+      // inattendue dans le script lui-même (jamais un vrai appel réseau,
+      // puisqu'aucun n'est fait dans cette branche) ne doit jamais remonter
+      // comme une exception non attrapée.
+      console.error('sendToAgent (mode démo) failed', error);
+      return {
+        ok: false,
+        error: "L'appel à l'agent IA a échoué.",
+      };
+    }
+  }
+
   try {
     const systemPrompt = loadedSkills
       .map((skill) => skill.instructions)
