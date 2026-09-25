@@ -1,0 +1,1 @@
+ALTER TABLE `app_state` ADD `demo_mode_active` integer;

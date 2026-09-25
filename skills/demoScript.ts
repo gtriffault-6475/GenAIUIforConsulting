@@ -17,21 +17,14 @@ import type { ProposedLivrableContent } from '@/skills/propose_livrable_content'
 // naturellement aucun mot-clé et retombe sur le repli générique — le
 // comportement demandé, sans code dédié à ce second projet.
 
-// Un seul point de lecture de `DEMO_MODE` — toute vérification du mode
-// démo ailleurs dans le code passe par cette fonction, jamais par une
-// lecture directe de `process.env.DEMO_MODE`. Explicite uniquement
-// (`=== 'true'`), jamais une bascule automatique sur simple absence de
-// `ANTHROPIC_API_KEY` (Décisions, Checkpoint 1) : une vraie panne de clé
-// dans un déploiement réel mal configuré doit rester visible comme une
-// panne (Boundaries: Always), jamais se travestir en mode démo.
-// `.trim().toLowerCase()` (Tour 2, blind-hunter) : une valeur comme `"1"`,
-// `"True"` ou un espace parasite issu d'un copier-coller ne doit jamais
-// échouer silencieusement en retombant sur le chemin réel (sans clé API,
-// donc un échec visible) alors que quelqu'un croit avoir activé le mode
-// démo pour une présentation en direct.
-export function isDemoModeActive(): boolean {
-  return process.env.DEMO_MODE?.trim().toLowerCase() === 'true';
-}
+// spec-toggle-mode-demo-ui.md retires `isDemoModeActive()` (which lived
+// here, reading `process.env.DEMO_MODE`): the demo mode's activation state
+// is now a persisted `db` column (`appState.demoModeActive`,
+// `actions/demo.ts`'s `getDemoModeActive`/`setDemoModeActive`), read
+// directly by `skills/buildRequest.ts`'s `sendToAgent` — never through this
+// file, which stays pure (no `db` access, per this file's header comment)
+// and unconcerned with *whether* the demo mode is active, only with *what*
+// it says once it is.
 
 export type DemoChatEntry = {
   keywords: string[];

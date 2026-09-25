@@ -22,6 +22,14 @@
   --color-selected-tint: #eef0f8;
   --color-avatar-bg: #dfe2ee;
   --color-success: #0f7a4d;
+  /* spec-toggle-mode-demo-ui.md — Boundaries: "aucun écran ne puisse être
+     confondu avec une session réelle" when the demo mode is active.
+     Deliberately distinct from `--color-ai-accent` (reserved for
+     AI-authored content, DESIGN.md) and `--color-accent` (navigation) so
+     the banner/border below never reads as either of those — a warm
+     amber, unused everywhere else in this palette. */
+  --color-demo-accent: #b45309;
+  --color-demo-accent-foreground: #ffffff;
 
   /* Typography families (assigned to next/font variables in app/layout.tsx) */
   --font-display: var(--font-space-grotesk), sans-serif;
@@ -232,6 +240,10 @@ a {
 .top-bar {
   display: flex;
   align-items: center;
+  /* spec-toggle-mode-demo-ui.md adds `DemoModeToggle` as a second child,
+     next to `ProjectSelector` — a gap keeps them visually distinct instead
+     of touching now that this row holds more than one element. */
+  gap: var(--space-3);
   height: 56px;
   padding: 0 var(--space-gutter);
   background: var(--color-surface);
@@ -791,4 +803,93 @@ textarea {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* spec-toggle-mode-demo-ui.md — `DemoModeToggle.tsx` (top bar, next to
+   `.project-selector`). Bordered like a real toggle/switch control rather
+   than `.button-later`'s text-only style, so its on/off state stays
+   legible on its own even before reading its label. Neutral (border only)
+   when inactive; filled with the same `--color-demo-accent` as the
+   banner/border below once active, so the trigger itself previews what
+   the rest of the interface is about to do. */
+.button-toggle {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-body);
+  font-size: var(--text-body-strong-size);
+  font-weight: var(--text-body-strong-weight);
+  color: var(--color-text-secondary);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  padding: var(--space-1) var(--space-4);
+  cursor: pointer;
+}
+
+.button-toggle:hover,
+.button-toggle:focus-visible {
+  border-color: var(--color-demo-accent);
+  color: var(--color-text-primary);
+}
+
+.button-toggle:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.button-toggle-active {
+  background: var(--color-demo-accent);
+  border-color: var(--color-demo-accent);
+  color: var(--color-demo-accent-foreground);
+}
+
+.button-toggle-active:hover,
+.button-toggle-active:focus-visible {
+  color: var(--color-demo-accent-foreground);
+}
+
+.demo-mode-toggle {
+  position: relative;
+}
+
+.demo-mode-toggle-error {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  left: 0;
+  min-width: 220px;
+  /* Tour 2 (bmad-review, blind-hunter) : sans borne, un message d'erreur
+     plus long que prévu débordait du viewport plutôt que de passer à la
+     ligne -- `max-width` + `word-wrap` bornent la largeur à celle de
+     l'écran restant, `background`/`box-shadow` évitent que le texte se
+     fonde dans ce qui s'affiche dessous (le contenu de la page). */
+  max-width: min(320px, calc(100vw - var(--space-gutter) * 2));
+  word-wrap: break-word;
+  background: var(--color-surface);
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  color: var(--color-demo-accent);
+}
+
+/* Boundaries: "aucun écran ne puisse être confondu avec une session
+   réelle" — posed in `app/layout.tsx` (englobe toutes les pages, `/` et
+   `/livrables/[id]`), never a per-route concern. The banner is the primary
+   signal (impossible to miss scrolling past the top of any page); the
+   border below reinforces it for a screen already scrolled past the
+   banner. Neither ever appears unless `appState.demoModeActive` is true
+   (`actions/demo.ts`'s `getDemoModeActive`). */
+.demo-mode-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  background: var(--color-demo-accent);
+  color: var(--color-demo-accent-foreground);
+  font-family: var(--font-body);
+  font-size: var(--text-body-strong-size);
+  font-weight: var(--text-body-strong-weight);
+}
+
+body.demo-mode-active {
+  border: 4px solid var(--color-demo-accent);
 }

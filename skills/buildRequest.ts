@@ -1,13 +1,55 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { eq } from 'drizzle-orm';
 
+import { db } from '@/db/client';
+import { APP_STATE_ID, appState } from '@/db/schema';
 import {
   DEMO_FALLBACK_REPLY,
   DEMO_REWORK_REPLY,
-  isDemoModeActive,
   isDemoReworkPrompt,
   matchDemoChatEntry,
   matchDemoStepSuggestion,
 } from '@/skills/demoScript';
+
+// spec-toggle-mode-demo-ui.md — the demo mode's activation state moved
+// from an environment variable (`DEMO_MODE`, read once via
+// `skills/demoScript.ts`'s now-removed `isDemoModeActive`) to a persisted
+// `db` column (`appState.demoModeActive`, `actions/demo.ts`), so a toggle
+// clicked in the UI takes effect on the very next agent call, with no
+// server restart. This is a narrow, documented `db` read directly inside
+// `skills/`, the same exception already made a few lines below for
+// `process.env['ANTHROPIC_API_KEY']` (`new Anthropic()`'s own default
+// behavior) — both are infrastructure/assembly concerns local to this one
+// function, not business logic that belongs in `actions/`. Kept as a
+// plain top-level function (not exported) rather than added to
+// `skills/demoScript.ts`, which stays pure and `db`-free (that file's own
+// header comment) — only *what* the demo mode says is that file's
+// concern, never *whether* it is active.
+//
+// Tour 2 (bmad-review, blind-hunter + edge-case-hunter convergence): this
+// read has its own `try/catch`, unlike Tour 1, so a transient DB error here
+// can never escape `sendToAgent` as an uncaught exception -- the function's
+// own header comment already promises every failure comes back as
+// `{ok:false,error}`, never an unhandled throw. Every real caller today
+// (`sendMessage`, `getStartingSuggestion`, `reworkSuggestion`) happens to
+// wrap its own call in a try/catch too, so this was never reachable as a
+// user-visible crash -- but relying on that elsewhere is fragile, and this
+// function should keep its own promise regardless of what callers do.
+// Degrades to `false` (the real path) on failure, the same fail-safe
+// direction as `getDemoModeActive`/`app/layout.tsx` elsewhere in this spec.
+async function isDemoModeActive(): Promise<boolean> {
+  try {
+    const [state] = await db
+      .select({ demoModeActive: appState.demoModeActive })
+      .from(appState)
+      .where(eq(appState.id, APP_STATE_ID));
+
+    return state?.demoModeActive ?? false;
+  } catch (error) {
+    console.error('sendToAgent: failed to read demoModeActive, falling back to the real path', error);
+    return false;
+  }
+}
 
 // AD-11 — the single assembly point for every `@anthropic-ai/sdk` Messages
 // API call. No other Server Action may instantiate an Anthropic client —
@@ -98,17 +140,19 @@ export async function sendToAgent({
   tool?: Anthropic.Tool;
   executeTool?: (input: unknown) => Promise<ExecuteToolResult>;
 }): Promise<SendToAgentResult> {
-  // Mode démo scripté (spec-mode-demo-scripte.md) — interception tout en
-  // haut du corps de la fonction, avant toute construction de client
-  // Anthropic (Code Map: "avant `new Anthropic()`"), donc avant même le
-  // calcul de `systemPrompt`/`turns` ci-dessous qui n'a de sens que pour un
-  // vrai appel. `isDemoModeActive` (`skills/demoScript.ts`) est le seul
-  // point de lecture de `DEMO_MODE` : explicite uniquement, jamais une
-  // bascule automatique sur simple absence de clé API (Décisions,
-  // Checkpoint 1) — une vraie panne de clé dans un déploiement mal
-  // configuré reste donc un vrai échec visible (Boundaries: Always),
-  // inchangée par ce bloc puisqu'il ne s'exécute jamais dans ce cas.
-  if (isDemoModeActive()) {
+  // Mode démo scripté (spec-mode-demo-scripte.md, activation désormais
+  // pilotée depuis l'UI par spec-toggle-mode-demo-ui.md) — interception
+  // tout en haut du corps de la fonction, avant toute construction de
+  // client Anthropic (Code Map: "avant `new Anthropic()`"), donc avant
+  // même le calcul de `systemPrompt`/`turns` ci-dessous qui n'a de sens que
+  // pour un vrai appel. `isDemoModeActive` (déclarée juste au-dessus) est
+  // le seul point de lecture de `appState.demoModeActive` : explicite
+  // uniquement (une colonne `NULL`/`false`, jamais une bascule automatique
+  // sur simple absence de clé API — Décisions, Checkpoint 1) — une vraie
+  // panne de clé dans un déploiement mal configuré reste donc un vrai
+  // échec visible (Boundaries: Always), inchangée par ce bloc puisqu'il ne
+  // s'exécute jamais dans ce cas.
+  if (await isDemoModeActive()) {
     try {
       // Chemin chat (`sendMessage`, Design Notes) : `tool`/`executeTool`
       // sont toujours fournis ensemble par cet appelant, jamais l'un sans

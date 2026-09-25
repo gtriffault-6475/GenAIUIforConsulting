@@ -1,4 +1,5 @@
 import { getActiveConversation, listConversations } from '@/actions/conversation';
+import { getDemoModeActive } from '@/actions/demo';
 import { listDocuments } from '@/actions/document';
 import { listLivrables } from '@/actions/livrable';
 import { getLastMattermostMessage } from '@/actions/mattermost';
@@ -8,6 +9,7 @@ import { Composer } from '@/components/Composer';
 import { ContextPanel } from '@/components/ContextPanel';
 import { ConversationHistory } from '@/components/ConversationHistory';
 import { ConversationList } from '@/components/ConversationList';
+import { DemoModeToggle } from '@/components/DemoModeToggle';
 import { DemoResetAvantVente } from '@/components/DemoResetAvantVente';
 import { LivrablesPanel } from '@/components/LivrablesPanel';
 import { MattermostPanel } from '@/components/MattermostPanel';
@@ -92,6 +94,7 @@ export default async function Home() {
     skillsResult,
     livrablesResult,
     projectsResult,
+    demoModeResult,
   ] = await Promise.all([
     listConversations(activeProject.id),
     getActiveConversation(activeProject.id),
@@ -109,6 +112,12 @@ export default async function Home() {
     // parallelization reasoning as every other read in this
     // `Promise.all`, independent of them all.
     listProjects(),
+    // spec-toggle-mode-demo-ui.md. A second, independent read of the same
+    // singleton `getDemoModeActive` already calls from `app/layout.tsx` —
+    // that one drives the banner/border, this one only seeds
+    // `DemoModeToggle`'s initial `active` prop below; there is no shared
+    // request-scoped cache to reuse between the two Server Components.
+    getDemoModeActive(),
   ]);
   const conversations = conversationsResult.ok ? conversationsResult.data : null;
   const activeConversationId =
@@ -119,6 +128,7 @@ export default async function Home() {
   const skills = skillsResult.ok ? skillsResult.data : null;
   const livrables = livrablesResult.ok ? livrablesResult.data : null;
   const projects = projectsResult.ok ? projectsResult.data : null;
+  const demoModeActive = demoModeResult.ok ? demoModeResult.data : false;
   // Story 3.1 — Stepper de workflow. Read from the active conversation's
   // own `stepKey` (AD-6: never the other way around) — a fixture
   // conversation or a failed read both fall back to `null`, which
@@ -174,6 +184,7 @@ export default async function Home() {
     <div>
       <header className="top-bar">
         <ProjectSelector projects={projects} activeProject={activeProject} />
+        <DemoModeToggle active={demoModeActive} />
       </header>
       {/* Story 3.2 — Workflow du cas "livrable de mission" (FR-15). A
           mission project never has a step to be active in, but the stepper

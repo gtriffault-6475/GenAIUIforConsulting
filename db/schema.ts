@@ -49,6 +49,18 @@ export const APP_STATE_ID = 'singleton';
 export const appState = sqliteTable('app_state', {
   id: text('id').primaryKey(),
   activeProjectId: text('active_project_id').references(() => project.id),
+  // spec-toggle-mode-demo-ui.md — replaces the `DEMO_MODE` environment
+  // variable (spec-mode-demo-scripte.md) as the single source of truth for
+  // whether the scripted demo mode is active: a global singleton, like
+  // `activeProjectId` above (this product only ever has one active project
+  // at a time regardless, AD-6), toggled from the UI instead of requiring
+  // an `.env.local` edit and a server restart. Nullable, same pattern as
+  // `message.assistantFailed`/`projectSkill.position`: a single literal
+  // default can't express "off by default, on only once toggled", so
+  // `NULL` is the correct implicit backfill for every pre-existing row —
+  // `actions/demo.ts`'s `getDemoModeActive` coalesces it to `false`, no
+  // migration backfill needed.
+  demoModeActive: integer('demo_mode_active', { mode: 'boolean' }),
 });
 
 // A document attached to a project's context, either mirrored from the

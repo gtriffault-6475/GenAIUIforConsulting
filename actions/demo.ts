@@ -30,6 +30,16 @@ import { STEPS } from '@/domain/workflow';
 // justified by what leaving them live would mean for a supposedly-reset
 // document.
 //
+// spec-toggle-mode-demo-ui.md extends this file's AD-2 exception to cover
+// a second, unrelated write on APP_STATE: `getDemoModeActive`/
+// `setDemoModeActive` below read/write its new `demoModeActive` column —
+// the same singleton row `resetAvantVenteWorkflow` above already reads
+// (`appStateRow`) for its stale-tab guard, but never wrote before this
+// spec. Both live in this file rather than `actions/project.ts` (which
+// owns PROJECT/APP_STATE's `activeProjectId`) because, like the rest of
+// this file, they exist only for the demo tooling this product currently
+// needs, not because APP_STATE itself is scoped to one file only.
+//
 // No table here has an `ON DELETE CASCADE` (`db/schema.ts`), so every FK
 // into CONVERSATION.id must be cleared before that row is deleted, or the
 // delete itself fails with `FOREIGN KEY constraint failed`
@@ -192,6 +202,62 @@ export async function resetAvantVenteWorkflow(
     return {
       ok: false,
       error: 'Impossible de réinitialiser cette avant-vente.',
+    };
+  }
+}
+
+// spec-toggle-mode-demo-ui.md — replaces `DEMO_MODE` (an environment
+// variable, read once via `skills/demoScript.ts`'s now-removed
+// `isDemoModeActive`) with this singleton column on APP_STATE, so toggling
+// the demo mode from the UI takes effect immediately, with no
+// `.env.local` edit or server restart. `?? false` covers both a
+// pre-existing row whose column backfilled to `NULL` (no migration
+// backfill, per `db/schema.ts`'s comment on this column) and the case
+// where APP_STATE itself has no row yet (a fresh install that has never
+// called `selectProject`/`setDemoModeActive`) — both mean "inactive",
+// never a distinct error state, unlike `getActiveProject`'s handling of a
+// dangling `activeProjectId` FK (there is no FK here to dangle).
+export async function getDemoModeActive(): Promise<ActionResult<boolean>> {
+  try {
+    const [state] = await db
+      .select({ demoModeActive: appState.demoModeActive })
+      .from(appState)
+      .where(eq(appState.id, APP_STATE_ID));
+
+    return { ok: true, data: state?.demoModeActive ?? false };
+  } catch (error) {
+    console.error('getDemoModeActive failed', error);
+    return {
+      ok: false,
+      error: "Impossible de lire l'état du mode démo.",
+    };
+  }
+}
+
+// Same upsert shape as `actions/project.ts`'s `selectProject` (APP_STATE
+// is a true singleton row, fixed id: upsert, never a second insert) —
+// `onConflictDoUpdate`'s `set` only touches `demoModeActive`, so a
+// pre-existing `activeProjectId` on this row is never disturbed by
+// toggling the demo mode, and vice versa (`selectProject`'s own `set`
+// likewise never touches this column).
+export async function setDemoModeActive(
+  active: boolean,
+): Promise<ActionResult<void>> {
+  try {
+    db.insert(appState)
+      .values({ id: APP_STATE_ID, demoModeActive: active })
+      .onConflictDoUpdate({
+        target: appState.id,
+        set: { demoModeActive: active },
+      })
+      .run();
+
+    return { ok: true, data: undefined };
+  } catch (error) {
+    console.error('setDemoModeActive failed', error);
+    return {
+      ok: false,
+      error: "Impossible de modifier l'état du mode démo.",
     };
   }
 }

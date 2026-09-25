@@ -14,12 +14,23 @@ import { SuggestionsPanel } from '@/components/SuggestionsPanel';
 // simply appear. Stories 4.3-4.5 still populate this same page with
 // suggestion actions and the global revision field.
 //
-// Reads APP_STATE indirectly through nothing here — this page looks up
-// the livrable by `id` alone (Boundaries: mono-projet-actif this round,
-// `id` is an opaque UUID), so unlike `/` it needs no `force-dynamic`
-// override for an active-project read. It still must never be statically
-// cached across different `id`s, which the dynamic segment itself already
-// guarantees (`params` requires a request to resolve).
+// `force-dynamic` (Tour 2, spec-toggle-mode-demo-ui.md, verification-gap
+// lens): this file's own comment previously claimed the dynamic `[id]`
+// segment alone was enough to keep this page off the Full Route Cache
+// ("`params` requires a request to resolve") — confirmed wrong against
+// this Next version's own bundled docs
+// (`node_modules/next/dist/docs/01-app/04-glossary.md`'s "Request-time
+// APIs" list: `cookies()`/`headers()`/`searchParams`/`draftMode()`, never
+// `params`) and against `use-router.md`'s own note that `router.refresh()`
+// "does not invalidate the server-side cache". Without this, a production
+// `next build`/`next start` could serve a cached render of this exact
+// `id` from before a `router.refresh()`-triggered mutation (an accepted/
+// rejected/reworked suggestion, or — the boundary this spec actually
+// needs — the demo-mode banner/border toggled from `/`) instead of the
+// current state. `next dev` never surfaces this: dev mode always renders
+// on demand regardless.
+export const dynamic = 'force-dynamic';
+
 export default async function LivrablePage({
   params,
 }: {
