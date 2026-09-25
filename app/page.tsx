@@ -204,7 +204,11 @@ export default async function Home() {
             conversations={conversations}
             activeConversationId={activeConversationId}
           />
-          <SkillsPanel projectId={activeProject.id} skills={skills} />
+          <SkillsPanel
+            projectId={activeProject.id}
+            skills={skills}
+            demoModeActive={demoModeActive}
+          />
         </aside>
         <div className="workspace-center">
           {startingSuggestionStepLabel && activeConversationData?.conversation.stepKey && (

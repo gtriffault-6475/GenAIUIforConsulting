@@ -3,6 +3,7 @@
 import { asc, eq } from 'drizzle-orm';
 
 import type { ActionResult } from '@/actions/types';
+import { getDemoModeActive } from '@/actions/demo';
 import { seedIfEmpty } from '@/actions/seed-if-empty';
 import { db } from '@/db/client';
 import { projectSkill } from '@/db/schema';
@@ -161,5 +162,90 @@ export async function listLoadedSkillInstructions(
       ok: false,
       error: 'Impossible de récupérer les instructions des skills chargées.',
     };
+  }
+}
+
+// spec-demo-ajout-skill.md — mocke le vrai "Ajouter une skill" toujours
+// différé (PRD OQ-6, commentaire de `FIXTURE_PROJECT_SKILLS` ci-dessus) :
+// insère une vraie ligne `PROJECT_SKILL`, jamais une donnée fictive --
+// reste chargée normalement (utilisée par `listLoadedSkillInstructions`,
+// visible dans `listProjectSkills`) même après désactivation du mode démo.
+// Refuse explicitement si le mode démo n'est pas actif (`actions/demo.ts`'s
+// `getDemoModeActive`) : jamais une fonctionnalité activable par accident
+// en dehors d'une démo, avant même que `SkillsPanel.tsx` ne l'offre. Reste
+// dans ce fichier (AD-2, seul propriétaire de PROJECT_SKILL) plutôt que
+// dans `actions/demo.ts` : contrairement à `resetAvantVenteWorkflow`
+// (un outil autonome sur son propre domaine), ceci ne fait qu'étendre une
+// action déjà propriétaire de cette table.
+export async function addProjectSkillDemo(
+  projectId: string,
+  skillKey: string,
+): Promise<ActionResult<void>> {
+  // Tour 2 (bmad-review, blind-hunter) : la garde du mode démo passe en
+  // premier -- avant même de valider `skillKey` -- pour que "cette
+  // fonctionnalité n'est disponible qu'en mode démo" reste le refus reçu
+  // hors démo dans tous les cas, y compris avec une clé invalide, plutôt
+  // que l'ordre inverse d'origine qui pouvait renvoyer "introuvable dans
+  // le catalogue" en dehors du mode démo. Un échec de lecture (pas
+  // seulement "mode démo inactif") est aussi loggé ici, comme partout
+  // ailleurs dans ce fichier -- l'utilisateur voit le même message dans
+  // les deux cas (aucune action possible de son côté), mais une vraie
+  // panne d'infrastructure ne doit jamais disparaître sans trace.
+  const demoModeResult = await getDemoModeActive();
+  if (!demoModeResult.ok) {
+    console.error('addProjectSkillDemo: getDemoModeActive failed', demoModeResult.error);
+  }
+  if (!demoModeResult.ok || !demoModeResult.data) {
+    return {
+      ok: false,
+      error: "L'ajout d'une skill n'est disponible qu'en mode démo.",
+    };
+  }
+
+  if (!SKILL_CATALOG[skillKey]) {
+    return { ok: false, error: 'Cette skill est introuvable dans le catalogue.' };
+  }
+
+  try {
+    // Tour 2 (bmad-review, blind-hunter) : même geste que
+    // `listProjectSkills`/`listLoadedSkillInstructions` -- sans cet appel,
+    // un premier ajout sur un projet jamais encore lu (ex. cette action
+    // appelée directement, sans être passé par l'UI qui aurait déjà
+    // déclenché ce seed) rendrait la table non-vide avant que les
+    // fixtures n'aient jamais été posées, désactivant `seedIfEmpty`'s
+    // garde "si vide" pour toujours sur ce projet.
+    seedFixturesIfEmpty(projectId);
+
+    let result: ActionResult<void> | null = null;
+
+    db.transaction((tx) => {
+      const existingRows = tx
+        .select({ skillKey: projectSkill.skillKey, position: projectSkill.position })
+        .from(projectSkill)
+        .where(eq(projectSkill.projectId, projectId))
+        .all();
+
+      if (existingRows.some((row) => row.skillKey === skillKey)) {
+        result = { ok: false, error: 'Cette skill est déjà chargée sur ce projet.' };
+        return;
+      }
+
+      // Append (Boundaries: même position-append que `seedFixturesIfEmpty`
+      // ci-dessus) — jamais une position choisie par l'utilisateur, cette
+      // skill arrive toujours en dernier dans l'ordre de chargement.
+      const nextPosition =
+        existingRows.reduce((max, row) => Math.max(max, row.position ?? -1), -1) + 1;
+
+      tx.insert(projectSkill)
+        .values({ projectId, skillKey, position: nextPosition })
+        .run();
+
+      result = { ok: true, data: undefined };
+    });
+
+    return result ?? { ok: false, error: "Impossible d'ajouter cette skill." };
+  } catch (error) {
+    console.error('addProjectSkillDemo failed', error);
+    return { ok: false, error: "Impossible d'ajouter cette skill." };
   }
 }
