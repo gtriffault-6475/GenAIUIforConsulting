@@ -51,6 +51,29 @@ async function isDemoModeActive(): Promise<boolean> {
   }
 }
 
+// spec-demo-frappe-et-revision.md — un délai avant de renvoyer une réponse
+// canned, jamais une animation lettre par lettre (Boundaries: hors
+// périmètre de cette spec). Le composer/le champ de révision globale
+// affichent déjà un état "envoi..." (`isPending`, `useTransition`) le
+// temps que la Server Action réponde -- ce délai le fait simplement durer
+// un instant de plus au lieu que la réponse n'apparaisse instantanément,
+// sans aucun changement côté UI. Proportionnel à la longueur du texte
+// (une réponse plus longue "prend" un peu plus de temps à générer) mais
+// borné (Boundaries: Always -- "jamais plusieurs secondes"), pour ne
+// jamais devenir frustrant à rejouer plusieurs fois pendant une démo.
+function demoTypingDelayMs(content: string): number {
+  return Math.min(400 + content.length * 8, 1800);
+}
+
+// Seul point de retour "succès" du mode démo (les 4 branches de succès
+// ci-dessous convergent ici) -- un échec réel (ex. `executeTool` en échec)
+// ne passe jamais par cette fonction et reste immédiat, aucune raison de
+// simuler une "frappe" sur une vraie panne.
+async function resolveDemoReply(content: string): Promise<SendToAgentResult> {
+  await new Promise((resolve) => setTimeout(resolve, demoTypingDelayMs(content)));
+  return { ok: true, content };
+}
+
 // AD-11 — the single assembly point for every `@anthropic-ai/sdk` Messages
 // API call. No other Server Action may instantiate an Anthropic client —
 // `actions/message.ts`'s `sendMessage` is the only caller today, and
@@ -167,7 +190,7 @@ export async function sendToAgent({
           : null;
 
         if (!entry) {
-          return { ok: true, content: DEMO_FALLBACK_REPLY };
+          return resolveDemoReply(DEMO_FALLBACK_REPLY);
         }
 
         if (entry.toolCall) {
@@ -191,7 +214,7 @@ export async function sendToAgent({
           }
         }
 
-        return { ok: true, content: entry.reply };
+        return resolveDemoReply(entry.reply);
       }
 
       // Deux appelants réels partagent cette même forme d'appel (ni `tool`
@@ -204,9 +227,9 @@ export async function sendToAgent({
       // sans rapport (le bug trouvé par la lentille verification-gap).
       const promptText = history[0]?.content ?? '';
       if (isDemoReworkPrompt(promptText)) {
-        return { ok: true, content: DEMO_REWORK_REPLY };
+        return resolveDemoReply(DEMO_REWORK_REPLY);
       }
-      return { ok: true, content: matchDemoStepSuggestion(promptText) };
+      return resolveDemoReply(matchDemoStepSuggestion(promptText));
     } catch (error) {
       // Même filet de sécurité que le chemin réel ci-dessous : une panne
       // inattendue dans le script lui-même (jamais un vrai appel réseau,

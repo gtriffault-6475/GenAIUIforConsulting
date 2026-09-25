@@ -92,6 +92,65 @@ export const DEMO_CHAT_SCRIPT: DemoChatEntry[] = [
     },
   },
   {
+    // spec-demo-frappe-et-revision.md — déclenchée par `GlobalRevisionField`
+    // (`actions/livrable.ts`'s `requestGlobalRevision`), qui poste ses
+    // instructions comme un message `user` ordinaire dans la conversation
+    // d'origine du livrable, via ce même `sendMessage`. Aucun chevauchement
+    // avec les mots-clés d'aucune autre entrée de ce tableau (création
+    // ci-dessus, références/experts/salutation ci-dessous) : vérifié
+    // directement, un vocabulaire de révision distinct.
+    //
+    // Mots-clés délibérément des LOCUTIONS complètes ("revoir le document",
+    // pas juste "revoir"), jamais un verbe seul -- corrigé après une revue
+    // (bmad-review, blind-hunter) qui a trouvé qu'un verbe seul comme
+    // "mettre à jour"/"actualiser" est un français bien trop courant pour
+    // rester sans risque une fois associé à un `toolCall` : contrairement
+    // aux entrées références/experts (une simple réponse texte en cas de
+    // faux positif, risque déjà accepté par `spec-mode-demo-scripte.md`
+    // finding #9), cette entrée exécute réellement `executeTool` ->
+    // `updateLivrableWithSuggestions`, donc un faux positif sur une
+    // conversation du projet mission (ex. "il faut mettre à jour le
+    // planning") écraserait silencieusement son vrai livrable avec ce
+    // contenu RFP Acme Corp fabriqué -- un risque destructeur, pas
+    // seulement une réponse hors sujet. Chaque locution ci-dessous inclut
+    // "document"/"réponse" pour rester improbable hors d'un contexte de
+    // révision documentaire volontaire ; le mot-clé "revu" (4 lettres, trop
+    // court, matchait aussi "revue" par sous-chaîne) est retiré entièrement.
+    keywords: [
+      'revoir le document',
+      'revoir la réponse',
+      'réviser le document',
+      'réviser la réponse',
+      'révision globale',
+      'mettre à jour le document',
+      'mettre à jour la réponse',
+      'actualiser le document',
+      'actualiser la réponse',
+      'nouvelle version du document',
+    ],
+    reply:
+      "J'ai mis à jour le document en tenant compte de vos remarques, avec un paragraphe supplémentaire sur les délais. Vous pouvez consulter la nouvelle version dans le panneau Livrables.",
+    toolCall: {
+      title: "Réponse à l'appel d'offres — Acme Corp",
+      blocks: [
+        "Le cabinet propose une équipe pluridisciplinaire disposant de douze années d'expérience cumulée sur le secteur d'Acme Corp, construite au fil de missions comparables menées ces trois dernières années.",
+        "Sur des missions de portée et de secteur similaires, le cabinet a accompagné plusieurs acteurs dans la refonte de leurs processus de conformité, avec des résultats mesurables sur les délais de mise en œuvre.",
+        "L'équipe proposée pour cette mission est disponible dès la date de démarrage souhaitée par Acme Corp et reste stable sur toute la durée prévue, sans recours à des ressources externes non nommées à ce stade.",
+        "Le calendrier proposé prévoit un démarrage sous deux semaines et une première restitution intermédiaire à six semaines, pour sécuriser les délais annoncés par Acme Corp dans son cahier des charges.",
+      ],
+      suggestions: [
+        {
+          blockIndex: 1,
+          text: 'Ajouter un exemple chiffré de résultat obtenu sur une mission comparable, si disponible.',
+        },
+        {
+          blockIndex: 3,
+          text: 'Préciser les livrables intermédiaires attendus à la restitution à six semaines.',
+        },
+      ],
+    },
+  },
+  {
     keywords: ['référence', 'références', 'mission similaire', "expérience du cabinet"],
     reply:
       "Je vous propose de mettre en avant nos missions récentes menées pour des acteurs du secteur d'Acme Corp, en insistant sur les résultats obtenus plutôt que sur la seule liste des clients.",

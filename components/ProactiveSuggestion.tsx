@@ -78,6 +78,23 @@ export function ProactiveSuggestion({
     // given mount (they change only via the `key`-driven remount above).
   }, []);
 
+  // spec-demo-frappe-et-revision.md (bmad-review, blind-hunter) : ce
+  // composant rendait `null` pendant tout le chargement -- inoffensif avec
+  // un vrai appel réseau habituellement rapide, mais le nouveau délai
+  // artificiel du mode démo (`skills/buildRequest.ts`'s `resolveDemoReply`,
+  // jusqu'à 1.8s) transformait ce silence en un espace vide qui paraît
+  // figé plutôt que "vivant" -- l'effet inverse de celui recherché. Un
+  // texte de statut sobre comble cet instant, en démo comme en usage réel.
+  if (status === 'loading') {
+    return (
+      <section className="ai-suggestion-card" aria-label="Suggestion de démarrage">
+        <p className="text-caption" style={{ margin: 0 }}>
+          {"L'agent réfléchit à une proposition…"}
+        </p>
+      </section>
+    );
+  }
+
   if (status !== 'visible' || suggestion === null) return null;
 
   function handleLater() {
