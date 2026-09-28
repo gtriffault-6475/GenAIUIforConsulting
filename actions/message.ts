@@ -3,6 +3,8 @@
 import { eq } from 'drizzle-orm';
 
 import type { ActionResult } from '@/actions/types';
+import { getDemoModeActive } from '@/actions/demo';
+import { seedDemoReferenceDocument } from '@/actions/document';
 import { insertMessage } from '@/actions/insert-message';
 import {
   createLivrableWithSuggestions,
@@ -199,6 +201,8 @@ export async function sendMessage(
           return { ok: false, error: updated.error };
         }
 
+        await seedDemoReferenceDocumentIfDemoActive();
+
         // Same rule as the creation branch below: this text is only the
         // tool's `tool_result`, read by the model on the second call, never
         // persisted to MESSAGE itself. No title clause here, unlike the
@@ -221,6 +225,8 @@ export async function sendMessage(
         return { ok: false, error: created.error };
       }
 
+      await seedDemoReferenceDocumentIfDemoActive();
+
       // This text becomes the tool's `tool_result` content, read only by
       // the model on the second call (Design Notes) — never persisted to
       // MESSAGE itself (Always: "MESSAGE ne stocke jamais l'échange
@@ -230,6 +236,23 @@ export async function sendMessage(
         content: `Le livrable "${parsed.data.title}" a été créé avec ${parsed.data.suggestions.length} suggestion(s) ancrée(s).`,
       };
     };
+
+    // spec-demo-document-reference.md — point d'accroche unique
+    // (Boundaries: "jamais lors de la réinitialisation avant-vente ni
+    // ailleurs"), appelé après les deux branches réussies ci-dessus
+    // (création et révision partagent le même tool-call démo,
+    // `skills/demoScript.ts`). `seedDemoReferenceDocument`
+    // (`actions/document.ts`) est elle-même idempotente par projet (id
+    // dérivé de `projectId`, vérifié avant insertion -- voir son propre
+    // commentaire pour le pourquoi d'un id par projet plutôt qu'un id fixe
+    // partagé) -- ce garde-fou ne concerne que le mode démo, pas la
+    // duplication, qui reste la responsabilité de cette fonction-là.
+    async function seedDemoReferenceDocumentIfDemoActive(): Promise<void> {
+      const demoModeResult = await getDemoModeActive();
+      if (demoModeResult.ok && demoModeResult.data) {
+        await seedDemoReferenceDocument(projectId);
+      }
+    }
 
     // Fiabilité de la révision globale et de la concurrence des suggestions
     // (spec-fiabilite-revision-suggestions, CAP-1). `MESSAGE` never stores

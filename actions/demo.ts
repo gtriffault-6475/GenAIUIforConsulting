@@ -4,8 +4,9 @@ import { eq, inArray } from 'drizzle-orm';
 
 import type { ActionResult } from '@/actions/types';
 import { selectStep } from '@/actions/conversation';
+import { resolveDemoReferenceDocumentId } from '@/actions/document';
 import { db } from '@/db/client';
-import { APP_STATE_ID, appState, conversation, livrable, message, project, suggestion } from '@/db/schema';
+import { APP_STATE_ID, appState, conversation, document, livrable, message, project, suggestion } from '@/db/schema';
 import { STEPS } from '@/domain/workflow';
 
 // spec-simulation-demarrage-avant-vente.md, extended by the Epic 4
@@ -74,6 +75,13 @@ export async function resetAvantVenteWorkflow(
 ): Promise<ActionResult<void>> {
   let guardError: string | null = null;
 
+  // Resolved before the transaction opens, not inside it: the transaction
+  // callback below is synchronous (`node:sqlite`, same constraint as every
+  // other multi-statement write in this file), and `resolveDemoReferenceDocumentId`
+  // is a Server Action (`'use server'` in `actions/document.ts`) that must
+  // stay `async` — it cannot be `await`ed from inside a synchronous closure.
+  const demoReferenceDocId = await resolveDemoReferenceDocumentId(projectId);
+
   try {
     db.transaction((tx) => {
       const [projectRow] = tx
@@ -115,6 +123,26 @@ export async function resetAvantVenteWorkflow(
         guardError = "Ce projet n'est pas (ou plus) le projet actif.";
         return;
       }
+
+      // spec-demo-document-reference.md, revue (blind-hunter, Review
+      // Triage Log #3) : le document de référence que `executeTool`
+      // (`actions/message.ts`) sème via `seedDemoReferenceDocument`
+      // (`actions/document.ts`) n'était jamais nettoyé par ce reset --
+      // rejouer la démo sur le même projet le montrait dans le panneau
+      // Contexte dès le tout premier message, avant même que le tool-call
+      // RFP ne se redéclenche, ce qui défait tout l'intérêt de la
+      // fonctionnalité (le faire apparaître au moment précis où le
+      // livrable est rédigé). AD-2 exception sur DOCUMENT, même
+      // justification déjà établie par ce fichier pour CONVERSATION/
+      // MESSAGE/SUGGESTION ci-dessus : outil démo uniquement, jamais un
+      // chemin consultant. L'id lui-même (`demoReferenceDocId`, résolu par
+      // `resolveDemoReferenceDocumentId` avant l'ouverture de cette
+      // transaction) reste dérivé par `actions/document.ts`, seule
+      // propriétaire de DOCUMENT -- jamais reconstruit ici à la main.
+      // Supprime au plus une ligne (id dérivé par projet, jamais partagé) ;
+      // un id absent (démo jamais jouée sur ce projet) ne fait rien, pas
+      // d'erreur.
+      tx.delete(document).where(eq(document.id, demoReferenceDocId)).run();
 
       // Epic 4 retrospective (follow-up, 2026-09-23), finding #1 (Option A,
       // validated): a livrable this reset is about to orphan (its
