@@ -22,6 +22,8 @@
   --color-selected-tint: #eef0f8;
   --color-avatar-bg: #dfe2ee;
   --color-success: #0f7a4d;
+  /* spec-demo-catalogue-skills.md — dimmed backdrop behind modal popups. */
+  --color-backdrop: rgba(20, 22, 40, 0.45);
   /* spec-toggle-mode-demo-ui.md — Boundaries: "aucun écran ne puisse être
      confondu avec une session réelle" when the demo mode is active.
      Deliberately distinct from `--color-ai-accent` (reserved for
@@ -434,16 +436,43 @@ textarea {
   box-shadow: var(--elevation-dropdown);
 }
 
-/* spec-demo-ajout-skill.md — catalog entries offered while the demo mode
-   is active, inside `.skill-add-overlay` above. Solid border (unlike
-   `.skill-add-entry`'s dashed one, reserved for the always-present "not
-   yet available" trigger) so a genuinely clickable, real action reads as
-   more affirmative than that permanently-disabled-looking entry point. */
-.skill-add-catalog-entry {
+/* spec-demo-catalogue-skills.md — demo-mode "Catalogue de skills OCTO"
+   modal (`SkillCatalogDialog.tsx`). The backdrop sits outside the
+   `OverlayProvider`'s `contentRef` (attached to the panel), so a click on
+   it closes the popup through the provider's existing click-outside
+   handler. Neutral palette throughout — `--color-ai-accent` stays
+   reserved for the skill icon (DESIGN.md). */
+.skill-catalog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
   display: flex;
   align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  background: var(--color-backdrop);
+}
+
+.skill-catalog-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
   width: 100%;
-  text-align: left;
+  max-width: 720px;
+  max-height: 80vh;
+  overflow: hidden;
+  padding: var(--space-5);
+  box-shadow: var(--elevation-dropdown);
+}
+
+.skill-catalog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.skill-catalog-search {
   font-family: var(--font-body);
   font-size: var(--text-body-size);
   color: var(--color-text-primary);
@@ -451,17 +480,135 @@ textarea {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   padding: var(--space-2) var(--space-3);
+}
+
+.skill-catalog-search:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.skill-catalog-body {
+  display: flex;
+  gap: var(--space-4);
+  min-height: 0;
+  flex: 1;
+}
+
+.skill-catalog-categories {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  flex: 0 0 180px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.skill-catalog-category {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  width: 100%;
+  text-align: left;
+  font-family: var(--font-body);
+  font-size: var(--text-body-size);
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
   cursor: pointer;
 }
 
-.skill-add-catalog-entry:hover,
-.skill-add-catalog-entry:focus-visible {
-  border-color: var(--color-accent);
+.skill-catalog-category:hover,
+.skill-catalog-category:focus-visible {
+  background: var(--color-selected-tint);
 }
 
-.skill-add-catalog-entry:disabled {
-  cursor: default;
-  opacity: 0.6;
+.skill-catalog-category-active {
+  background: var(--color-selected-tint);
+  color: var(--color-text-primary);
+  font-weight: var(--text-body-strong-weight);
+}
+
+.skill-catalog-count {
+  font-size: var(--text-caption-size);
+  color: var(--color-text-muted);
+}
+
+.skill-catalog-list {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.skill-catalog-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.skill-catalog-card {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+}
+
+.skill-catalog-card-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  flex: 1;
+  min-width: 0;
+}
+
+.skill-catalog-card-category {
+  color: var(--color-text-muted);
+}
+
+.skill-catalog-card-action {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-1);
+  flex-shrink: 0;
+}
+
+.skill-catalog-badge {
+  font-family: var(--font-body);
+  font-size: var(--text-caption-size);
+  color: var(--color-success);
+}
+
+/* Mobile: the panel itself scrolls (categories stacked above the list),
+   so the list never collapses to 0 height inside a clipped panel. */
+@media (max-width: 640px) {
+  .skill-catalog-panel {
+    overflow-y: auto;
+  }
+
+  .skill-catalog-body {
+    flex-direction: column;
+    flex: none;
+  }
+
+  .skill-catalog-categories {
+    flex: none;
+    overflow-y: visible;
+  }
+
+  .skill-catalog-list {
+    flex: none;
+    overflow-y: visible;
+  }
 }
 
 /* Story 1.5 — first link in the app that isn't styled by the global `a`

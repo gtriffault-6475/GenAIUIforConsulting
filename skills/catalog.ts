@@ -14,6 +14,10 @@ export type Skill = {
   key: string;
   name: string;
   description: string;
+  // spec-demo-catalogue-skills.md — free-form label used by the demo
+  // catalogue popup (`SkillCatalogDialog.tsx`) to group entries; its list
+  // of categories is derived from this field, never hardcoded.
+  category: string;
   instructions: string;
 };
 
@@ -21,6 +25,7 @@ export const SKILL_CATALOG: Record<string, Skill> = {
   references: {
     key: 'references',
     name: 'Recherche de références clients',
+    category: 'Capitalisation',
     description:
       "Identifie, parmi les missions déjà menées par le cabinet, celles pertinentes pour le secteur et le besoin du client, à citer dans une réponse ou une note.",
     instructions:
@@ -29,6 +34,7 @@ export const SKILL_CATALOG: Record<string, Skill> = {
   'rfp-drafting': {
     key: 'rfp-drafting',
     name: "Rédaction de réponse RFP",
+    category: 'Avant-vente',
     description:
       "Aide à structurer et rédiger une réponse à un appel d'offres à partir du cahier des charges et du positionnement du cabinet.",
     instructions:
@@ -37,6 +43,7 @@ export const SKILL_CATALOG: Record<string, Skill> = {
   'mission-scoping': {
     key: 'mission-scoping',
     name: 'Note de cadrage de mission',
+    category: 'Cadrage de mission',
     description:
       'Aide à structurer une note de cadrage de mission : contexte, objectifs, périmètre et livrables attendus.',
     instructions:

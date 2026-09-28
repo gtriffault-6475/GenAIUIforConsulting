@@ -1,11 +1,11 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 
 import { addProjectSkillDemo, type ProjectSkillSummary } from '@/actions/skill';
 import { useOverlay } from '@/components/OverlayProvider';
-import { SKILL_CATALOG } from '@/skills/catalog';
+import { SkillCatalogDialog } from '@/components/SkillCatalogDialog';
 
 const OVERLAY_ID = 'add-skill';
 
@@ -21,14 +21,14 @@ const OVERLAY_ID = 'add-skill';
 // static message — never a form that looks functional but silently does
 // nothing.
 //
-// spec-demo-ajout-skill.md — when `demoModeActive` is true, the overlay
-// additionally lists the catalog's (`skills/catalog.ts`, safe to import
-// client-side — plain data, no `db`/secrets) not-yet-loaded skills as
-// clickable entries, each calling the new `addProjectSkillDemo` (real
-// `PROJECT_SKILL` insert, `actions/skill.ts`) then `router.refresh()` —
-// same shape as `ProjectSelector.tsx`'s `handleChoose`. Outside demo mode
-// this list is never computed/shown, so the honest message stays the only
-// thing this panel ever offers in a real deployment.
+// spec-demo-ajout-skill.md / spec-demo-catalogue-skills.md — when
+// `demoModeActive` is true, the trigger opens `SkillCatalogDialog` (modal
+// "Catalogue de skills OCTO": search, categories, cards) instead; its
+// "Ajouter" buttons call `addProjectSkillDemo` (real `PROJECT_SKILL`
+// insert, `actions/skill.ts`) then `router.refresh()` — same shape as
+// `ProjectSelector.tsx`'s `handleChoose`. Outside demo mode the popup is
+// never rendered, so the honest message stays the only thing this panel
+// ever offers in a real deployment.
 export function SkillsPanel({
   projectId,
   skills,
@@ -48,13 +48,19 @@ export function SkillsPanel({
 
   const isOpen = isOverlayOpen(OVERLAY_ID);
 
-  // Demo-mode-only: catalog entries not already loaded on this project —
-  // `null` (a failed read) degrades to "nothing addable" rather than
-  // risking an add on top of an unknown current state.
-  const loadedKeys = new Set((skills ?? []).map((skill) => skill.skillKey));
-  const availableToAdd = demoModeActive
-    ? Object.values(SKILL_CATALOG).filter((skill) => !loadedKeys.has(skill.key))
-    : [];
+  // spec-demo-catalogue-skills.md — the demo popup is modal, so focus
+  // goes back to "Ajouter une skill" whenever it closes (Escape, backdrop
+  // click, "Fermer", or a successful add). Only on an open -> closed
+  // transition while the demo popup was the one shown.
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const wasDemoDialogOpenRef = useRef(false);
+  const isDemoDialogOpen = isOpen && demoModeActive;
+  useEffect(() => {
+    if (wasDemoDialogOpenRef.current && !isDemoDialogOpen) {
+      triggerRef.current?.focus();
+    }
+    wasDemoDialogOpenRef.current = isDemoDialogOpen;
+  }, [isDemoDialogOpen]);
 
   function handleToggle() {
     if (isOpen) {
@@ -100,12 +106,14 @@ export function SkillsPanel({
           the content ref from a different overlay opened elsewhere. */}
       <div
         className="skill-add-entry-wrap"
-        ref={isOpen ? contentRef : undefined}
+        ref={isOpen && !demoModeActive ? contentRef : undefined}
       >
         <button
+          ref={triggerRef}
           type="button"
           className="skill-add-entry"
           aria-expanded={isOpen}
+          aria-haspopup={demoModeActive ? 'dialog' : undefined}
           onClick={handleToggle}
         >
           <span className="skill-add-entry-icon" aria-hidden="true">
@@ -114,68 +122,37 @@ export function SkillsPanel({
           Ajouter une skill
         </button>
 
-        {isOpen && (
-          // No `role="dialog"`/`aria-haspopup="dialog"` on the trigger:
-          // this disclosure has no focus trap and no modal behavior, so
-          // claiming the dialog role would promise more than it delivers
-          // — same reasoning as `ContextPanel.tsx`'s add-document
-          // disclosure (see the Epic 1 retrospective).
+        {/* Hors mode démo : message honnête seul, inchangé. No
+            `role="dialog"`/`aria-haspopup="dialog"` on the trigger: this
+            disclosure has no focus trap and no modal behavior, so claiming
+            the dialog role would promise more than it delivers — same
+            reasoning as `ContextPanel.tsx`'s add-document disclosure (see
+            the Epic 1 retrospective). */}
+        {isOpen && !demoModeActive && (
           <div
             role="region"
             aria-label="Ajouter une skill"
             className="card skill-add-overlay"
             style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}
           >
-            {/* Tour 2 (bmad-review, blind-hunter) : ce message ne s'affiche
-                plus quand la liste d'ajout ci-dessous est proposée -- au
-                tour 1, les deux coexistaient ("pas encore disponible"
-                juste au-dessus de boutons réellement cliquables),
-                contredisant directement le principe honnête que ce
-                commentaire de fichier revendique. Reste seul, inchangé,
-                dans tous les autres cas (mode démo inactif, ou actif mais
-                plus aucune skill du catalogue à ajouter). */}
-            {availableToAdd.length === 0 && (
-              <p className="text-caption" style={{ margin: 0 }}>
-                L&rsquo;ajout d&rsquo;une skill à ce projet n&rsquo;est pas
-                encore disponible depuis cette interface.
-              </p>
-            )}
-
-            {availableToAdd.length > 0 && (
-              <ul
-                style={{
-                  listStyle: 'none',
-                  margin: 0,
-                  padding: 0,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 'var(--space-1)',
-                }}
-              >
-                {availableToAdd.map((skill) => (
-                  <li key={skill.key}>
-                    <button
-                      type="button"
-                      className="skill-add-catalog-entry"
-                      disabled={isPending}
-                      onClick={() => handleAdd(skill.key)}
-                    >
-                      {/* Tour 2 (bmad-review, blind-hunter) : verbe
-                          d'action explicite -- le nom seul de la skill ne
-                          signalait pas qu'un clic l'ajoute au projet. */}
-                      Ajouter : {skill.name}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            {error && (
-              <p className="text-caption" role="alert" style={{ margin: 0 }}>
-                {error}
-              </p>
-            )}
+            <p className="text-caption" style={{ margin: 0 }}>
+              L&rsquo;ajout d&rsquo;une skill à ce projet n&rsquo;est pas
+              encore disponible depuis cette interface.
+            </p>
           </div>
+        )}
+
+        {/* spec-demo-catalogue-skills.md — en mode démo, la popup modale
+            "Catalogue de skills OCTO" remplace l'ancien menu ancré. */}
+        {isOpen && demoModeActive && (
+          <SkillCatalogDialog
+            skills={skills}
+            isPending={isPending}
+            error={error}
+            onAdd={handleAdd}
+            onClose={closeOverlay}
+            contentRef={contentRef}
+          />
         )}
       </div>
 
