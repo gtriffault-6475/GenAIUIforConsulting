@@ -1,5 +1,6 @@
 import type { ConversationSummary, MessageSummary } from '@/actions/conversation';
 import type { ActionResult } from '@/actions/types';
+import { MessageContent } from '@/components/MessageContent';
 
 // Center-column, read-only history of the active conversation (Story 2.1
 // — Conversations multiples et sélection active). No composer here
@@ -59,9 +60,23 @@ export function ConversationHistory({
                   <span className="text-caption">
                     {msg.role === 'user' ? 'Vous' : msg.model ?? 'Assistant'}
                   </span>
-                  <p className="text-body" style={{ margin: 0 }}>
-                    {msg.content}
-                  </p>
+                  {msg.role === 'user' ? (
+                    // spec-rendu-markdown-conversation.md — user messages
+                    // stay plain text (no markdown), but keep their line
+                    // breaks.
+                    <p
+                      className="text-body"
+                      style={{
+                        margin: 0,
+                        whiteSpace: 'pre-wrap',
+                        overflowWrap: 'anywhere',
+                      }}
+                    >
+                      {msg.content}
+                    </p>
+                  ) : (
+                    <MessageContent content={msg.content} />
+                  )}
                   {msg.role === 'user' && msg.assistantFailed && (
                     // epic-2-retro-item-16 — durable, not just transient,
                     // failed-response indicator, sourced from the persisted

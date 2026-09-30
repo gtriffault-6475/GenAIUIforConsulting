@@ -36,6 +36,7 @@
   /* Typography families (assigned to next/font variables in app/layout.tsx) */
   --font-display: var(--font-space-grotesk), sans-serif;
   --font-body: var(--font-ibm-plex-sans), sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /* Typography scale */
   --text-display-size: 22px;
@@ -168,6 +169,127 @@ a {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
+}
+
+/* spec-rendu-markdown-conversation.md — markdown rendering of assistant
+   messages (`components/MessageContent.tsx`). Compact vertical rhythm,
+   neutral code background, no AI violet (DESIGN.md). */
+.message-markdown {
+  overflow-wrap: anywhere;
+}
+
+.message-markdown p {
+  white-space: pre-line;
+}
+
+.message-markdown li > p {
+  margin: 0;
+}
+
+.message-markdown > :first-child {
+  margin-top: 0;
+}
+
+.message-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.message-markdown p,
+.message-markdown ul,
+.message-markdown ol,
+.message-markdown pre,
+.message-markdown blockquote,
+.message-markdown table {
+  margin: 0 0 var(--space-2);
+}
+
+.message-markdown ul,
+.message-markdown ol {
+  padding-left: var(--space-5);
+}
+
+.message-markdown li + li,
+.message-markdown li > ul,
+.message-markdown li > ol {
+  margin-top: var(--space-1);
+}
+
+.message-markdown li > ul,
+.message-markdown li > ol {
+  margin-bottom: 0;
+}
+
+.message-markdown h1,
+.message-markdown h2,
+.message-markdown h3,
+.message-markdown h4,
+.message-markdown h5,
+.message-markdown h6 {
+  font-family: var(--font-display);
+  font-size: var(--text-heading-size);
+  font-weight: var(--text-heading-weight);
+  line-height: var(--text-heading-line-height);
+  margin: var(--space-3) 0 var(--space-2);
+}
+
+.message-markdown h3,
+.message-markdown h4,
+.message-markdown h5,
+.message-markdown h6 {
+  font-family: var(--font-body);
+  font-size: var(--text-body-strong-size);
+  font-weight: var(--text-body-strong-weight);
+}
+
+.message-markdown strong {
+  font-weight: var(--text-body-strong-weight);
+}
+
+.message-markdown a {
+  text-decoration: underline;
+}
+
+.message-markdown code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-1);
+}
+
+.message-markdown pre {
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  overflow-x: auto;
+}
+
+.message-markdown pre code {
+  background: none;
+  border: 0;
+  padding: 0;
+}
+
+.message-markdown blockquote {
+  border-left: 2px solid var(--color-border);
+  padding-left: var(--space-3);
+  color: var(--color-text-secondary);
+}
+
+.message-markdown table {
+  border-collapse: collapse;
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.message-markdown th,
+.message-markdown td {
+  border: 1px solid var(--color-border);
+  padding: var(--space-1) var(--space-2);
+  text-align: left;
 }
 
 .button-primary {
