@@ -227,3 +227,7 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-fiabilite-appel-api-reel.md`
   summary: The "tool succeeded, second call failed" state (already deferred) now has three more triggers on the real path -- `max_tokens`, `model_context_window_exceeded` and `refusal` on the second call -- surfaced to the user as "Le livrable a bien été enregistré, mais la réponse de l'agent a été interrompue", still recorded as a failed assistant turn.
   evidence: Flagged by the blind-hunter review lens. The message no longer invites a misleading retry, but the conversation still shows a failure while the livrable exists; resolving it means distinguishing "tool ran" from "tool never ran" in `SendToAgentResult`, the same fix as the existing entry.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-rendu-markdown-conversation.md`
+  summary: No automated render test pins the markdown security invariants (raw HTML shown as text, no `<img>`, unsafe URL schemes neutralised, links `rel="noopener noreferrer"`) or the user-plain / assistant-markdown split in `ConversationHistory`.
+  evidence: Flagged by the blind-hunter and verification-gap review lenses. The repo has no test runner; adding `rehype-raw`, a permissive `urlTransform` or dropping the `img`/`a` overrides later would pass `tsc` and `next build` silently. A `renderToStaticMarkup(<MessageContent … />)` test is the natural first case once a runner exists.
