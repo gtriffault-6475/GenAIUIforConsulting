@@ -111,6 +111,58 @@ export type ExecuteToolResult =
   | { ok: true; content: string }
   | { ok: false; error: string };
 
+// spec-fiabilite-appel-api-reel.md — 16000 rather than the original 4096:
+// on Opus 5 / Sonnet 5 adaptive thinking is on by default and spends
+// output tokens, and a whole livrable travels as `propose_livrable_content`'s
+// tool input. Still non-streaming, so it stays under the SDK's HTTP timeouts.
+const MAX_TOKENS = 16000;
+
+// spec-fiabilite-appel-api-reel.md — a truncated (`max_tokens`,
+// `model_context_window_exceeded`) or refused (`refusal`) response is never
+// a normal reply: its text may be partial, and a cut-off `tool_use` carries
+// an incomplete input that must never reach `executeTool`. Checked on both
+// calls of the cycle. `toolAlreadySucceeded` is true only for the second
+// call after a successful `executeTool`: the livrable is then already saved,
+// so the message must say so rather than invite the consultant to retry.
+// Logged server-side (stop reason, model, usage) so truncations leave a
+// trace to tune `MAX_TOKENS` from.
+function checkStopReason(
+  response: Anthropic.Message,
+  toolAlreadySucceeded = false,
+): SendToAgentResult | null {
+  const { stop_reason: stopReason } = response;
+  if (
+    stopReason !== 'max_tokens' &&
+    stopReason !== 'model_context_window_exceeded' &&
+    stopReason !== 'refusal'
+  ) {
+    return null;
+  }
+
+  console.warn('sendToAgent: abnormal stop reason', {
+    stopReason,
+    model: response.model,
+    usage: response.usage,
+    toolAlreadySucceeded,
+  });
+
+  if (toolAlreadySucceeded) {
+    return {
+      ok: false,
+      error:
+        "Le livrable a bien été enregistré, mais la réponse de l'agent a été interrompue avant la fin.",
+    };
+  }
+  if (stopReason === 'refusal') {
+    return { ok: false, error: "L'agent a refusé de répondre à cette demande." };
+  }
+  return {
+    ok: false,
+    error:
+      "La réponse de l'agent a été tronquée car elle était trop longue. Essayez de reformuler une demande plus ciblée.",
+  };
+}
+
 // Extracts the final natural-language reply from a Messages API response —
 // shared by both the no-tool path (Story 2.5, unchanged) and the second
 // call of the tool cycle below (Design Notes step 4). Concatenates every
@@ -278,11 +330,14 @@ export async function sendToAgent({
 
     const response = await anthropic.messages.create({
       model,
-      max_tokens: 4096,
+      max_tokens: MAX_TOKENS,
       ...(systemPrompt ? { system: systemPrompt } : {}),
       ...(tool ? { tools: [tool] } : {}),
       messages: apiMessages,
     });
+
+    const firstStop = checkStopReason(response);
+    if (firstStop) return firstStop;
 
     // No tool cycle: either this call was made without a `tool`/
     // `executeTool` pair (`propose_starting_point.ts`'s exact path,
@@ -328,19 +383,27 @@ export async function sendToAgent({
     };
 
     // Step 4: second (and last) `messages.create` call with the extended
-    // history — no `tools` this time, so the model cannot chain a further
+    // history. spec-fiabilite-appel-api-reel.md: the history now holds
+    // `tool_use`/`tool_result` blocks, which the API only accepts when
+    // `tools` is defined — so the same tool is sent again, with
+    // `tool_choice: none` so the model still cannot chain a further
     // tool_use (Never: "un seul tool_use géré par réponse"). Its text
     // reply is the final result `sendToAgent` returns.
     const secondResponse = await anthropic.messages.create({
       model,
-      max_tokens: 4096,
+      max_tokens: MAX_TOKENS,
       ...(systemPrompt ? { system: systemPrompt } : {}),
+      tools: [tool],
+      tool_choice: { type: 'none' },
       messages: [
         ...apiMessages,
         { role: 'assistant', content: response.content },
         toolResultMessage,
       ],
     });
+
+    const secondStop = checkStopReason(secondResponse, toolResult.ok);
+    if (secondStop) return secondStop;
 
     return extractText(secondResponse);
   } catch (error) {
