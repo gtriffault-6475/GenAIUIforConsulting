@@ -1,4 +1,4 @@
-import type { DriveFile, DriveProvider } from '../ports/drive-provider';
+import { isExportableMimeType, type DriveFile, type DriveProvider } from '../ports/drive-provider';
 import { withLatency } from './with-latency';
 
 const PDF = 'application/pdf';
@@ -92,5 +92,19 @@ export const mockDriveProvider: DriveProvider = {
       }),
     );
     return withLatency({ ok: true as const, data: files });
+  },
+
+  // Story 5.7 — the simulated export. The simulated files keep their
+  // PDF/.docx/.xlsx types, so the panel never offers to select them and
+  // this is not reached from the UI today; it still answers like the
+  // Google adapter would (the seed text, or `not_found`).
+  async exportText(fileId) {
+    for (const files of Object.values(SEED_FILES)) {
+      const file = files.find((candidate) => candidate.id === fileId);
+      if (file && isExportableMimeType(file.mimeType)) {
+        return withLatency({ ok: true as const, data: file.content });
+      }
+    }
+    return withLatency({ ok: false as const, error: 'not_found' as const });
   },
 };

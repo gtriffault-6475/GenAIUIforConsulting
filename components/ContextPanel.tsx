@@ -1,8 +1,13 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { useState, useTransition } from 'react';
 
-import type { DocumentSummary, DriveStatus } from '@/actions/document';
+import {
+  setDocumentUsedAsContext,
+  type DocumentSummary,
+  type DriveStatus,
+} from '@/actions/document';
 import { AddDocumentForm } from '@/components/AddDocumentForm';
 import { useOverlay } from '@/components/OverlayProvider';
 
@@ -148,12 +153,19 @@ export function ContextPanel({
                     {/* Matches `nav-row`'s padding without its class — the
                         class also carries a hover/focus highlight meant for
                         genuinely clickable rows, which would visually
-                        contradict this panel's read-only intent. No visual
-                        distinction between `drive` and `manual` sources
-                        here, per spec — explicitly out of scope. */}
-                    <div style={{ padding: 'var(--space-2) var(--space-3)' }}>
-                      {doc.name}
-                    </div>
+                        contradict this panel's read-only intent. */}
+                    {doc.contextSelection === 'selectable' ? (
+                      <ContextFileRow doc={doc} />
+                    ) : (
+                      <div style={{ padding: 'var(--space-2) var(--space-3)' }}>
+                        {doc.name}
+                        {doc.contextSelection === 'unreadable' && (
+                          <span className="text-caption context-file-note">
+                            non lisible par l&apos;agent
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -162,6 +174,58 @@ export function ContextPanel({
         </div>
       )}
     </section>
+  );
+}
+
+// Story 5.7 — a Google Docs/Slides/Sheets of the project folder: a real
+// checkbox "Utiliser comme contexte", labelled by the file's name
+// (EXPERIENCE.md). The server state (`doc.usedAsContext`) is the checked
+// state; while the Server Action runs, the box shows the requested state
+// and is disabled. On failure (export failed, refused) the box falls back
+// to the server state — unchecked for a failed selection — and the
+// message stays under the row until the next change; the panel is
+// refreshed either way.
+function ContextFileRow({ doc }: { doc: DocumentSummary }) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [requested, setRequested] = useState<boolean | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const inputId = `context-file-${doc.id}`;
+  const errorId = `${inputId}-error`;
+
+  function handleChange(used: boolean) {
+    setError(null);
+    setRequested(used);
+    startTransition(async () => {
+      const result = await setDocumentUsedAsContext({ documentId: doc.id, used });
+      if (!result.ok) setError(result.error);
+      // After a failure too: the mode or the connection may have changed
+      // (e.g. a revoked token), and the panel must follow.
+      router.refresh();
+      setRequested(null);
+    });
+  }
+
+  return (
+    <div className="context-file-row">
+      <input
+        id={inputId}
+        type="checkbox"
+        checked={requested ?? doc.usedAsContext}
+        disabled={isPending}
+        aria-describedby={error ? errorId : undefined}
+        onChange={(event) => handleChange(event.target.checked)}
+      />
+      <label htmlFor={inputId}>
+        <span className="sr-only">Utiliser comme contexte : </span>
+        {doc.name}
+      </label>
+      {error && (
+        <p id={errorId} className="text-caption context-file-error" role="alert">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }
 

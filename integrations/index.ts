@@ -21,9 +21,11 @@ export type {
   DriveError,
   DriveFile,
   DriveMode,
+  DriveProvider,
   DriveResult,
 } from './ports/drive-provider';
 export type { GoogleOAuthExchangeResult } from './google/oauth';
+export { isExportableMimeType } from './ports/drive-provider';
 
 export const projectProvider: ProjectProvider = mockProjectProvider;
 export const mattermostProvider: MattermostProvider = mockMattermostProvider;
@@ -33,6 +35,9 @@ export const mattermostProvider: MattermostProvider = mockMattermostProvider;
 function failingDriveProvider(error: DriveError): DriveProvider {
   return {
     async listFiles() {
+      return { ok: false, error };
+    },
+    async exportText() {
       return { ok: false, error };
     },
   };

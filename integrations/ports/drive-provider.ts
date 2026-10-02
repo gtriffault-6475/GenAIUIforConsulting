@@ -39,8 +39,27 @@ export type DriveResult<T> =
   | { ok: true; data: T }
   | { ok: false; error: DriveError };
 
+// Story 5.7 — the only file types whose text can be exported for the
+// agent ("Utiliser comme contexte"), with the format requested from
+// Drive's `files.export`: plain text for Docs and Slides, CSV for Sheets
+// (Drive exports the first sheet only). Every other type is "non lisible
+// par l'agent".
+export const EXPORT_FORMAT_BY_MIME_TYPE: Readonly<Record<string, string>> = {
+  'application/vnd.google-apps.document': 'text/plain',
+  'application/vnd.google-apps.presentation': 'text/plain',
+  'application/vnd.google-apps.spreadsheet': 'text/csv',
+};
+
+export function isExportableMimeType(mimeType: string | null): boolean {
+  return mimeType !== null && Object.hasOwn(EXPORT_FORMAT_BY_MIME_TYPE, mimeType);
+}
+
 export interface DriveProvider {
   listFiles(projectName: string): Promise<DriveResult<DriveFile[]>>;
+  // Story 5.7 — the text of one file, for the agent. Only ever called for
+  // a file the consultant selected as context (NFR8). A file of a type
+  // outside `EXPORT_FORMAT_BY_MIME_TYPE` answers `not_found`.
+  exportText(fileId: string): Promise<DriveResult<string>>;
 }
 
 // Story 5.1 (AD-1, epic-5-context.md "Mode drive") — computed once by

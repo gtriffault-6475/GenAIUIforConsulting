@@ -75,11 +75,13 @@ export const appState = sqliteTable('app_state', {
 // is the provider's file id (unique per project when set, NULL for
 // `manual` rows), `mimeType` the provider's type, `origin` which adapter
 // produced the row (`mock` in demo mode, `google` when connected — rows
-// of the other origin are purged at resync). `usedAsContext` is always
+// of the other origin are kept but hidden and never sent, Story 5.7).
+// `usedAsContext` is always
 // true for `manual` rows (FR-4, set by the migration's backfill and by
 // every insert) and false by default for `drive` rows; Story 5.7 lets the
-// consultant toggle it. The resync never writes `content` nor
-// `usedAsContext` on an existing row.
+// consultant toggle it. The resync never writes `usedAsContext`; it writes
+// `content` only to re-export a selected file (AD-1 as amended by Story
+// 5.7).
 export const document = sqliteTable(
   'document',
   {
@@ -97,6 +99,10 @@ export const document = sqliteTable(
     usedAsContext: integer('used_as_context', { mode: 'boolean' })
       .notNull()
       .default(false),
+    // Story 5.7 — the provider's `modifiedTime` of the file the current
+    // `content` was exported from (NULL for `manual` rows). The resync
+    // re-exports a selected file when Drive reports another value.
+    driveModifiedTime: text('drive_modified_time'),
   },
   (table) => [
     uniqueIndex('document_project_id_drive_file_id_unique')
