@@ -500,6 +500,41 @@ textarea {
   color: var(--color-text-secondary);
 }
 
+/* Story 5.7 — a selectable drive file: checkbox "Utiliser comme
+   contexte" labelled by the file's name, same padding as the read-only
+   rows, error message under it. */
+.context-file-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+}
+
+.context-file-row input {
+  margin: 0;
+  accent-color: var(--color-accent);
+}
+
+.context-file-row label {
+  cursor: pointer;
+}
+
+.context-file-row input:disabled + label {
+  cursor: progress;
+}
+
+.context-file-error {
+  grid-column: 2;
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-secondary);
+}
+
+/* "non lisible par l'agent", under the file's name. */
+.context-file-note {
+  display: block;
+}
+
 .add-document-dropdown {
   /* Spans the full card (edge-to-edge, `-var(--space-panel-padding)` on
      each side) rather than just the header's inset content width —

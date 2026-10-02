@@ -1,10 +1,11 @@
 import { drive as createDriveClient, type drive_v3 } from '@googleapis/drive';
 
-import type {
-  DriveError,
-  DriveFile,
-  DriveProvider,
-  DriveResult,
+import {
+  EXPORT_FORMAT_BY_MIME_TYPE,
+  type DriveError,
+  type DriveFile,
+  type DriveProvider,
+  type DriveResult,
 } from '../ports/drive-provider';
 import { createOAuthClient, type GoogleConfig } from './oauth';
 
@@ -191,6 +192,39 @@ export function createGoogleDriveProvider(
         return { ok: true, data: files };
       } catch (error) {
         console.error('googleDrive.listFiles failed', describeDriveError(error));
+        return { ok: false, error: toDriveError(error) };
+      }
+    },
+
+    // Story 5.7 — `files.get` for the type (the port only takes the id),
+    // then `files.export` in the matching text format: plain text for Docs
+    // and Slides, CSV of the first sheet for Sheets. Google caps an export
+    // at 10 MB (an error, mapped like any other). Only ever called for a
+    // file the consultant selected (NFR8).
+    async exportText(fileId): Promise<DriveResult<string>> {
+      try {
+        const metadata = await client.files.get({
+          fileId,
+          fields: 'mimeType, trashed',
+          supportsAllDrives: true,
+        });
+        const format = metadata.data.mimeType
+          ? EXPORT_FORMAT_BY_MIME_TYPE[metadata.data.mimeType]
+          : undefined;
+        if (!format || metadata.data.trashed) return { ok: false, error: 'not_found' };
+
+        const response = await client.files.export(
+          { fileId, mimeType: format },
+          { responseType: 'text' },
+        );
+        if (typeof response.data !== 'string') {
+          console.error('googleDrive.exportText: unexpected response body type', typeof response.data);
+          return { ok: false, error: 'unknown' };
+        }
+        // Drive prefixes text exports with a UTF-8 byte order mark.
+        return { ok: true, data: response.data.replace(/^\uFEFF/, '') };
+      } catch (error) {
+        console.error('googleDrive.exportText failed', describeDriveError(error));
         return { ok: false, error: toDriveError(error) };
       }
     },

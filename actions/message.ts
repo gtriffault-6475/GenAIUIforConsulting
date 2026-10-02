@@ -3,8 +3,7 @@
 import { eq } from 'drizzle-orm';
 
 import type { ActionResult } from '@/actions/types';
-import { getDemoModeActive } from '@/actions/demo';
-import { seedDemoReferenceDocument } from '@/actions/document';
+import { getAgentContext, seedDemoReferenceDocument } from '@/actions/document';
 import { insertMessage } from '@/actions/insert-message';
 import {
   createLivrableWithSuggestions,
@@ -156,6 +155,11 @@ export async function sendMessage(
     }
     const loadedSkills = loadedSkillsResult.data;
 
+    // Story 5.7 — the demo flag and the context documents, read here and
+    // passed to `sendToAgent` (which never reads the database). Never
+    // fails: a failed read degrades to no documents (logged).
+    const { demoModeActive, contextDocuments } = await getAgentContext(projectId);
+
     const historyRows = await db
       .select({ role: message.role, content: message.content })
       .from(message)
@@ -247,9 +251,9 @@ export async function sendMessage(
     // commentaire pour le pourquoi d'un id par projet plutôt qu'un id fixe
     // partagé) -- ce garde-fou ne concerne que le mode démo, pas la
     // duplication, qui reste la responsabilité de cette fonction-là.
+    // Story 5.7: the same demo flag as the one passed to `sendToAgent`.
     async function seedDemoReferenceDocumentIfDemoActive(): Promise<void> {
-      const demoModeResult = await getDemoModeActive();
-      if (demoModeResult.ok && demoModeResult.data) {
+      if (demoModeActive) {
         await seedDemoReferenceDocument(projectId);
       }
     }
@@ -319,6 +323,8 @@ export async function sendMessage(
 
     const agentResult = await sendToAgent({
       loadedSkills: effectiveLoadedSkills,
+      contextDocuments,
+      demoModeActive,
       history: historyRows,
       model,
       tool: PROPOSE_LIVRABLE_CONTENT_TOOL,

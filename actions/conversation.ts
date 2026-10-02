@@ -3,6 +3,7 @@
 import { and, eq } from 'drizzle-orm';
 
 import type { ActionResult } from '@/actions/types';
+import { getAgentContext } from '@/actions/document';
 import { insertMessage } from '@/actions/insert-message';
 import { seedIfEmpty } from '@/actions/seed-if-empty';
 import { listLoadedSkillInstructions } from '@/actions/skill';
@@ -504,9 +505,12 @@ export async function getStartingSuggestion(
       return { ok: false, error: loadedSkillsResult.error };
     }
 
+    // Story 5.7 — demo flag and context documents, passed to the agent
+    // (never fails: a failed read degrades to no documents).
     const result = await proposeStartingPoint({
       stepLabel,
       loadedSkills: loadedSkillsResult.data,
+      ...(await getAgentContext(projectId)),
     });
 
     if (!result.ok) {

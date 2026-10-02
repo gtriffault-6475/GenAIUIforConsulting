@@ -1,0 +1,1 @@
+ALTER TABLE `document` ADD `drive_modified_time` text;

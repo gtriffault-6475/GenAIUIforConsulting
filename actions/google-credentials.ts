@@ -17,7 +17,8 @@ import { GOOGLE_CONNECTION_ID, googleConnection } from '@/db/schema';
 
 // `refreshToken: null` = no account connected (confirmed by a successful
 // read). `ok: false` = the row could not be read (logged): never to be
-// mistaken for "no account", which would purge the drive rows.
+// mistaken for "no account" (the panel shows the generic error instead
+// of the connection prompt).
 export type GoogleTokenRead =
   | { ok: true; refreshToken: string | null }
   | { ok: false };

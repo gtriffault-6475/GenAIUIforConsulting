@@ -1,6 +1,6 @@
 'use server';
 
-import { and, eq, isNull, ne, or, sql } from 'drizzle-orm';
+import { and, eq, isNull, or, sql } from 'drizzle-orm';
 
 import { getDemoModeActive } from '@/actions/demo';
 import { resolveDriveMode } from '@/actions/drive-mode';
@@ -11,7 +11,15 @@ import {
 import type { ActionResult } from '@/actions/types';
 import { db } from '@/db/client';
 import { document, project } from '@/db/schema';
-import { createDriveProvider, type DriveError, type DriveFile } from '@/integrations';
+import {
+  createDriveProvider,
+  isExportableMimeType,
+  type DriveError,
+  type DriveFile,
+  type DriveMode,
+  type DriveProvider,
+} from '@/integrations';
+import type { ContextDocument } from '@/skills/buildRequest';
 
 // spec-demo-document-reference.md — id dérivé de `projectId` (jamais
 // `crypto.randomUUID()`, jamais un seul id fixe partagé entre projets) :
@@ -57,6 +65,11 @@ export type DocumentSummary = {
   name: string;
   source: 'drive' | 'manual';
   folderPath: string | null;
+  // Story 5.7 — drive files only (`null` for `manual` rows, always sent):
+  // `selectable` for a Google Docs/Slides/Sheets (checkbox "Utiliser comme
+  // contexte"), `unreadable` otherwise ("non lisible par l'agent").
+  contextSelection: 'selectable' | 'unreadable' | null;
+  usedAsContext: boolean;
 };
 
 // Story 5.2 — what the Contexte panel shows in place of (or alongside)
@@ -93,60 +106,111 @@ function toDriveStatus(error: DriveError): DriveStatus {
   }
 }
 
+// Story 5.7 (Décision 1) — the drive origin shown and sent in a mode:
+// `mock` in demo mode, `google` when connected, none otherwise. Rows of
+// another origin are kept (with their `content` and `usedAsContext`, so a
+// selection survives a switch to demo mode or a disconnection) but are
+// neither shown nor sent.
+function originForMode(mode: DriveMode): DriveOrigin | null {
+  if (mode === 'demo') return 'mock';
+  if (mode === 'connected') return 'google';
+  return null;
+}
+
+// The provider of the current mode, with the stored refresh token when
+// connected (read server-side straight into the factory, never returned).
+// `null` when the token could not be read.
+function currentDriveProvider(
+  mode: DriveMode,
+): { provider: DriveProvider; refreshToken: string | null } | null {
+  if (mode !== 'connected') {
+    return { provider: createDriveProvider(mode), refreshToken: null };
+  }
+  const tokenRead = readGoogleRefreshToken();
+  if (!tokenRead.ok) return null;
+  return {
+    provider: createDriveProvider(mode, tokenRead.refreshToken),
+    refreshToken: tokenRead.refreshToken,
+  };
+}
+
+// A selected file whose text must be exported again (Story 5.7): its
+// `modifiedTime` changed in Drive, or it was never exported at resync
+// (`driveModifiedTime` NULL, written by a selection).
+type StaleContextRow = {
+  rowId: string;
+  driveFileId: string;
+  modifiedTime: string | null;
+};
+
 // The single drive resync (sync-then-read, epic-5-context.md
-// "Resynchronisation"), one synchronous transaction:
-// - purges the project's drive rows of another origin than `origin`
-//   (every drive row when `origin` is `null`: no drive outside demo mode
-//   without a connected account);
-// - updates name, type and folder of the files still listed — never
-//   `content` nor `usedAsContext`;
+// "Resynchronisation", AD-1 as amended by Story 5.7), one synchronous
+// transaction, for a successful listing of the current mode (`origin`):
+// - updates name, type, folder and `driveModifiedTime` of the files still
+//   listed — never `usedAsContext`, and never `content` (only the export
+//   below writes it). A selected file is left on its old
+//   `driveModifiedTime` until its re-export succeeds;
 // - inserts new files with a fresh UUID, an empty `content` and
 //   `usedAsContext` left to its default (false);
-// - deletes the rows of files that disappeared from the listing.
+// - deletes the rows of this origin whose file disappeared from the
+//   listing, and the legacy drive rows without origin;
+// - keeps the rows of the other origin untouched (hidden, never sent).
 // Rows are matched on `driveFileId`, never on DOCUMENT's own `id`.
-// `files: null` (the listing failed) only purges the other origin: the
-// current origin's rows are kept as they are, and simply not shown.
+// Returns the selected rows to re-export — never an unselected one (NFR8).
 function syncDriveRows(
   projectId: string,
-  origin: DriveOrigin | null,
-  files: DriveFile[] | null,
-): void {
+  origin: DriveOrigin,
+  files: DriveFile[],
+): StaleContextRow[] {
   const isProjectDriveRow = and(
     eq(document.projectId, projectId),
     eq(document.source, 'drive'),
   );
 
-  db.transaction((tx) => {
+  return db.transaction((tx) => {
     tx.delete(document)
-      .where(
-        origin === null
-          ? isProjectDriveRow
-          : and(isProjectDriveRow, or(isNull(document.origin), ne(document.origin, origin))),
-      )
+      .where(and(isProjectDriveRow, isNull(document.origin)))
       .run();
 
-    if (origin === null || files === null) return;
-
     const existing = tx
-      .select({ id: document.id, driveFileId: document.driveFileId })
+      .select({
+        id: document.id,
+        driveFileId: document.driveFileId,
+        content: document.content,
+        usedAsContext: document.usedAsContext,
+        driveModifiedTime: document.driveModifiedTime,
+      })
       .from(document)
-      .where(isProjectDriveRow)
+      .where(and(isProjectDriveRow, eq(document.origin, origin)))
       .all();
-    const rowIdByFileId = new Map<string, string>();
+    const rowByFileId = new Map<string, (typeof existing)[number]>();
     for (const row of existing) {
-      if (row.driveFileId) rowIdByFileId.set(row.driveFileId, row.id);
+      if (row.driveFileId) rowByFileId.set(row.driveFileId, row);
     }
 
+    const stale: StaleContextRow[] = [];
     const listedFileIds = new Set<string>();
     for (const file of files) {
       if (listedFileIds.has(file.id)) continue;
       listedFileIds.add(file.id);
 
-      const rowId = rowIdByFileId.get(file.id);
-      if (rowId) {
+      const row = rowByFileId.get(file.id);
+      if (row) {
+        const needsExport =
+          row.usedAsContext &&
+          isExportableMimeType(file.mimeType) &&
+          row.driveModifiedTime !== file.modifiedTime;
+        if (needsExport) {
+          stale.push({ rowId: row.id, driveFileId: file.id, modifiedTime: file.modifiedTime });
+        }
         tx.update(document)
-          .set({ name: file.name, mimeType: file.mimeType, folderPath: file.folderPath })
-          .where(eq(document.id, rowId))
+          .set({
+            name: file.name,
+            mimeType: file.mimeType,
+            folderPath: file.folderPath,
+            ...(needsExport ? {} : { driveModifiedTime: file.modifiedTime }),
+          })
+          .where(eq(document.id, row.id))
           .run();
       } else {
         tx.insert(document)
@@ -160,6 +224,7 @@ function syncDriveRows(
             driveFileId: file.id,
             mimeType: file.mimeType,
             origin,
+            driveModifiedTime: file.modifiedTime,
           })
           .run();
       }
@@ -170,7 +235,53 @@ function syncDriveRows(
         tx.delete(document).where(eq(document.id, row.id)).run();
       }
     }
+
+    return stale;
   });
+}
+
+// Story 5.7 — at most 20,000 characters of a document are ever sent
+// (`skills/buildRequest.ts`); an export (up to 10 MB) is stored cut a
+// little above that, never half of a surrogate pair.
+const MAX_STORED_EXPORT_CHARS = 25_000;
+
+function capStoredText(text: string): string {
+  if (text.length <= MAX_STORED_EXPORT_CHARS) return text;
+  let end = MAX_STORED_EXPORT_CHARS;
+  const last = text.charCodeAt(end - 1);
+  if (last >= 0xd800 && last <= 0xdbff) end -= 1;
+  return text.slice(0, end);
+}
+
+// Story 5.7 — re-exports the selected files the resync found stale. On
+// success, `content` and `driveModifiedTime` are written together, and
+// only if the row is still selected (a deselection in between wins). On
+// failure the old text is kept and the failure logged; the unchanged
+// `driveModifiedTime` makes the next resync try again. Stops at the first
+// `token_revoked` (the connection is then deleted).
+async function refreshStaleContextRows(
+  provider: DriveProvider,
+  refreshToken: string | null,
+  stale: StaleContextRow[],
+): Promise<void> {
+  for (const row of stale) {
+    const result = await provider.exportText(row.driveFileId);
+    if (!result.ok) {
+      console.error('listDocuments: context document refresh failed, old text kept', {
+        documentId: row.rowId,
+        error: result.error,
+      });
+      if (result.error === 'token_revoked') {
+        if (refreshToken) deleteRevokedGoogleConnection(refreshToken);
+        return;
+      }
+      continue;
+    }
+    db.update(document)
+      .set({ content: capStoredText(result.data), driveModifiedTime: row.modifiedTime })
+      .where(and(eq(document.id, row.rowId), eq(document.usedAsContext, true)))
+      .run();
+  }
 }
 
 export async function listDocuments(
@@ -186,51 +297,45 @@ export async function listDocuments(
     }
 
     const mode = await resolveDriveMode();
-    // Read server-side only, straight into the factory: the token never
-    // leaves this function, and nothing returned below carries it.
-    const tokenRead =
-      mode === 'connected' || mode === 'disconnected'
-        ? readGoogleRefreshToken()
-        : ({ ok: true, refreshToken: null } as const);
-    const refreshToken = tokenRead.ok ? tokenRead.refreshToken : null;
+    const origin = originForMode(mode);
 
     // `resolveDriveMode` degrades an unreadable demo flag or connection
-    // row to `disconnected`. Only a confirmed absence of connection (demo
-    // flag readable and off, connection row read and absent) may purge
-    // the drive rows: a read failure shows the generic error and leaves
-    // every row untouched (Story 5.7's selections survive it).
-    let readFailed = !tokenRead.ok;
-    if (mode === 'disconnected' && !readFailed) {
+    // row to `disconnected`: the panel then shows the generic error rather
+    // than the connection prompt. No drive row is ever written or deleted
+    // outside a successful listing (Story 5.7: rows are hidden, not
+    // purged).
+    let readFailed = false;
+    if (mode === 'disconnected') {
       const demoModeResult = await getDemoModeActive();
-      readFailed = !demoModeResult.ok || demoModeResult.data || refreshToken !== null;
+      const tokenRead = readGoogleRefreshToken();
+      readFailed =
+        !demoModeResult.ok ||
+        demoModeResult.data ||
+        !tokenRead.ok ||
+        tokenRead.refreshToken !== null;
     }
+    const current = readFailed ? null : currentDriveProvider(mode);
 
     let driveStatus: DriveStatus;
-    if (readFailed) {
+    if (!current) {
       driveStatus = 'error';
     } else {
-      const result = await createDriveProvider(mode, refreshToken).listFiles(
-        projectRow.name,
-      );
+      const { provider, refreshToken } = current;
+      const result = await provider.listFiles(projectRow.name);
 
-      if (result.ok) {
+      if (result.ok && origin) {
         driveStatus = 'ok';
-        syncDriveRows(projectId, mode === 'demo' ? 'mock' : 'google', result.data);
+        const stale = syncDriveRows(projectId, origin, result.data);
+        await refreshStaleContextRows(provider, refreshToken, stale);
+      } else if (result.ok) {
+        // Unreachable: only `demo` and `connected` list files.
+        driveStatus = 'error';
       } else {
         if (result.error === 'token_revoked' && refreshToken) {
           // AD-1: a dead connection is removed, back to `disconnected`.
           deleteRevokedGoogleConnection(refreshToken);
         }
         driveStatus = toDriveStatus(result.error);
-        // No account (or no configuration): no drive rows may remain. Any
-        // other failure (folder missing/duplicate, quota, network…) only
-        // purges the other origin's rows; the current origin's are kept
-        // (Story 5.7's selections survive a transient error) and hidden.
-        if (driveStatus === 'disconnected' || driveStatus === 'unconfigured') {
-          syncDriveRows(projectId, null, null);
-        } else {
-          syncDriveRows(projectId, mode === 'demo' ? 'mock' : 'google', null);
-        }
       }
     }
 
@@ -240,18 +345,38 @@ export async function listDocuments(
         name: document.name,
         source: document.source,
         folderPath: document.folderPath,
+        origin: document.origin,
+        mimeType: document.mimeType,
+        usedAsContext: document.usedAsContext,
       })
       .from(document)
       .where(eq(document.projectId, projectId))
       .orderBy(sql`rowid`);
 
-    const driveRows =
-      driveStatus === 'ok'
+    const driveRows: DocumentSummary[] =
+      driveStatus === 'ok' && origin
         ? rows
-            .filter((row) => row.source === 'drive')
+            .filter((row) => row.source === 'drive' && row.origin === origin)
             .sort((a, b) => a.name.localeCompare(b.name, 'fr'))
+            .map((row) => ({
+              id: row.id,
+              name: row.name,
+              source: 'drive',
+              folderPath: row.folderPath,
+              contextSelection: isExportableMimeType(row.mimeType) ? 'selectable' : 'unreadable',
+              usedAsContext: row.usedAsContext,
+            }))
         : [];
-    const manualRows = rows.filter((row) => row.source === 'manual');
+    const manualRows: DocumentSummary[] = rows
+      .filter((row) => row.source === 'manual')
+      .map((row) => ({
+        id: row.id,
+        name: row.name,
+        source: 'manual',
+        folderPath: row.folderPath,
+        contextSelection: null,
+        usedAsContext: true,
+      }));
 
     return {
       ok: true,
@@ -262,6 +387,138 @@ export async function listDocuments(
     return {
       ok: false,
       error: 'Impossible de récupérer les documents du projet.',
+    };
+  }
+}
+
+// Story 5.7 — "Utiliser comme contexte" on a drive file. Refused outside
+// the `connected` and `demo` modes, for a row of another origin than the
+// current mode's, and for a type that cannot be exported. Selecting
+// exports the file's text into `content` first (the only export of a file
+// outside the resync, NFR8): on failure nothing changes and the box stays
+// unchecked. Deselecting empties `content`, so the text is no longer sent.
+export async function setDocumentUsedAsContext({
+  documentId,
+  used,
+}: {
+  documentId: string;
+  used: boolean;
+}): Promise<ActionResult<void>> {
+  const refused = {
+    ok: false as const,
+    error: 'Ce fichier ne peut pas être utilisé comme contexte.',
+  };
+  const exportFailed = {
+    ok: false as const,
+    error: "Impossible de lire ce fichier pour l'agent.",
+  };
+
+  try {
+    const [row] = await db
+      .select({
+        source: document.source,
+        origin: document.origin,
+        mimeType: document.mimeType,
+        driveFileId: document.driveFileId,
+      })
+      .from(document)
+      .where(eq(document.id, documentId));
+
+    const mode = await resolveDriveMode();
+    const origin = originForMode(mode);
+    if (
+      !row ||
+      row.source !== 'drive' ||
+      !row.driveFileId ||
+      origin === null ||
+      row.origin !== origin ||
+      !isExportableMimeType(row.mimeType)
+    ) {
+      return refused;
+    }
+
+    if (!used) {
+      db.update(document)
+        .set({ usedAsContext: false, content: '' })
+        .where(eq(document.id, documentId))
+        .run();
+      return { ok: true, data: undefined };
+    }
+
+    const current = currentDriveProvider(mode);
+    if (!current) return exportFailed;
+
+    const result = await current.provider.exportText(row.driveFileId);
+    if (!result.ok) {
+      if (result.error === 'token_revoked' && current.refreshToken) {
+        deleteRevokedGoogleConnection(current.refreshToken);
+      }
+      return exportFailed;
+    }
+
+    const updated = db
+      .update(document)
+      // `driveModifiedTime` NULL: the export's own date is unknown, so the
+      // next resync re-exports once and stores the file's real date.
+      .set({ usedAsContext: true, content: capStoredText(result.data), driveModifiedTime: null })
+      .where(eq(document.id, documentId))
+      .run();
+    // The row vanished in between (concurrent resync): nothing selected.
+    if (updated.changes === 0) return exportFailed;
+    return { ok: true, data: undefined };
+  } catch (error) {
+    console.error('setDocumentUsedAsContext failed', error);
+    return exportFailed;
+  }
+}
+
+export type AgentContext = {
+  demoModeActive: boolean;
+  contextDocuments: ContextDocument[];
+};
+
+// Story 5.7 (AD-11) — what every action that calls the agent passes to
+// `sendToAgent`: the demo flag (from the drive mode, so it is read once;
+// an unreadable flag degrades to the real path, as before) and the
+// project's context documents — every `manual` document, plus the drive
+// files selected as context whose `origin` matches the current mode
+// (none outside `demo`/`connected`). A document with an empty text is
+// skipped. The size caps are applied by `skills/buildRequest.ts`.
+// Never fails: a failed read is logged and degrades to no context
+// documents, with the demo flag read on its own (`false` if that fails
+// too, the previous behavior), so the scripted demo chat is unaffected.
+export async function getAgentContext(projectId: string): Promise<AgentContext> {
+  try {
+    const mode = await resolveDriveMode();
+    const origin = originForMode(mode);
+
+    const rows = await db
+      .select({ name: document.name, content: document.content })
+      .from(document)
+      .where(
+        and(
+          eq(document.projectId, projectId),
+          eq(document.usedAsContext, true),
+          origin === null
+            ? eq(document.source, 'manual')
+            : or(
+                eq(document.source, 'manual'),
+                and(eq(document.source, 'drive'), eq(document.origin, origin)),
+              ),
+        ),
+      )
+      .orderBy(sql`rowid`);
+
+    return {
+      demoModeActive: mode === 'demo',
+      contextDocuments: rows.filter((row) => row.content !== ''),
+    };
+  } catch (error) {
+    console.error('getAgentContext failed, continuing without context documents', error);
+    const demoModeResult = await getDemoModeActive();
+    return {
+      demoModeActive: demoModeResult.ok ? demoModeResult.data : false,
+      contextDocuments: [],
     };
   }
 }
@@ -319,6 +576,8 @@ export async function addManualDocument({
         name: trimmedName,
         source: 'manual',
         folderPath: trimmedFolderPath,
+        contextSelection: null,
+        usedAsContext: true,
       },
     };
   } catch (error) {

@@ -3,6 +3,7 @@
 import { and, eq } from 'drizzle-orm';
 
 import type { ActionResult } from '@/actions/types';
+import { getAgentContext } from '@/actions/document';
 import { listLoadedSkillInstructions } from '@/actions/skill';
 import { db } from '@/db/client';
 import { livrable, suggestion } from '@/db/schema';
@@ -444,11 +445,14 @@ export async function reworkSuggestion(
       throw new Error(loadedSkillsResult.error);
     }
 
+    // Story 5.7 — demo flag and context documents, passed to the agent
+    // (never fails: a failed read degrades to no documents).
     const reworkResult = await reworkSuggestionContent({
       blockText,
       suggestionText: previousText,
       instructions: trimmedInstructions,
       loadedSkills: loadedSkillsResult.data,
+      ...(await getAgentContext(livrableRow.projectId)),
     });
 
     if (!reworkResult.ok) {

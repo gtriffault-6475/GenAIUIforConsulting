@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-14-2026 15:47
-last_updated: 10-02-2026 16:30
+last_updated: 10-02-2026 18:00
 project: GenAI4Consulting
 project_key: NOKEY
 tracking_system: file-system
@@ -73,7 +73,7 @@ development_status:
   5-4-suggestions-ia-sur-une-présentation-importée: backlog
   5-5-enregistrement-dans-drive: backlog
   5-6-création-d-une-présentation-depuis-la-conversation: backlog
-  5-7-documents-de-contexte-envoyés-à-l-agent: backlog
+  5-7-documents-de-contexte-envoyés-à-l-agent: review
   epic-5-retrospective: optional
 action_items:
   - id: "epic-1-retro-item-1-implémenter-button-ai-primary-ai-suggest"
