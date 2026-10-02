@@ -1,38 +1,72 @@
 // Single wiring point (AD-1): the only place a concrete adapter is
 // imported. `actions/` imports providers from here, never from
 // `integrations/mock/*` or a future `integrations/real/*` directly.
+import { createGoogleDriveProvider } from './google/drive';
 import {
   GOOGLE_OAUTH_REDIRECT_URI,
   createGoogleAuthUrl,
   exchangeGoogleAuthCode,
   isGoogleConfigured,
+  readGoogleConfig,
   revokeGoogleToken,
 } from './google/oauth';
 import { mockDriveProvider } from './mock/drive-provider';
 import { mockMattermostProvider } from './mock/mattermost-provider';
 import { mockProjectProvider } from './mock/project-provider';
-import type { DriveMode, DriveProvider } from './ports/drive-provider';
+import type { DriveError, DriveMode, DriveProvider } from './ports/drive-provider';
 import type { MattermostProvider } from './ports/mattermost-provider';
 import type { ProjectProvider } from './ports/project-provider';
 
-export type { DriveMode } from './ports/drive-provider';
+export type {
+  DriveError,
+  DriveFile,
+  DriveMode,
+  DriveResult,
+} from './ports/drive-provider';
 export type { GoogleOAuthExchangeResult } from './google/oauth';
 
 export const projectProvider: ProjectProvider = mockProjectProvider;
 export const mattermostProvider: MattermostProvider = mockMattermostProvider;
 
-// Story 5.1 — replaces the former `driveProvider` constant. The mode comes
-// from `actions/drive-mode.ts`'s `resolveDriveMode` (the single decision
-// point). Decision 1 of the spec (Checkpoint 1): until Story 5.2 wires
-// `integrations/google/*`, every mode still returns the simulated adapter,
-// so the Contexte and Livrables panels stay unchanged in every mode.
-export function createDriveProvider(mode: DriveMode): DriveProvider {
+// A provider that only ever answers one error: what the panel shows
+// outside demo mode when there is no usable Google account.
+function failingDriveProvider(error: DriveError): DriveProvider {
+  return {
+    async listFiles() {
+      return { ok: false, error };
+    },
+  };
+}
+
+// Story 5.1 replaced the former `driveProvider` constant with this
+// factory; Story 5.2 wires the real adapters. The mode comes from
+// `actions/drive-mode.ts`'s `resolveDriveMode` (the single decision
+// point):
+// - `demo` → the simulated adapter (never any Google call);
+// - `connected` → the Google adapter, built with the stored refresh
+//   token (read server-side by `actions/google-credentials.ts`, never
+//   through a Server Action);
+// - `disconnected` / `unconfigured` → a provider answering that error, so
+//   no simulated file ever shows outside demo mode.
+// A `connected` call without a token, or whose configuration vanished in
+// between, degrades to the matching error rather than calling Google.
+export function createDriveProvider(
+  mode: DriveMode,
+  refreshToken: string | null = null,
+): DriveProvider {
   switch (mode) {
     case 'demo':
-    case 'unconfigured':
-    case 'disconnected':
-    case 'connected':
       return mockDriveProvider;
+    case 'unconfigured':
+      return failingDriveProvider('unconfigured');
+    case 'disconnected':
+      return failingDriveProvider('disconnected');
+    case 'connected': {
+      const config = readGoogleConfig();
+      if (!config) return failingDriveProvider('unconfigured');
+      if (!refreshToken) return failingDriveProvider('disconnected');
+      return createGoogleDriveProvider(config, refreshToken);
+    }
   }
 }
 

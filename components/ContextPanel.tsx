@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 
-import type { DocumentSummary } from '@/actions/document';
+import type { DocumentSummary, DriveStatus } from '@/actions/document';
 import { AddDocumentForm } from '@/components/AddDocumentForm';
 import { useOverlay } from '@/components/OverlayProvider';
 
@@ -16,15 +16,27 @@ const OVERLAY_ID = 'add-document-form';
 // `card`/`text-label`/`text-caption`/`nav-row` tokens (app/globals.css)
 // rather than introducing new component classes for the list itself;
 // only layout-specific spacing (not a reusable token) is set inline here.
+//
+// Story 5.2 — the drive part is the project's real Drive folder when a
+// Google account is connected, the simulated one in demo mode, and a
+// state message otherwise (EXPERIENCE.md "State Patterns"); the documents
+// added outside the drive always follow it. `driveStatus` is a code from
+// `listDocuments`; the French copy lives here.
 export function ContextPanel({
   projectId,
+  projectName,
   documents,
+  driveStatus,
 }: {
   projectId: string;
+  projectName: string;
   // `null` means the document list failed to load — distinct from a
   // genuinely empty list, which gets its own explicit message below.
   // Mirrors the same convention as `ProjectSelector`'s `projects` prop.
+  // Otherwise: drive files first (only when `driveStatus` is `ok`), then
+  // the documents added outside the drive.
   documents: DocumentSummary[] | null;
+  driveStatus: DriveStatus | null;
 }) {
   const { openOverlay, closeOverlay, isOverlayOpen, contentRef } = useOverlay();
   const router = useRouter();
@@ -90,18 +102,34 @@ export function ContextPanel({
         )}
       </div>
 
+      {documents !== null && driveStatus !== null && driveStatus !== 'ok' && (
+        <DriveNotice status={driveStatus} projectName={projectName} />
+      )}
+
       {documents === null ? (
         <p className="text-caption" style={{ marginTop: 'var(--space-3)' }}>
           Impossible de charger les documents du projet.
         </p>
       ) : documents.length === 0 ? (
-        <p className="text-caption" style={{ marginTop: 'var(--space-3)' }}>
-          Aucun document pour ce projet.
-        </p>
+        driveStatus === 'ok' && (
+          <p className="text-caption" style={{ marginTop: 'var(--space-3)' }}>
+            Aucun document pour ce projet.
+          </p>
+        )
       ) : (
         <div style={{ marginTop: 'var(--space-2)' }}>
-          {groupByFolder(documents).map(([folderPath, docs]) => (
-            <div key={folderPath ?? ''} style={{ marginTop: 'var(--space-3)' }}>
+          {[
+            ...groupByFolder(documents.filter((doc) => doc.source === 'drive')).map(
+              (group) => ['drive', group] as const,
+            ),
+            ...groupByFolder(documents.filter((doc) => doc.source === 'manual')).map(
+              (group) => ['manual', group] as const,
+            ),
+          ].map(([source, [folderPath, docs]]) => (
+            <div
+              key={`${source}:${folderPath ?? ''}`}
+              style={{ marginTop: 'var(--space-3)' }}
+            >
               {folderPath && (
                 <span className="text-caption">{folderPath}</span>
               )}
@@ -134,6 +162,41 @@ export function ContextPanel({
         </div>
       )}
     </section>
+  );
+}
+
+// The drive part's state message, in place of the drive files (the
+// documents added outside the drive still follow). Exact copy from
+// EXPERIENCE.md "State Patterns". `role="status"`: it can appear after a
+// refresh (e.g. a revoked connection), and is not an error the consultant
+// caused.
+function DriveNotice({
+  status,
+  projectName,
+}: {
+  status: Exclude<DriveStatus, 'ok'>;
+  projectName: string;
+}) {
+  const message = {
+    disconnected: 'Connectez Google Drive pour afficher les fichiers du projet.',
+    unconfigured: "Google Drive n'est pas configuré pour cette installation.",
+    folder_missing: `Aucun dossier « ${projectName} » dans le Drive racine.`,
+    folder_duplicate: `Plusieurs dossiers portent le nom « ${projectName} ».`,
+    error: 'Impossible de récupérer les fichiers du Drive du projet.',
+  }[status];
+
+  return (
+    <div className="context-drive-notice" role="status">
+      <p className="text-caption">{message}</p>
+      {status === 'disconnected' && (
+        // Same server-side OAuth entry point as the top bar's button
+        // (`components/GoogleConnection.tsx`): a full navigation, not a
+        // Server Action.
+        <a className="button-neutral" href="/api/google/oauth/start">
+          Connecter Google Drive
+        </a>
+      )}
+    </div>
   );
 }
 

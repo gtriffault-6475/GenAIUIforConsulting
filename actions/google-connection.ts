@@ -8,8 +8,10 @@ import { db } from '@/db/client';
 import { GOOGLE_CONNECTION_ID, googleConnection } from '@/db/schema';
 import { googleOAuth } from '@/integrations';
 
-// Story 5.1 — Connexion du compte Google (AD-12). AD-2: this is the only
-// file allowed to read or write GOOGLE_CONNECTION. The OAuth callback
+// Story 5.1 — Connexion du compte Google (AD-12). AD-2: this file and
+// `actions/google-credentials.ts` (Story 5.2 — the token for the Drive
+// adapter, deliberately outside any `'use server'` module) are the only
+// ones allowed to read or write GOOGLE_CONNECTION. The OAuth callback
 // route (`app/api/google/oauth/callback/route.ts`, the one AD-2 exception
 // to "mutations go through Server Actions") writes only through
 // `completeGoogleConnection` below.

@@ -528,8 +528,8 @@ So that elle puisse accéder au Drive de mes projets en mon nom.
 ### Story 5.2: Dossier Drive du projet et panneau Contexte réel
 
 As a consultant,
-I want que le panneau Contexte montre les vrais fichiers du dossier Drive du projet et que je choisisse ceux que l'agent utilise,
-So that l'agent travaille avec les vrais documents, sans rien envoyer que je n'aie choisi.
+I want que le panneau Contexte montre les vrais fichiers du dossier Drive du projet,
+So that je retrouve dans l'app les documents de l'équipe.
 
 **Acceptance Criteria:**
 
@@ -537,19 +537,14 @@ So that l'agent travaille avec les vrais documents, sans rien envoyer que je n'a
 **When** je sélectionne le projet
 **Then** le panneau Contexte liste les fichiers présents directement dans ce dossier, puis les documents ajoutés hors-drive
 
-**Given** un Google Docs, Slides ou Sheets du dossier
-**When** je coche "Utiliser comme contexte"
-**Then** son texte est exporté et envoyé à l'agent avec les prochains messages ; décocher l'en retire
-**And** les autres formats portent "non lisible par l'agent", sans case
-
-**Given** un document ajouté hors-drive (FR-4)
-**Then** il est envoyé à l'agent comme contexte, sans sélection (mise en conformité de FR-4, jamais réalisée jusqu'ici)
-
 **Given** Google non connecté hors démo, dossier racine non configuré, ou dossier absent/en double
 **Then** le panneau affiche le message correspondant d'`EXPERIENCE.md`, aucun contenu simulé, et l'app ne crée jamais de dossier
 
-**And** la resynchronisation au chargement du projet met à jour la liste, supprime les fichiers disparus, purge les lignes d'une autre origine que le mode courant, rafraîchit le texte des fichiers sélectionnés, et ne touche jamais au choix du consultant (AD-1)
-**And** les documents de contexte sont transmis à `buildRequest` par l'action appelante, chacun sous un plafond de taille signalé (AD-11)
+**Given** le mode démo
+**Then** le panneau Contexte reste simulé, comme aujourd'hui
+
+**And** la resynchronisation au chargement du projet met à jour la liste, supprime les fichiers disparus et purge les lignes d'une autre origine que le mode courant, sans jamais toucher `content` ni `usedAsContext` (AD-1)
+**And** `DOCUMENT` gagne `driveFileId`, `mimeType`, `origin` et `usedAsContext` ; le port passe de `listDocuments(projectId)` à `listFiles(projectName)` à résultats et erreurs typés ; `token_revoked` supprime la connexion Google
 
 ### Story 5.3: Import d'une présentation comme livrable
 
@@ -631,4 +626,25 @@ So that je parte d'un premier jet structuré.
 
 **And** l'outil de proposition n'est offert à l'agent qu'en mode `connected` (AD-14)
 **And** prérequis avant la spec : OQ-7 (mise en page / modèle OCTO) tranchée ; la forme et la persistance de la proposition sont décidées dans la spec de cette story
+
+### Story 5.7: Documents de contexte envoyés à l'agent
+
+As a consultant,
+I want choisir les fichiers du Drive que l'agent utilise, et que mes documents ajoutés à la main lui servent enfin de contexte,
+So that l'agent travaille avec les bons documents, sans rien envoyer que je n'aie choisi.
+
+*Découpée de la Story 5.2 le 2026-10-02 ; à construire juste après la 5.2.*
+
+**Acceptance Criteria:**
+
+**Given** un Google Docs, Slides ou Sheets du dossier
+**When** je coche "Utiliser comme contexte"
+**Then** son texte est exporté et envoyé à l'agent avec les prochains messages ; décocher l'en retire
+**And** les autres formats portent "non lisible par l'agent", sans case
+
+**Given** un document ajouté hors-drive (FR-4)
+**Then** il est envoyé à l'agent comme contexte, sans sélection (mise en conformité de FR-4, jamais réalisée jusqu'ici)
+
+**And** le texte des fichiers sélectionnés est rafraîchi au chargement du projet ; un fichier non sélectionné n'est jamais exporté (AD-1)
+**And** les documents de contexte sont transmis à `buildRequest` par l'action appelante, chacun sous un plafond de taille signalé ; `buildRequest` ne lit plus la base (AD-11)
 

@@ -1,15 +1,28 @@
-import type { DriveProvider, OctopodDocument } from '../ports/drive-provider';
+import type { DriveFile, DriveProvider } from '../ports/drive-provider';
 import { withLatency } from './with-latency';
 
-// Round-1 seed data: a handful of documents per seed project (ids match
-// `integrations/mock/project-provider.ts`), credible enough to read as a
-// real drive listing rather than a placeholder — no "mock"/"test"
-// wording, no obviously-fake names.
-const SEED_DOCUMENTS: Record<string, OctopodDocument[]> = {
-  'proj-acme-rfp': [
+const PDF = 'application/pdf';
+const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+// Simulated drive (demo mode only, never shown outside it). Story 5.2:
+// indexed by project NAME — the port resolves the project folder by name,
+// like the Google adapter — matching `integrations/mock/project-provider.ts`.
+// Credible enough to read as a real drive listing rather than a
+// placeholder — no "mock"/"test" wording, no obviously-fake names.
+// `folderPath` keeps the simulated folder grouping the demo has always
+// shown. `content` is not part of `DriveFile`: it is kept here for Story
+// 5.7's simulated text export, and never written to DOCUMENT by the
+// resync (new drive rows start with an empty `content`).
+type SeedFile = DriveFile & { content: string };
+
+const SEED_FILES: Record<string, SeedFile[]> = {
+  'Réponse RFP — Acme Corp': [
     {
       id: 'doc-acme-rfp',
       name: 'RFP — Acme Corp.pdf',
+      mimeType: PDF,
+      modifiedTime: '2026-09-01T09:00:00.000Z',
       folderPath: null,
       content:
         "Cahier des charges de l'appel d'offres pour la refonte de la plateforme de gestion des achats d'Acme Corp : périmètre fonctionnel, contraintes techniques et calendrier de réponse attendu.",
@@ -17,6 +30,8 @@ const SEED_DOCUMENTS: Record<string, OctopodDocument[]> = {
     {
       id: 'doc-acme-cr-achats',
       name: 'CR call achats.docx',
+      mimeType: DOCX,
+      modifiedTime: '2026-09-02T09:00:00.000Z',
       folderPath: 'Comptes-rendus',
       content:
         "Compte-rendu de l'appel avec la direction achats d'Acme Corp : priorités budgétaires, jalons de décision et interlocuteurs côté client.",
@@ -24,15 +39,19 @@ const SEED_DOCUMENTS: Record<string, OctopodDocument[]> = {
     {
       id: 'doc-acme-synthese',
       name: 'Note de synthèse client.pdf',
+      mimeType: PDF,
+      modifiedTime: '2026-09-03T09:00:00.000Z',
       folderPath: 'Synthèses',
       content:
         "Synthèse des échanges préliminaires avec Acme Corp avant le lancement officiel de l'appel d'offres.",
     },
   ],
-  'proj-audit-mission': [
+  'Audit interne — Mission Client': [
     {
       id: 'doc-audit-rapport',
       name: "Rapport d'audit interne — v0.docx",
+      mimeType: DOCX,
+      modifiedTime: '2026-09-04T09:00:00.000Z',
       folderPath: null,
       content:
         "Version de travail du rapport d'audit interne : constats préliminaires sur les processus de contrôle et premières recommandations.",
@@ -40,6 +59,8 @@ const SEED_DOCUMENTS: Record<string, OctopodDocument[]> = {
     {
       id: 'doc-audit-cr-direction',
       name: 'CR entretien direction financière.docx',
+      mimeType: DOCX,
+      modifiedTime: '2026-09-05T09:00:00.000Z',
       folderPath: 'Comptes-rendus',
       content:
         "Compte-rendu de l'entretien avec la direction financière : points de vigilance identifiés et périmètre des tests à mener.",
@@ -47,6 +68,8 @@ const SEED_DOCUMENTS: Record<string, OctopodDocument[]> = {
     {
       id: 'doc-audit-referentiel',
       name: 'Référentiel de contrôle interne.xlsx',
+      mimeType: XLSX,
+      modifiedTime: '2026-09-06T09:00:00.000Z',
       folderPath: 'Référentiels',
       content:
         "Référentiel des contrôles internes en vigueur, utilisé comme base de comparaison pour la mission d'audit.",
@@ -55,7 +78,19 @@ const SEED_DOCUMENTS: Record<string, OctopodDocument[]> = {
 };
 
 export const mockDriveProvider: DriveProvider = {
-  async listDocuments(projectId) {
-    return withLatency(SEED_DOCUMENTS[projectId] ?? []);
+  async listFiles(projectName) {
+    // An unknown project has an empty simulated folder (as before this
+    // story) rather than `folder_missing`: the demo never shows a Google
+    // message.
+    const files: DriveFile[] = (SEED_FILES[projectName] ?? []).map(
+      ({ id, name, mimeType, modifiedTime, folderPath }) => ({
+        id,
+        name,
+        mimeType,
+        modifiedTime,
+        folderPath,
+      }),
+    );
+    return withLatency({ ok: true as const, data: files });
   },
 };
