@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-14-2026 15:47
-last_updated: 10-02-2026 14:00
+last_updated: 10-02-2026 15:00
 project: GenAI4Consulting
 project_key: NOKEY
 tracking_system: file-system
@@ -73,6 +73,7 @@ development_status:
   5-4-suggestions-ia-sur-une-présentation-importée: backlog
   5-5-enregistrement-dans-drive: backlog
   5-6-création-d-une-présentation-depuis-la-conversation: backlog
+  5-7-documents-de-contexte-envoyés-à-l-agent: backlog
   epic-5-retrospective: optional
 action_items:
   - id: "epic-1-retro-item-1-implémenter-button-ai-primary-ai-suggest"
@@ -259,9 +260,9 @@ action_items:
     ref: "_bmad-output/planning-artifacts/epics.md"
   - id: "epic-5-readiness-item-2-taille-de-la-story-5-2"
     epic: 5
-    action: "Story 5.2 : surveiller la taille de la spec (Contexte réel + sélection + FR-4
-      + resynchro + AD-11) et la découper si elle dépasse la cible (readiness 2026-10-02,
-      réserve 4)"
+    action: "Story 5.2 : surveiller la taille de la spec (Contexte réel + sélection
+      + FR-4 + resynchro + AD-11) et la découper si elle dépasse la cible (readiness
+      2026-10-02, réserve 4)"
     owner: "dev loop"
     status: open
     ref: "_bmad-output/planning-artifacts/epics.md"
