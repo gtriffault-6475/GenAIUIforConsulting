@@ -23,9 +23,12 @@ export type {
   DriveMode,
   DriveProvider,
   DriveResult,
+  PresentationContent,
+  PresentationSlide,
+  PresentationTextBox,
 } from './ports/drive-provider';
 export type { GoogleOAuthExchangeResult } from './google/oauth';
-export { isExportableMimeType } from './ports/drive-provider';
+export { PRESENTATION_MIME_TYPE, isExportableMimeType } from './ports/drive-provider';
 
 export const projectProvider: ProjectProvider = mockProjectProvider;
 export const mattermostProvider: MattermostProvider = mockMattermostProvider;
@@ -38,6 +41,9 @@ function failingDriveProvider(error: DriveError): DriveProvider {
       return { ok: false, error };
     },
     async exportText() {
+      return { ok: false, error };
+    },
+    async readPresentation() {
       return { ok: false, error };
     },
   };

@@ -43,12 +43,15 @@ export function resolveAnchorPosition(
 // which always reads the anchor from the same livrable it is about to
 // update, but defensive per `resolveAnchorPosition`'s own precedent
 // above), returns `blocks` unchanged rather than throwing.
-export function applyAcceptedSuggestion(
-  blocks: { id: string; text: string }[],
+//
+// Story 5.3: every other field of the block (a drive block's `slideId`,
+// `slideNumber` and `driveText`) is carried over too.
+export function applyAcceptedSuggestion<T extends { id: string; text: string }>(
+  blocks: T[],
   anchorRef: string,
   newText: string,
-): { id: string; text: string }[] {
+): T[] {
   return blocks.map((block) =>
-    block.id === anchorRef ? { id: block.id, text: newText } : block,
+    block.id === anchorRef ? { ...block, text: newText } : block,
   );
 }

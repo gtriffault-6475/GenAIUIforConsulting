@@ -2,6 +2,7 @@
 
 import { and, eq, isNull, or, sql } from 'drizzle-orm';
 
+import { currentDriveProvider } from '@/actions/current-drive-provider';
 import { getDemoModeActive } from '@/actions/demo';
 import { resolveDriveMode } from '@/actions/drive-mode';
 import {
@@ -12,7 +13,7 @@ import type { ActionResult } from '@/actions/types';
 import { db } from '@/db/client';
 import { document, project } from '@/db/schema';
 import {
-  createDriveProvider,
+  PRESENTATION_MIME_TYPE,
   isExportableMimeType,
   type DriveError,
   type DriveFile,
@@ -115,23 +116,6 @@ function originForMode(mode: DriveMode): DriveOrigin | null {
   if (mode === 'demo') return 'mock';
   if (mode === 'connected') return 'google';
   return null;
-}
-
-// The provider of the current mode, with the stored refresh token when
-// connected (read server-side straight into the factory, never returned).
-// `null` when the token could not be read.
-function currentDriveProvider(
-  mode: DriveMode,
-): { provider: DriveProvider; refreshToken: string | null } | null {
-  if (mode !== 'connected') {
-    return { provider: createDriveProvider(mode), refreshToken: null };
-  }
-  const tokenRead = readGoogleRefreshToken();
-  if (!tokenRead.ok) return null;
-  return {
-    provider: createDriveProvider(mode, tokenRead.refreshToken),
-    refreshToken: tokenRead.refreshToken,
-  };
 }
 
 // A selected file whose text must be exported again (Story 5.7): its
@@ -284,9 +268,33 @@ async function refreshStaleContextRows(
   }
 }
 
+// Story 5.3 (Checkpoint 1) — records which origin the last listing of the
+// project folder is valid for (`null` = failed), written only when the
+// value changes. Never throws: a failed write is logged, and leaves the
+// previous value (re-written by the next resync).
+function recordListingOrigin(projectId: string, value: DriveOrigin | null): void {
+  try {
+    const [row] = db
+      .select({ driveListingOrigin: project.driveListingOrigin })
+      .from(project)
+      .where(eq(project.id, projectId))
+      .all();
+    if (!row || row.driveListingOrigin === value) return;
+    db.update(project)
+      .set({ driveListingOrigin: value })
+      .where(eq(project.id, projectId))
+      .run();
+  } catch (error) {
+    console.error('recordListingOrigin failed', error);
+  }
+}
+
 export async function listDocuments(
   projectId: string,
 ): Promise<ActionResult<DocumentListing>> {
+  // The origin of the current mode once known (`demo`/`connected` only),
+  // so the error path below can invalidate the last listing.
+  let listingOrigin: DriveOrigin | null = null;
   try {
     const [projectRow] = await db
       .select({ name: project.name })
@@ -298,6 +306,7 @@ export async function listDocuments(
 
     const mode = await resolveDriveMode();
     const origin = originForMode(mode);
+    listingOrigin = origin;
 
     // `resolveDriveMode` degrades an unreadable demo flag or connection
     // row to `disconnected`: the panel then shows the generic error rather
@@ -319,13 +328,23 @@ export async function listDocuments(
     let driveStatus: DriveStatus;
     if (!current) {
       driveStatus = 'error';
+      // Connected with an unreadable token: no valid listing.
+      if (origin) recordListingOrigin(projectId, null);
     } else {
       const { provider, refreshToken } = current;
       const result = await provider.listFiles(projectRow.name);
 
+      // Story 5.3 (Checkpoint 1) — the outcome of a real listing of the
+      // folder, read by `getAgentContext` and `listDrivePresentations`.
+      // Only `demo` and `connected` list a folder: the `disconnected`/
+      // `unconfigured` providers' answer is not a listing and is never
+      // recorded. Valid for `origin` only once the resync has landed.
+      if (origin && !result.ok) recordListingOrigin(projectId, null);
+
       if (result.ok && origin) {
         driveStatus = 'ok';
         const stale = syncDriveRows(projectId, origin, result.data);
+        recordListingOrigin(projectId, origin);
         await refreshStaleContextRows(provider, refreshToken, stale);
       } else if (result.ok) {
         // Unreachable: only `demo` and `connected` list files.
@@ -384,6 +403,7 @@ export async function listDocuments(
     };
   } catch (error) {
     console.error('listDocuments failed', error);
+    if (listingOrigin) recordListingOrigin(projectId, null);
     return {
       ok: false,
       error: 'Impossible de récupérer les documents du projet.',
@@ -477,6 +497,109 @@ export type AgentContext = {
   contextDocuments: ContextDocument[];
 };
 
+// Story 5.3 — a Google Slides presentation of the project folder, as
+// listed by the last resync: what the Livrables panel offers to import.
+export type DrivePresentation = {
+  documentId: string;
+  driveFileId: string;
+  name: string;
+};
+
+// Story 5.3 — the presentations of the project folder (`DOCUMENT` rows of
+// origin `google` and type Google Slides), in name order. `null` when the
+// Livrables panel has no "Dans le Drive du projet" group: outside the
+// `connected` mode (never in demo mode), or when the last listing of the
+// folder is not a successful `google` one (the Contexte panel then shows
+// why). Reads only what the resync of `listDocuments` wrote; never calls
+// Google itself.
+export async function listDrivePresentations(
+  projectId: string,
+): Promise<ActionResult<DrivePresentation[] | null>> {
+  try {
+    const mode = await resolveDriveMode();
+    if (mode !== 'connected') return { ok: true, data: null };
+
+    const [projectRow] = await db
+      .select({ driveListingOrigin: project.driveListingOrigin })
+      .from(project)
+      .where(eq(project.id, projectId));
+    if (projectRow?.driveListingOrigin !== 'google') return { ok: true, data: null };
+
+    const rows = await db
+      .select({ documentId: document.id, driveFileId: document.driveFileId, name: document.name })
+      .from(document)
+      .where(
+        and(
+          eq(document.projectId, projectId),
+          eq(document.source, 'drive'),
+          eq(document.origin, 'google'),
+          eq(document.mimeType, PRESENTATION_MIME_TYPE),
+        ),
+      );
+
+    const presentations: DrivePresentation[] = [];
+    for (const row of rows) {
+      if (row.driveFileId) {
+        presentations.push({ documentId: row.documentId, driveFileId: row.driveFileId, name: row.name });
+      }
+    }
+    presentations.sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+    return { ok: true, data: presentations };
+  } catch (error) {
+    console.error('listDrivePresentations failed', error);
+    return { ok: false, error: 'Impossible de récupérer les présentations du dossier Drive.' };
+  }
+}
+
+// Story 5.3 — one presentation of the project folder by its `DOCUMENT`
+// id, for `importPresentation` (`actions/livrable.ts`), under the same
+// gate as `listDrivePresentations`. `data: null` when the row does not
+// belong to `projectId`, is not a Google Slides file of origin `google`
+// (deleted by a resync in between, or another kind of document), or the
+// project's last listing is not a successful `google` one.
+export async function getDrivePresentation(
+  projectId: string,
+  documentId: string,
+): Promise<ActionResult<DrivePresentation | null>> {
+  try {
+    const [projectRow] = await db
+      .select({ driveListingOrigin: project.driveListingOrigin })
+      .from(project)
+      .where(eq(project.id, projectId));
+    if (projectRow?.driveListingOrigin !== 'google') return { ok: true, data: null };
+
+    const [row] = await db
+      .select({
+        projectId: document.projectId,
+        driveFileId: document.driveFileId,
+        name: document.name,
+        source: document.source,
+        origin: document.origin,
+        mimeType: document.mimeType,
+      })
+      .from(document)
+      .where(eq(document.id, documentId));
+
+    if (
+      !row ||
+      row.projectId !== projectId ||
+      row.source !== 'drive' ||
+      row.origin !== 'google' ||
+      row.mimeType !== PRESENTATION_MIME_TYPE ||
+      !row.driveFileId
+    ) {
+      return { ok: true, data: null };
+    }
+    return {
+      ok: true,
+      data: { documentId, driveFileId: row.driveFileId, name: row.name },
+    };
+  } catch (error) {
+    console.error('getDrivePresentation failed', error);
+    return { ok: false, error: 'Impossible de récupérer cette présentation.' };
+  }
+}
+
 // Story 5.7 (AD-11) — what every action that calls the agent passes to
 // `sendToAgent`: the demo flag (from the drive mode, so it is read once;
 // an unreadable flag degrades to the real path, as before) and the
@@ -490,7 +613,18 @@ export type AgentContext = {
 export async function getAgentContext(projectId: string): Promise<AgentContext> {
   try {
     const mode = await resolveDriveMode();
-    const origin = originForMode(mode);
+    const modeOrigin = originForMode(mode);
+
+    // Story 5.3 (Checkpoint 1) — no drive file is sent unless the last
+    // listing of the project folder succeeded for the current origin: a
+    // file may have vanished, or the folder be missing or duplicated, since
+    // it was selected. Manual documents are always sent.
+    const [projectRow] = await db
+      .select({ driveListingOrigin: project.driveListingOrigin })
+      .from(project)
+      .where(eq(project.id, projectId));
+    const origin =
+      modeOrigin !== null && projectRow?.driveListingOrigin === modeOrigin ? modeOrigin : null;
 
     const rows = await db
       .select({ name: document.name, content: document.content })

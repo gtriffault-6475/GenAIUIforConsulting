@@ -1,4 +1,5 @@
 import { drive as createDriveClient, type drive_v3 } from '@googleapis/drive';
+import { slides as createSlidesClient, type slides_v1 } from '@googleapis/slides';
 
 import {
   EXPORT_FORMAT_BY_MIME_TYPE,
@@ -6,6 +7,9 @@ import {
   type DriveFile,
   type DriveProvider,
   type DriveResult,
+  type PresentationContent,
+  type PresentationSlide,
+  type PresentationTextBox,
 } from '../ports/drive-provider';
 import { createOAuthClient, type GoogleConfig } from './oauth';
 
@@ -114,6 +118,58 @@ function toDriveError(error: unknown): DriveError {
   return 'unknown';
 }
 
+// Story 5.3 — the text of one shape: its text runs and auto texts (e.g. a
+// slide number) in order, without Slides' closing paragraph break (every
+// shape's text ends with one). Line breaks inside a paragraph stay as
+// Slides' vertical tab, paragraph breaks as `\n`, so the text stays the
+// exact image of the file (compared again before any later write).
+function readShapeText(text: slides_v1.Schema$TextContent | undefined): string {
+  let result = '';
+  for (const element of text?.textElements ?? []) {
+    result += element.textRun?.content ?? element.autoText?.content ?? '';
+  }
+  return result.endsWith('\n') ? result.slice(0, -1) : result;
+}
+
+// Story 5.3 — the text boxes of a list of page elements, in order,
+// descending into groups at any depth. A shape without text (or with only
+// whitespace) is not a text box; tables, images, videos, lines, charts
+// and word art are ignored.
+function collectTextBoxes(
+  elements: slides_v1.Schema$PageElement[] | undefined,
+  into: PresentationTextBox[],
+): PresentationTextBox[] {
+  for (const element of elements ?? []) {
+    if (element.elementGroup) {
+      collectTextBoxes(element.elementGroup.children ?? undefined, into);
+      continue;
+    }
+    if (!element.objectId || !element.shape?.text) continue;
+    const text = readShapeText(element.shape.text);
+    if (text.trim() === '') continue;
+    into.push({ objectId: element.objectId, text });
+  }
+  return into;
+}
+
+// Pure (no Google call): a `presentations.get` response to the port's
+// `PresentationContent`. Exported so it can be checked against a recorded
+// response.
+export function toPresentationContent(
+  presentation: slides_v1.Schema$Presentation,
+): PresentationContent {
+  const slides: PresentationSlide[] = [];
+  for (const slide of presentation.slides ?? []) {
+    // A slide always has an id; one without would be unusable as an
+    // anchor, but keeps its rank so the numbering stays the file's.
+    slides.push({
+      objectId: slide.objectId ?? '',
+      textBoxes: collectTextBoxes(slide.pageElements ?? undefined, []),
+    });
+  }
+  return { title: presentation.title ?? '', slides };
+}
+
 export function createGoogleDriveProvider(
   config: GoogleConfig,
   refreshToken: string,
@@ -121,6 +177,7 @@ export function createGoogleDriveProvider(
   const auth = createOAuthClient(config);
   auth.setCredentials({ refresh_token: refreshToken });
   const client = createDriveClient({ version: 'v3', auth, timeout: REQUEST_TIMEOUT_MS });
+  const slidesClient = createSlidesClient({ version: 'v1', auth, timeout: REQUEST_TIMEOUT_MS });
 
   // Every page of a `files.list` query. `supportsAllDrives` +
   // `includeItemsFromAllDrives` so a root folder living in a shared drive
@@ -225,6 +282,22 @@ export function createGoogleDriveProvider(
         return { ok: true, data: response.data.replace(/^\uFEFF/, '') };
       } catch (error) {
         console.error('googleDrive.exportText failed', describeDriveError(error));
+        return { ok: false, error: toDriveError(error) };
+      }
+    },
+
+    // Story 5.3 — `presentations.get`, read only: the file is never
+    // modified. Speaker notes live under `slideProperties`, which the
+    // field mask leaves out.
+    async readPresentation(fileId): Promise<DriveResult<PresentationContent>> {
+      try {
+        const response = await slidesClient.presentations.get({
+          presentationId: fileId,
+          fields: 'title,slides(objectId,pageElements)',
+        });
+        return { ok: true, data: toPresentationContent(response.data) };
+      } catch (error) {
+        console.error('googleDrive.readPresentation failed', describeDriveError(error));
         return { ok: false, error: toDriveError(error) };
       }
     },

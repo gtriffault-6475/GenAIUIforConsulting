@@ -38,6 +38,16 @@ export const project = sqliteTable('project', {
   activeConversationId: text('active_conversation_id').references(
     (): AnySQLiteColumn => conversation.id,
   ),
+  // Story 5.3 (Checkpoint 1, deferred from Story 5.7) — the drive origin
+  // (`mock` in demo mode, `google` when connected) whose last listing of
+  // this project's folder by the resync (`actions/document.ts`'s
+  // `listDocuments`) succeeded; `NULL` after any failed listing or resync
+  // error in those two modes (folder missing or duplicated, quota, error,
+  // unreadable token), and when never listed. Never written in the
+  // `disconnected`/`unconfigured` states. `getAgentContext` sends no drive
+  // file, and the Livrables panel offers no presentation, unless it equals
+  // the current mode's origin (manual documents are always sent).
+  driveListingOrigin: text('drive_listing_origin', { enum: ['mock', 'google'] }),
 });
 
 // Singleton row tracking round-1's only notion of "session" (AD-6): the
@@ -277,15 +287,40 @@ export const projectSkill = sqliteTable(
 // `CREATE TABLE`, not an `ALTER TABLE` on a table with existing rows), so
 // none of them need a `.default(...)` the way `message.createdAt` did —
 // see that column's comment for why a default would matter there.
-export const livrable = sqliteTable('livrable', {
-  id: text('id').primaryKey(),
-  projectId: text('project_id')
-    .notNull()
-    .references(() => project.id),
-  conversationId: text('conversation_id').references(() => conversation.id),
-  title: text('title').notNull(),
-  content: text('content').notNull(),
-});
+//
+// Story 5.3 — Import d'une présentation comme livrable (AD-13, AD-14).
+// `source` is `local` for every livrable drafted in the app (the backfill
+// default) and `drive` for a Google Slides presentation imported from the
+// project folder; `driveFileId` is that presentation's Drive id (NULL for
+// `local`), unique per project so a presentation is imported once. A
+// `drive` livrable's `content.blocks` entries also carry `slideId`,
+// `slideNumber` and `driveText` (the last text known from Drive).
+// `conversationId` is unique when set: one livrable per conversation
+// (AD-14), every drive livrable getting its own dedicated conversation.
+export const livrable = sqliteTable(
+  'livrable',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => project.id),
+    conversationId: text('conversation_id').references(() => conversation.id),
+    title: text('title').notNull(),
+    content: text('content').notNull(),
+    source: text('source', { enum: ['local', 'drive'] })
+      .notNull()
+      .default('local'),
+    driveFileId: text('drive_file_id'),
+  },
+  (table) => [
+    uniqueIndex('livrable_project_id_drive_file_id_unique')
+      .on(table.projectId, table.driveFileId)
+      .where(sql`${table.driveFileId} is not null`),
+    uniqueIndex('livrable_conversation_id_unique')
+      .on(table.conversationId)
+      .where(sql`${table.conversationId} is not null`),
+  ],
+);
 
 // An AI-authored suggestion on a LIVRABLE (Story 4.2 — Génération des
 // suggestions ancrées à l'écriture), per the Structural Seed. `type`

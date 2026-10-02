@@ -107,4 +107,10 @@ export const mockDriveProvider: DriveProvider = {
     }
     return withLatency({ ok: false as const, error: 'not_found' as const });
   },
+
+  // Story 5.3 — drive livrables do not exist in demo mode (epic-5-context.md):
+  // the simulated folder holds no presentation, so there is nothing to read.
+  async readPresentation() {
+    return withLatency({ ok: false as const, error: 'not_found' as const });
+  },
 };
