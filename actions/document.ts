@@ -1,12 +1,17 @@
 'use server';
 
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull, ne, or, sql } from 'drizzle-orm';
 
+import { getDemoModeActive } from '@/actions/demo';
 import { resolveDriveMode } from '@/actions/drive-mode';
+import {
+  deleteRevokedGoogleConnection,
+  readGoogleRefreshToken,
+} from '@/actions/google-credentials';
 import type { ActionResult } from '@/actions/types';
 import { db } from '@/db/client';
-import { document } from '@/db/schema';
-import { createDriveProvider } from '@/integrations';
+import { document, project } from '@/db/schema';
+import { createDriveProvider, type DriveError, type DriveFile } from '@/integrations';
 
 // spec-demo-document-reference.md — id dérivé de `projectId` (jamais
 // `crypto.randomUUID()`, jamais un seul id fixe partagé entre projets) :
@@ -43,9 +48,9 @@ export async function resolveDemoReferenceDocumentId(
 
 // AD-2 — this is the only file allowed to read or write DOCUMENT.
 // Components never touch `db/` or `integrations/` directly; they call
-// this Server Action. Story 1.3 only ever inserts/reads rows with
-// `source: 'drive'` — Story 1.4 adds `source: 'manual'` rows through this
-// same file, alongside these.
+// this Server Action. Drive rows (`source: 'drive'`) are written only by
+// the resync below; `source: 'manual'` rows by `addManualDocument` and
+// `seedDemoReferenceDocument`.
 
 export type DocumentSummary = {
   id: string;
@@ -54,44 +59,180 @@ export type DocumentSummary = {
   folderPath: string | null;
 };
 
-export async function listDocuments(
-  projectId: string,
-): Promise<ActionResult<DocumentSummary[]>> {
-  try {
-    // Story 5.1 — the provider now comes from the factory, fed by the
-    // single drive-mode decision point. Until Story 5.2 the factory still
-    // returns the simulated adapter in every mode (spec's Decision 1), so
-    // this listing is unchanged.
-    const driveProvider = createDriveProvider(await resolveDriveMode());
-    const driveDocuments = await driveProvider.listDocuments(projectId);
+// Story 5.2 — what the Contexte panel shows in place of (or alongside)
+// the drive files. A code, not French copy: the panel owns the wording
+// (CONVENTIONS.md). `ok` covers demo mode too (simulated drive).
+export type DriveStatus =
+  | 'ok'
+  | 'unconfigured'
+  | 'disconnected'
+  | 'folder_missing'
+  | 'folder_duplicate'
+  | 'error';
 
-    // Mirrors `selectProject` in `actions/project.ts`: sync the (mocked)
-    // drive listing into DOCUMENT before reading it back, so this table
-    // — not the provider — is the single read path the Contexte panel
-    // depends on, exactly as it will be once Story 1.4 starts inserting
-    // `source: 'manual'` rows into the same table.
-    db.transaction((tx) => {
-      for (const doc of driveDocuments) {
+export type DocumentListing = {
+  // Drive files first (only when `driveStatus` is `ok`), then the
+  // documents added outside the drive, always.
+  documents: DocumentSummary[];
+  driveStatus: DriveStatus;
+};
+
+type DriveOrigin = 'mock' | 'google';
+
+function toDriveStatus(error: DriveError): DriveStatus {
+  switch (error) {
+    case 'unconfigured':
+    case 'folder_missing':
+    case 'folder_duplicate':
+      return error;
+    case 'disconnected':
+    case 'token_revoked':
+      return 'disconnected';
+    default:
+      return 'error';
+  }
+}
+
+// The single drive resync (sync-then-read, epic-5-context.md
+// "Resynchronisation"), one synchronous transaction:
+// - purges the project's drive rows of another origin than `origin`
+//   (every drive row when `origin` is `null`: no drive outside demo mode
+//   without a connected account);
+// - updates name, type and folder of the files still listed — never
+//   `content` nor `usedAsContext`;
+// - inserts new files with a fresh UUID, an empty `content` and
+//   `usedAsContext` left to its default (false);
+// - deletes the rows of files that disappeared from the listing.
+// Rows are matched on `driveFileId`, never on DOCUMENT's own `id`.
+// `files: null` (the listing failed) only purges the other origin: the
+// current origin's rows are kept as they are, and simply not shown.
+function syncDriveRows(
+  projectId: string,
+  origin: DriveOrigin | null,
+  files: DriveFile[] | null,
+): void {
+  const isProjectDriveRow = and(
+    eq(document.projectId, projectId),
+    eq(document.source, 'drive'),
+  );
+
+  db.transaction((tx) => {
+    tx.delete(document)
+      .where(
+        origin === null
+          ? isProjectDriveRow
+          : and(isProjectDriveRow, or(isNull(document.origin), ne(document.origin, origin))),
+      )
+      .run();
+
+    if (origin === null || files === null) return;
+
+    const existing = tx
+      .select({ id: document.id, driveFileId: document.driveFileId })
+      .from(document)
+      .where(isProjectDriveRow)
+      .all();
+    const rowIdByFileId = new Map<string, string>();
+    for (const row of existing) {
+      if (row.driveFileId) rowIdByFileId.set(row.driveFileId, row.id);
+    }
+
+    const listedFileIds = new Set<string>();
+    for (const file of files) {
+      if (listedFileIds.has(file.id)) continue;
+      listedFileIds.add(file.id);
+
+      const rowId = rowIdByFileId.get(file.id);
+      if (rowId) {
+        tx.update(document)
+          .set({ name: file.name, mimeType: file.mimeType, folderPath: file.folderPath })
+          .where(eq(document.id, rowId))
+          .run();
+      } else {
         tx.insert(document)
           .values({
-            id: doc.id,
+            id: crypto.randomUUID(),
             projectId,
-            name: doc.name,
+            name: file.name,
             source: 'drive',
-            folderPath: doc.folderPath,
-            content: doc.content,
-          })
-          .onConflictDoUpdate({
-            target: document.id,
-            set: {
-              name: doc.name,
-              folderPath: doc.folderPath,
-              content: doc.content,
-            },
+            folderPath: file.folderPath,
+            content: '',
+            driveFileId: file.id,
+            mimeType: file.mimeType,
+            origin,
           })
           .run();
       }
-    });
+    }
+
+    for (const row of existing) {
+      if (!row.driveFileId || !listedFileIds.has(row.driveFileId)) {
+        tx.delete(document).where(eq(document.id, row.id)).run();
+      }
+    }
+  });
+}
+
+export async function listDocuments(
+  projectId: string,
+): Promise<ActionResult<DocumentListing>> {
+  try {
+    const [projectRow] = await db
+      .select({ name: project.name })
+      .from(project)
+      .where(eq(project.id, projectId));
+    if (!projectRow) {
+      return { ok: false, error: 'Ce projet est introuvable.' };
+    }
+
+    const mode = await resolveDriveMode();
+    // Read server-side only, straight into the factory: the token never
+    // leaves this function, and nothing returned below carries it.
+    const tokenRead =
+      mode === 'connected' || mode === 'disconnected'
+        ? readGoogleRefreshToken()
+        : ({ ok: true, refreshToken: null } as const);
+    const refreshToken = tokenRead.ok ? tokenRead.refreshToken : null;
+
+    // `resolveDriveMode` degrades an unreadable demo flag or connection
+    // row to `disconnected`. Only a confirmed absence of connection (demo
+    // flag readable and off, connection row read and absent) may purge
+    // the drive rows: a read failure shows the generic error and leaves
+    // every row untouched (Story 5.7's selections survive it).
+    let readFailed = !tokenRead.ok;
+    if (mode === 'disconnected' && !readFailed) {
+      const demoModeResult = await getDemoModeActive();
+      readFailed = !demoModeResult.ok || demoModeResult.data || refreshToken !== null;
+    }
+
+    let driveStatus: DriveStatus;
+    if (readFailed) {
+      driveStatus = 'error';
+    } else {
+      const result = await createDriveProvider(mode, refreshToken).listFiles(
+        projectRow.name,
+      );
+
+      if (result.ok) {
+        driveStatus = 'ok';
+        syncDriveRows(projectId, mode === 'demo' ? 'mock' : 'google', result.data);
+      } else {
+        if (result.error === 'token_revoked' && refreshToken) {
+          // AD-1: a dead connection is removed, back to `disconnected`.
+          deleteRevokedGoogleConnection(refreshToken);
+        }
+        driveStatus = toDriveStatus(result.error);
+        // No account (or no configuration): no drive rows may remain. Any
+        // other failure (folder missing/duplicate, quota, network…) only
+        // purges the other origin's rows; the current origin's are kept
+        // (Story 5.7's selections survive a transient error) and hidden.
+        if (driveStatus === 'disconnected' || driveStatus === 'unconfigured') {
+          syncDriveRows(projectId, null, null);
+        } else {
+          syncDriveRows(projectId, mode === 'demo' ? 'mock' : 'google', null);
+        }
+      }
+    }
 
     const rows = await db
       .select({
@@ -101,9 +242,21 @@ export async function listDocuments(
         folderPath: document.folderPath,
       })
       .from(document)
-      .where(eq(document.projectId, projectId));
+      .where(eq(document.projectId, projectId))
+      .orderBy(sql`rowid`);
 
-    return { ok: true, data: rows };
+    const driveRows =
+      driveStatus === 'ok'
+        ? rows
+            .filter((row) => row.source === 'drive')
+            .sort((a, b) => a.name.localeCompare(b.name, 'fr'))
+        : [];
+    const manualRows = rows.filter((row) => row.source === 'manual');
+
+    return {
+      ok: true,
+      data: { documents: [...driveRows, ...manualRows], driveStatus },
+    };
   } catch (error) {
     console.error('listDocuments failed', error);
     return {
@@ -154,6 +307,8 @@ export async function addManualDocument({
         source: 'manual',
         folderPath: trimmedFolderPath,
         content: trimmedContent,
+        // FR-4: a document added outside the drive is always context.
+        usedAsContext: true,
       })
       .run();
 
@@ -184,8 +339,8 @@ export async function addManualDocument({
 // pour cette même entrée), pas ici. `source: 'manual'` (jamais `'drive'`,
 // AD-1) : ce n'est pas une donnée Octopod, seulement une mise en scène du
 // mode démo -- ne sera jamais retiré ni écrasé par le prochain
-// `listDocuments`/sync drive (qui ne touche que les ids listés par le
-// provider). Idempotente par projet (`demoReferenceDocumentId`
+// `listDocuments`/sync drive (qui ne touche que les lignes `source:
+// 'drive'`). Idempotente par projet (`demoReferenceDocumentId`
 // ci-dessus) : ne fait rien si ce projet a déjà sa copie, pour qu'un
 // second déclenchement du même tool-call (ex. la révision globale, même
 // point d'accroche) ne duplique jamais le document -- mais chaque projet
@@ -227,6 +382,8 @@ export async function seedDemoReferenceDocument(projectId: string): Promise<void
         folderPath: 'Références',
         content:
           "Liste des missions déjà menées par le cabinet pour des acteurs du secteur d'Acme Corp, avec la portée de chaque mission et les résultats obtenus -- base de travail pour la réponse à l'appel d'offres en cours.",
+        // Story 5.2: every `manual` row is used as context (FR-4).
+        usedAsContext: true,
       })
       .onConflictDoNothing({ target: document.id })
       .run();

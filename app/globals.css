@@ -484,6 +484,22 @@ textarea {
   position: relative;
 }
 
+/* Story 5.2 — the Contexte panel's drive state message (not connected,
+   not configured, folder missing/duplicate, Google error), shown in place
+   of the drive files, above the documents added outside the drive. */
+.context-drive-notice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.context-drive-notice p {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
 .add-document-dropdown {
   /* Spans the full card (edge-to-edge, `-var(--space-panel-padding)` on
      each side) rather than just the header's inset content width —

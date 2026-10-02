@@ -2,9 +2,10 @@
 title: "Story 5.2 : Dossier Drive du projet et panneau Contexte réel"
 type: 'feature'
 created: '2026-10-02'
-status: 'draft'
+status: 'done'
 route: 'dispatch'
 review_loop_iteration: 0
+baseline_commit: 'f6282960137b932053a069c16cb88407f1412728'
 context: ['{project-root}/_bmad-output/implementation-artifacts/epic-5-context.md', '{project-root}/_bmad-output/implementation-artifacts/spec-5-1-connexion-du-compte-google.md']
 ---
 
@@ -54,11 +55,11 @@ context: ['{project-root}/_bmad-output/implementation-artifacts/epic-5-context.m
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `package.json` -- `@googleapis/drive` 26.0.1 (exact).
-- [ ] `db/schema.ts` + migration -- colonnes et index de `document`, `UPDATE` des lignes manuelles.
-- [ ] `integrations/ports/drive-provider.ts`, `integrations/mock/drive-provider.ts`, `integrations/google/drive.ts`, `integrations/index.ts` -- port `listFiles`, mock par nom, adaptateur Google, fabrique.
-- [ ] `actions/` -- accès serveur au refresh token pour la fabrique (module non `'use server'`) ; `listDocuments` renvoie `{ documents, driveStatus }` avec la resynchro AD-1 ; gestion de `token_revoked` ; `addManualDocument` avec `used_as_context = 1`.
-- [ ] `components/ContextPanel.tsx`, `app/page.tsx`, `app/globals.css` -- états du panneau.
+- [x] `package.json` -- `@googleapis/drive` 26.0.1 (exact).
+- [x] `db/schema.ts` + migration -- colonnes et index de `document`, `UPDATE` des lignes manuelles.
+- [x] `integrations/ports/drive-provider.ts`, `integrations/mock/drive-provider.ts`, `integrations/google/drive.ts`, `integrations/index.ts` -- port `listFiles`, mock par nom, adaptateur Google, fabrique.
+- [x] `actions/` -- accès serveur au refresh token pour la fabrique (module non `'use server'`) ; `listDocuments` renvoie `{ documents, driveStatus }` avec la resynchro AD-1 ; gestion de `token_revoked` ; `addManualDocument` avec `used_as_context = 1`.
+- [x] `components/ContextPanel.tsx`, `app/page.tsx`, `app/globals.css` -- états du panneau.
 
 **Acceptance Criteria:**
 - Given un rendu en mode `connected`, then aucune réponse HTTP ni prop client ne contient le refresh token.
@@ -75,6 +76,31 @@ context: ['{project-root}/_bmad-output/implementation-artifacts/epic-5-context.m
 
 ## Implementation Notes
 
+Implémenté par sous-agent. `@googleapis/drive` 26.0.1 (réutilise l'unique `google-auth-library` 11.1.0) ; migration `20261002133648_loose_anita_blake` (4 colonnes, index unique partiel, `UPDATE` des lignes `manual` ajouté à la main). Port `listFiles(projectName)` → `DriveResult<DriveFile[]>` (`DriveFile` = `id`, `name`, `mimeType`, `modifiedTime`, `folderPath` — ce dernier toujours `null` côté Google, conservé pour le mock). `integrations/google/drive.ts` : dossier projet = `files.list` sur `'{root}' in parents and name = … and mimeType = folder and trashed = false` puis comparaison stricte (NFC) en JS ; enfants non-dossiers non supprimés, toutes les pages, `supportsAllDrives` + `includeItemsFromAllDrives`, délai 15 s ; erreurs → `invalid_grant` = `token_revoked`, 429/raisons de quota = `quota`, 404 = `not_found`, sinon `unknown`, log limité au statut/code/raison. Fabrique : `demo` → mock, `connected` → Google (config + jeton, sinon erreur correspondante), `disconnected`/`unconfigured` → provider qui renvoie cette erreur. `actions/google-credentials.ts` (sans `'use server'`) lit le jeton et supprime la connexion révoquée (seulement si la ligne porte encore ce jeton). `listDocuments` lit le nom du projet en base et renvoie `{ documents, driveStatus }` ; resynchro unique `syncDriveRows` (clé `driveFileId`, UUID + `content = ''` à l'insertion, ne touche jamais `content`/`usedAsContext`, purge l'autre origine, supprime les disparus) ; `disconnected`/`unconfigured` purgent toutes les lignes drive ; les autres erreurs ne purgent que l'autre origine et masquent les lignes drive. `seedDemoReferenceDocument` écrit aussi `used_as_context = 1`. Panneau : message d'état (copies d'`EXPERIENCE.md`, `role="status"`, lien "Connecter Google Drive" quand non connecté), fichiers drive (triés par nom, groupés par dossier simulé) puis hors-drive. Choix non dicté par la spec : `modifiedTime` est dans le port mais pas persisté (aucune colonne prévue par la migration).
+
+Vérifié (sous-agent, `next start -p 3100` sur la base locale, sauvegarde préalable dans le scratchpad) : tsc et build OK ; démo → panneau identique, anciennes lignes (ids `doc-*`, `origin` NULL) purgées et recréées en UUID/`mock`/`content = ''` ; nom modifié rétabli à la resynchro sans toucher `content`/`used_as_context` ; document hors-drive affiché après les fichiers drive ; démo off sans variables → message non configuré, lignes mock purgées, hors-drive conservé ; fausses variables sans compte → invite + lien ; fausse ligne de connexion → Google répond `invalid_client` → message d'erreur générique, log sans jeton, jeton absent du HTML/RSC, ligne `google` conservée et ligne `mock` purgée ; suppression de la connexion → lignes `google` purgées. Non vérifié : vrai dossier Drive (pas d'identifiants), chemin `invalid_grant` réel, Drive partagé. Base locale remise en démo, sans connexion ni ligne de test (migration appliquée).
+
 ## Spec Change Log
 
 ## Review Triage Log
+
+| # | Source | Finding | Verdict | Route | Evidence / resolution |
+|---|---|---|---|---|---|
+| 1 | blind-hunter, edge-case, verification-gap | Une erreur transitoire de lecture (jeton ou mode) est prise pour "aucun compte" et purge toutes les lignes drive du projet. | medium | patch | Vérifié (`readGoogleRefreshToken` → `null` sur erreur ; `resolveDriveMode` → `disconnected`). Purge complète seulement si l'absence de connexion est confirmée ; sinon `driveStatus = 'error'`, lignes conservées. |
+| 2 | blind-hunter, edge-case | `incompleteSearch: true` traité comme une liste complète → la resynchro supprime des fichiers. | medium | patch | Vérifié (`listAll` ne fait que logger) ; renvoie maintenant une erreur. |
+| 3 | blind-hunter, edge-case | 401 / 403 `insufficientPermissions` (scope retiré) → erreur générique, connexion morte jamais nettoyée. | low | patch | Mapping direct vers `token_revoked`. |
+| 4 | blind-hunter, edge-case | La requête envoie le nom brut alors que la comparaison est en NFC ; le commentaire prétend qu'un accent décomposé est retrouvé. | low | patch | Vérifié (le `name =` de Drive est exact) ; requête en NFC, commentaire corrigé. |
+| 5 | verification-gap | Le `UPDATE` ajouté à la main dans la migration disparaîtrait à une régénération. | low | patch | Commentaire SQL ajouté au-dessus. |
+| 6 | edge-case | Basculer en mode démo puis revenir purge les lignes `google` (origine différente), donc les futures sélections de la 5.7. | medium | defer | Conséquence directe de la règle AD-1 "purger l'autre origine" ; à reconsidérer dans la Story 5.7 (masquer plutôt que supprimer). Noté dans `deferred-work.md`. |
+| 7 | verification-gap (x5), blind-hunter | Aucun test automatisé (resynchro, fabrique, mapping d'erreurs, adaptateur, migration). | medium | defer | Pas de lanceur de tests (décision existante) ; vérifications manuelles à rejouer avec de vrais identifiants. |
+| 8 | blind-hunter | Pas de garde `import 'server-only'` sur `actions/google-credentials.ts`. | low | reject | Le paquet `server-only` n'est pas installé ; l'ajouter est une dépendance pour un risque non observé (aucun import client). |
+| 9 | blind-hunter | Barre du haut et panneau en désaccord dans le rendu où un jeton révoqué est supprimé. | low | reject | Se résout au rendu suivant. |
+| 10 | blind-hunter | Erreurs `not_found`/`quota` affichées avec le message générique. | low | reject | Copie non spécifiée par `EXPERIENCE.md` ; cas d'administration. |
+| 11 | blind-hunter, edge-case | Appels Google bloquants à chaque rendu, sans cache ni délai global ni limite de pages. | low | reject | Aucune cible de performance (NFR3), dossiers de projet de petite taille. |
+| 12 | blind-hunter | Première resynchro après migration : anciennes lignes drive recréées avec de nouveaux UUID. | low | reject | Rien ne référence `document.id` ; comportement voulu (purge des lignes sans origine). |
+| 13 | blind-hunter | Mock indexé par nom de projet, sans contrôle de concordance avec `project-provider.ts`. | low | reject | Deux projets de démo figés. |
+| 14 | blind-hunter | Dossier Drive vide + documents hors-drive : rien n'indique que le dossier est vide. | low | reject | État non spécifié par `EXPERIENCE.md`. |
+| 15 | blind-hunter | Jeton révoqué affiché comme "jamais connecté". | — | false | Voulu : `EXPERIENCE.md` demande un retour à "non connecté" sans message technique. |
+| 16 | blind-hunter, verification-gap | `modifiedTime` lu mais pas stocké. | low | reject | Pas de colonne dans la spec ; la Story 5.7 l'ajoutera si besoin. |
+
+Après correctifs de revue (remplace la description des erreurs plus haut) : `readGoogleRefreshToken` distingue "pas de compte" et "lecture en échec" ; la purge complète n'a lieu que si l'absence de connexion est confirmée (flag démo lisible et inactif, ligne lue et absente) ou après suppression d'un jeton révoqué — toute lecture en échec donne `driveStatus = 'error'` sans écrire de ligne drive ; `incompleteSearch` → erreur ; 401 et 403 `insufficientPermissions`/`ACCESS_TOKEN_SCOPE_INSUFFICIENT` → `token_revoked` (effet de bord : un client OAuth invalide supprime aussi la connexion) ; requête du dossier en NFC ; commentaire de conservation au-dessus du `UPDATE` de la migration. Vérifié par l'orchestrateur : `tsc` et build OK ; en démo, panneau Contexte identique (3 documents simulés de RFP Acme avec leurs dossiers) ; base en démo, aucune connexion.

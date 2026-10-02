@@ -137,7 +137,10 @@ export default async function Home({ searchParams }: PageProps<'/'>) {
     activeConversationResult.ok && activeConversationResult.data
       ? activeConversationResult.data.conversation.id
       : null;
-  const documents = documentsResult.ok ? documentsResult.data : null;
+  // Story 5.2 — drive files (or the drive's state code) then the
+  // documents added outside the drive. Never carries the refresh token.
+  const documents = documentsResult.ok ? documentsResult.data.documents : null;
+  const driveStatus = documentsResult.ok ? documentsResult.data.driveStatus : null;
   const skills = skillsResult.ok ? skillsResult.data : null;
   const livrables = livrablesResult.ok ? livrablesResult.data : null;
   const projects = projectsResult.ok ? projectsResult.data : null;
@@ -277,7 +280,12 @@ export default async function Home({ searchParams }: PageProps<'/'>) {
             passed `activeConversationResult` (or `.data.messages`); any
             future panel added to this right sidebar must do the same. */}
         <aside className="workspace-sidebar-right">
-          <ContextPanel projectId={activeProject.id} documents={documents} />
+          <ContextPanel
+            projectId={activeProject.id}
+            projectName={activeProject.name}
+            documents={documents}
+            driveStatus={driveStatus}
+          />
           <LivrablesPanel livrables={livrables} />
           <MattermostPanel result={mattermostResult} />
         </aside>

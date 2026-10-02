@@ -69,16 +69,41 @@ export const appState = sqliteTable('app_state', {
 // `folderPath` is nullable and denormalized (per the architecture spine's
 // structural seed): the mock has no real folder tree, just a flat
 // string used to group documents in the Contexte panel.
-export const document = sqliteTable('document', {
-  id: text('id').primaryKey(),
-  projectId: text('project_id')
-    .notNull()
-    .references(() => project.id),
-  name: text('name').notNull(),
-  source: text('source', { enum: ['drive', 'manual'] }).notNull(),
-  folderPath: text('folder_path'),
-  content: text('content').notNull(),
-});
+//
+// Story 5.2 — Dossier Drive du projet. `drive` rows are mirrored by the
+// single resync in `actions/document.ts` (`listDocuments`): `driveFileId`
+// is the provider's file id (unique per project when set, NULL for
+// `manual` rows), `mimeType` the provider's type, `origin` which adapter
+// produced the row (`mock` in demo mode, `google` when connected — rows
+// of the other origin are purged at resync). `usedAsContext` is always
+// true for `manual` rows (FR-4, set by the migration's backfill and by
+// every insert) and false by default for `drive` rows; Story 5.7 lets the
+// consultant toggle it. The resync never writes `content` nor
+// `usedAsContext` on an existing row.
+export const document = sqliteTable(
+  'document',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => project.id),
+    name: text('name').notNull(),
+    source: text('source', { enum: ['drive', 'manual'] }).notNull(),
+    folderPath: text('folder_path'),
+    content: text('content').notNull(),
+    driveFileId: text('drive_file_id'),
+    mimeType: text('mime_type'),
+    origin: text('origin', { enum: ['mock', 'google'] }),
+    usedAsContext: integer('used_as_context', { mode: 'boolean' })
+      .notNull()
+      .default(false),
+  },
+  (table) => [
+    uniqueIndex('document_project_id_drive_file_id_unique')
+      .on(table.projectId, table.driveFileId)
+      .where(sql`${table.driveFileId} is not null`),
+  ],
+);
 
 // A conversation thread on a project (Story 2.1 — Conversations multiples
 // et sélection active). No OCTO-side provider produces these (AD-1

@@ -4,7 +4,8 @@ import { OAuth2Client, type Credentials } from 'google-auth-library';
 // Google lives here, behind `integrations/index.ts` (AD-1's single wiring
 // point): `app/api/google/oauth/*` and `actions/google-connection.ts`
 // import it from there, never from this file directly. No Drive call here
-// — the Drive adapter is Story 5.2's concern.
+// — the Drive adapter (`integrations/google/drive.ts`, Story 5.2) reuses
+// `readGoogleConfig` and `createOAuthClient`.
 //
 // Secrets discipline: nothing in this file ever logs a token, an
 // authorization code or the client secret. Google/gaxios errors carry the
@@ -24,7 +25,7 @@ const GOOGLE_OAUTH_SCOPES = [
 
 const GOOGLE_REVOKE_URL = 'https://oauth2.googleapis.com/revoke';
 
-type GoogleConfig = {
+export type GoogleConfig = {
   clientId: string;
   clientSecret: string;
   rootFolderId: string;
@@ -32,8 +33,9 @@ type GoogleConfig = {
 
 // `unconfigured` (spec's Boundaries) = at least one of the three variables
 // missing. An empty string (`GOOGLE_CLIENT_ID=` copied as-is from
-// `.env.local.example`) counts as missing.
-function readGoogleConfig(): GoogleConfig | null {
+// `.env.local.example`) counts as missing. Exported for the Drive adapter
+// (Story 5.2) through `integrations/index.ts` only.
+export function readGoogleConfig(): GoogleConfig | null {
   const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
   const rootFolderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID?.trim();
@@ -46,7 +48,7 @@ export function isGoogleConfigured(): boolean {
   return readGoogleConfig() !== null;
 }
 
-function createOAuthClient(config: GoogleConfig): OAuth2Client {
+export function createOAuthClient(config: GoogleConfig): OAuth2Client {
   return new OAuth2Client({
     clientId: config.clientId,
     clientSecret: config.clientSecret,
