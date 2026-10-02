@@ -14,6 +14,20 @@ Open [http://localhost:3000](http://localhost:3000). No separate services to sta
 
 Copy `.env.local.example` to `.env.local` and set `ANTHROPIC_API_KEY` before sending a message from the workspace composer (Story 2.5) — without it, the composer still works but every reply fails with a clear error.
 
+## Google Drive (Epic 5)
+
+Outside the demo mode, the project drive is a real Google Drive. Connecting it needs three variables in `.env.local` (see `.env.local.example`); if any is missing, the top bar shows "Connecter Google Drive" disabled with "Google Drive n'est pas configuré pour cette installation." and the app never calls Google. The demo mode never uses Google.
+
+Google Cloud setup (once per installation):
+
+1. In a Google Cloud project of the OCTO Workspace organization, enable the **Google Drive API** and the **Google Slides API**.
+2. Configure the OAuth consent screen as **Internal** (a Workspace administrator may have to approve it), with the scopes `https://www.googleapis.com/auth/drive`, `openid` and `email`.
+3. Create an OAuth client ID of type **Web application** with the authorized redirect URI `http://localhost:3000/api/google/oauth/callback` (exactly; the app must run on port 3000).
+4. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` from that client, and `GOOGLE_DRIVE_ROOT_FOLDER_ID` to the id of the Drive folder holding one sub-folder per project (named exactly like the project).
+5. Restart `npm run dev`, open the app at exactly http://localhost:3000 (the OAuth redirect URI is fixed to that origin; the connect link sends any other origin, e.g. `127.0.0.1`, there first), then click "Connecter Google Drive" in the top bar and accept the consent screen.
+
+The refresh token is stored in the local SQLite database (`google_connection` table) and never reaches the browser. It is stored **unencrypted** in `db/local.db` and grants full access to the account's Drive: never share or commit that file (it is excluded from git by the `*.db` rule in `.gitignore`). "Se déconnecter" (account menu in the top bar) deletes it and revokes it at Google (best effort).
+
 ## Stack
 
 - **Next.js 16** (App Router, Turbopack), **React 19**, **TypeScript** (strict)

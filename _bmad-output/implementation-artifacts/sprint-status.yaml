@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-14-2026 15:47
-last_updated: 10-02-2026 00:00
+last_updated: 10-02-2026 14:00
 project: GenAI4Consulting
 project_key: NOKEY
 tracking_system: file-system
@@ -66,8 +66,8 @@ development_status:
   4-5-contrôle-du-consultant-sur-le-document-final: done
   epic-4-retrospective: done
 
-  epic-5: backlog
-  5-1-connexion-du-compte-google: backlog
+  epic-5: in-progress
+  5-1-connexion-du-compte-google: review
   5-2-dossier-drive-du-projet-et-panneau-contexte-réel: backlog
   5-3-import-d-une-présentation-comme-livrable: backlog
   5-4-suggestions-ia-sur-une-présentation-importée: backlog
@@ -249,3 +249,19 @@ action_items:
     owner: "dev loop"
     status: done
     ref: "_bmad-output/implementation-artifacts/epic-4-retro-2026-09-23.md"
+  - id: "epic-5-readiness-item-1-non-régression-du-mode-démo-en-5-4"
+    epic: 5
+    action: "Story 5.4 : ajouter dans sa spec un critère de non-régression du scénario
+      de démo scripté (choix des outils en un point, sendToAgent multi-outils) (readiness
+      2026-10-02, réserve 3)"
+    owner: "dev loop"
+    status: open
+    ref: "_bmad-output/planning-artifacts/epics.md"
+  - id: "epic-5-readiness-item-2-taille-de-la-story-5-2"
+    epic: 5
+    action: "Story 5.2 : surveiller la taille de la spec (Contexte réel + sélection + FR-4
+      + resynchro + AD-11) et la découper si elle dépasse la cible (readiness 2026-10-02,
+      réserve 4)"
+    owner: "dev loop"
+    status: open
+    ref: "_bmad-output/planning-artifacts/epics.md"

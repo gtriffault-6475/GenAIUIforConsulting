@@ -311,3 +311,22 @@ export const suggestion = sqliteTable(
       .where(sql`${table.status} = 'pending' and ${table.type} = 'anchored'`),
   ],
 );
+
+// Story 5.1 — Connexion du compte Google (AD-12). Singleton row, same
+// shape as APP_STATE above: `id` is always GOOGLE_CONNECTION_ID, upserted
+// by `actions/google-connection.ts` (the only file allowed to read or
+// write this table), never a second insert — one Google account per
+// workstation. `refreshToken` never leaves the server: no Server Action
+// returns it and no component prop carries it (`getGoogleAccount` only
+// exposes `accountEmail`/`connectedAt`). No row means "disconnected"
+// (`actions/drive-mode.ts`'s `resolveDriveMode`). `connectedAt` is an
+// ISO-8601 string, like `message.createdAt`. A brand-new table, so no
+// column needs a backfill default.
+export const GOOGLE_CONNECTION_ID = 'singleton';
+
+export const googleConnection = sqliteTable('google_connection', {
+  id: text('id').primaryKey(),
+  refreshToken: text('refresh_token').notNull(),
+  accountEmail: text('account_email').notNull(),
+  connectedAt: text('connected_at').notNull(),
+});

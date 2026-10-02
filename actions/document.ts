@@ -2,10 +2,11 @@
 
 import { eq } from 'drizzle-orm';
 
+import { resolveDriveMode } from '@/actions/drive-mode';
 import type { ActionResult } from '@/actions/types';
 import { db } from '@/db/client';
 import { document } from '@/db/schema';
-import { driveProvider } from '@/integrations';
+import { createDriveProvider } from '@/integrations';
 
 // spec-demo-document-reference.md — id dérivé de `projectId` (jamais
 // `crypto.randomUUID()`, jamais un seul id fixe partagé entre projets) :
@@ -57,6 +58,11 @@ export async function listDocuments(
   projectId: string,
 ): Promise<ActionResult<DocumentSummary[]>> {
   try {
+    // Story 5.1 — the provider now comes from the factory, fed by the
+    // single drive-mode decision point. Until Story 5.2 the factory still
+    // returns the simulated adapter in every mode (spec's Decision 1), so
+    // this listing is unchanged.
+    const driveProvider = createDriveProvider(await resolveDriveMode());
     const driveDocuments = await driveProvider.listDocuments(projectId);
 
     // Mirrors `selectProject` in `actions/project.ts`: sync the (mocked)

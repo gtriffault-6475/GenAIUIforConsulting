@@ -14,3 +14,9 @@ export type OctopodDocument = {
 export interface DriveProvider {
   listDocuments(projectId: string): Promise<OctopodDocument[]>;
 }
+
+// Story 5.1 (AD-1, epic-5-context.md "Mode drive") — computed once by
+// `actions/drive-mode.ts`'s `resolveDriveMode`, in this priority order,
+// and passed to `integrations/index.ts`'s `createDriveProvider`, the only
+// place a mode is turned into a concrete adapter.
+export type DriveMode = 'demo' | 'unconfigured' | 'disconnected' | 'connected';
