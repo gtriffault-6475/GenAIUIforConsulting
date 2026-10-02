@@ -1,7 +1,7 @@
 ---
 title: PRD GenAI4Consulting
 created: 2026-09-11
-updated: 2026-09-11
+updated: 2026-10-02
 status: final
 ---
 
@@ -10,7 +10,7 @@ status: final
 
 ## 0. Document Purpose
 
-Ce PRD s'adresse au porteur de projet, à l'architecte qui prendra le relais, et aux consultants OCTO qui rejoindront le groupe de test round 1. Il construit sur deux documents déjà finalisés plutôt que de les dupliquer : le [brief produit](../../briefs/brief-GenAI4Consulting-2026-09-10/brief.md) (problème, différenciation, success criteria, scope) et les [spines UX](../../ux-designs/ux-GenAI4Consulting-2026-09-11/) `DESIGN.md`/`EXPERIENCE.md` (identité visuelle, architecture de l'information, patterns de composants, key flows). Le vocabulaire du Glossaire (§3) fait autorité ; les Exigences Fonctionnelles sont numérotées globalement (FR-1 à FR-24) et regroupées par fonctionnalité ; les `[ASSUMPTION]` sont indexées en §9.
+Ce PRD s'adresse au porteur de projet, à l'architecte qui prendra le relais, et aux consultants OCTO qui rejoindront le groupe de test round 1. Il construit sur deux documents déjà finalisés plutôt que de les dupliquer : le [brief produit](../../briefs/brief-GenAI4Consulting-2026-09-10/brief.md) (problème, différenciation, success criteria, scope) et les [spines UX](../../ux-designs/ux-GenAI4Consulting-2026-09-11/) `DESIGN.md`/`EXPERIENCE.md` (identité visuelle, architecture de l'information, patterns de composants, key flows). Le vocabulaire du Glossaire (§3) fait autorité ; les Exigences Fonctionnelles sont numérotées globalement (FR-1 à FR-31) et regroupées par fonctionnalité ; les `[ASSUMPTION]` sont indexées en §9.
 
 ## 1. Vision
 
@@ -18,7 +18,7 @@ GenAI4Consulting est une interface de travail agentique interne pour les consult
 
 Le produit répond à un écart réel : moins de la moitié des consultants OCTO utilisent aujourd'hui l'IA de façon structurée, et ce qui fonctionne chez les uns ne profite jamais au reste du cabinet. Pendant ce temps, plusieurs grands cabinets de conseil ont déjà déployé leurs propres plateformes internes — voir §"Why Now" et le brief pour le détail.
 
-Round 1 est un prototype exploratoire, pas un produit à l'échelle de ces plateformes : intégrations largement simulées, un petit groupe de testeurs déjà identifié, aucun ROI chiffré attendu. L'objectif est de valider que l'idée tient debout et mérite d'être poussée plus loin — et, si elle l'est, de grossir au-delà des deux cas d'usage initiaux vers une intégration plus profonde à l'écosystème OCTO (brief, §Vision).
+Round 1 est un prototype exploratoire, pas un produit à l'échelle de ces plateformes. Les intégrations sont largement simulées : Octopod et Mattermost le sont, mais le drive est un vrai Google Drive depuis le Sprint Change Proposal du 2026-10-02 (voir §4.5). Le groupe de testeurs est petit et déjà identifié, et aucun ROI chiffré n'est attendu. L'objectif est de valider que l'idée tient debout et mérite d'être poussée plus loin. Si c'est le cas, le produit grossira au-delà des deux cas d'usage initiaux, vers une intégration plus profonde à l'écosystème OCTO (brief, §Vision).
 
 ## 2. Target User
 
@@ -54,7 +54,7 @@ Round 1 est un prototype exploratoire, pas un produit à l'échelle de ces plate
   - **Résolution :** le document s'affine section par section sans qu'il rouvre la conversation générale.
   - **Edge case :** si l'atelier cité n'existe pas dans le contexte du projet, la suggestion retravaillée redemande une source plutôt que d'inventer un chiffre.
 
-**FR non illustrées ci-dessus** (couvertes par les journeys mais non citées inline) : FR-3, FR-5, FR-18, FR-24.
+**FR non illustrées ci-dessus** (couvertes par les journeys mais non citées inline) : FR-3, FR-5, FR-18, FR-24. FR-25 à FR-31 (§4.5, ajoutées par le Sprint Change Proposal du 2026-10-02) prolongent UJ-1 et UJ-2 — le livrable vit dans le dossier Drive du projet — sans être illustrées par une étape de journey.
 
 ## 3. Glossary
 
@@ -67,14 +67,16 @@ Round 1 est un prototype exploratoire, pas un produit à l'échelle de ces plate
 - **Modèle IA** — Le modèle sous-jacent traitant les messages du composer (ex. Sonnet 5), choisi dans une liste fermée. Ne remplace pas le choix d'un agent ou d'une skill.
 - **Suggestion proactive** — Proposition de première action affichée par l'IA à l'ouverture d'un projet ou d'une étape de workflow, distincte d'une **suggestion ancrée**.
 - **Stepper de workflow** — Représentation visuelle des étapes du cas d'usage avant-vente (Qualification → Références → Experts → Rédaction), portant l'orchestrateur de workflow.
-- **Livrable** — Document hors code produit avec l'aide de l'IA sur un projet (réponse RFP, note de mission), listé dans le panneau Livrables, ouvert dans l'**Éditeur assisté**. Le round 1 ne couvre pas les livrables de code.
+- **Livrable** — Document hors code produit avec l'aide de l'IA sur un projet (réponse RFP, note de mission), listé dans le panneau Livrables, ouvert dans l'**Éditeur assisté**. Un livrable peut être adossé à une présentation Google Slides du **dossier Drive du projet**, créée par l'app ou importée depuis une présentation existante : c'est un **livrable adossé à Drive**. Le round 1 ne couvre pas les livrables de code.
+- **Dossier Drive du projet** — Sous-dossier d'un dossier racine Google Drive commun, portant exactement le nom du projet Octopod et créé au préalable, hors de l'app. Le dossier racine est configuré une seule fois pour toute l'installation.
+- **Mode démo** — Bascule visible dans l'app qui remplace les réponses du modèle IA par un script et le drive par des données simulées. Elle permet de présenter le produit sans aucune dépendance externe (ni clé d'API, ni compte Google).
 - **Éditeur assisté** — Vue distincte de l'espace de travail où un livrable est ouvert avec un panneau de **suggestions ancrées** et de **révision globale** en marge.
 - **Suggestion ancrée** — Suggestion de l'IA rattachée à un paragraphe précis d'un livrable ouvert dans l'Éditeur assisté ; traitable par Accepter / Rejeter / Retravailler.
 - **Révision globale** — Demande de retravail d'un livrable ne ciblant pas un paragraphe précis, distincte d'une suggestion ancrée.
 
 ## 4. Features
 
-*4 features : la connexion à un projet, prérequis commun aux trois briques du brief (espace multi-agents, orchestrateur de workflow, éditeur assisté), est regroupée ici en feature à part entière pour porter ses propres FR (intégrations mockées comprises).*
+*5 features. La connexion à un projet, prérequis commun aux trois briques du brief (espace multi-agents, orchestrateur de workflow, éditeur assisté), forme une feature à part entière pour porter ses propres FR, intégrations mockées comprises. La 5e feature, livrables et contexte Google Drive (§4.5), a été ajoutée par le Sprint Change Proposal du 2026-10-02.*
 
 ### 4.1 Connexion à un projet Octopod
 
@@ -96,24 +98,25 @@ Le consultant peut sélectionner un projet Octopod existant pour l'utiliser dans
 À la connexion à un projet, le drive et le canal Mattermost associés sont automatiquement rattachés, sans configuration manuelle par le consultant.
 
 **Consequences (testable):**
-- Le panneau Contexte et le panneau Mattermost affichent du contenu dès la première ouverture d'un projet connecté, sans étape de configuration intermédiaire.
+- Le panneau Contexte et le panneau Mattermost affichent du contenu dès la première ouverture d'un projet connecté, sans étape de configuration intermédiaire — hors la connexion unique du compte Google (FR-25), valable pour tous les projets.
+- Si le dossier Drive du projet est introuvable, le panneau Contexte affiche à la place le message prévu par FR-26.
 
 **Out of Scope:**
 - Le mécanisme d'authentification réel à Octopod/Mattermost (round 1 mocké — voir FR-6).
 
 #### FR-3: Panneau Contexte
 
-Le panneau Contexte affiche, en lecture seule, les documents et répertoires issus du drive du projet connecté.
+Le panneau Contexte affiche, en lecture seule, les documents et répertoires du dossier Drive du projet connecté (le vrai Google Drive, voir FR-27).
 
 **Consequences (testable):**
 - Aucune action d'édition, de suppression ou d'ajout de document n'est disponible depuis ce panneau — un document ajouté par le consultant lui-même passe par FR-4, pas par ce panneau.
 
 #### FR-4: Ajout d'un document hors-drive
 
-Le consultant peut ajouter au projet un document qui n'est pas présent sur le drive Octopod (ex. compte-rendu reçu par email), pour qu'il serve de contexte à l'agent. Realizes UJ-1.
+Le consultant peut ajouter au projet un document absent du dossier Drive du projet (ex. compte-rendu reçu par email), pour qu'il serve de contexte à l'agent. Realizes UJ-1.
 
 **Consequences (testable):**
-- Un document ajouté ainsi est immédiatement disponible comme contexte pour la conversation, sans passer par une resynchronisation du drive Octopod.
+- Un document ainsi ajouté est immédiatement disponible comme contexte pour la conversation, sans passer par le dossier Drive du projet.
 
 **Out of Scope:**
 - La distinction visuelle entre documents issus du drive et documents ajoutés manuellement dans le panneau Contexte (à trancher en UX si le besoin se confirme).
@@ -127,12 +130,12 @@ Le panneau Mattermost affiche un aperçu du dernier message du canal lié et un 
 
 #### FR-6: Intégrations simulées, expérience crédible
 
-Pour le round 1, les données issues d'Octopod, du drive et de Mattermost sont simulées (mockées) côté système, mais aucune indication visible ("donnée factice", badge de simulation) n'en informe le consultant.
+Pour le round 1, les données issues d'Octopod et de Mattermost sont simulées (mockées) côté système, sans qu'aucune indication visible ("donnée factice", badge de simulation) n'en informe le consultant. Le drive du projet est un vrai Google Drive (§4.5) ; il n'est simulé qu'en mode démo, avec la même exigence de crédibilité. Hors mode démo, l'absence de compte Google connecté est traitée par FR-25 : aucun drive simulé ne prend le relais.
 
 **Consequences (testable):**
 - Un testeur externe au projet ne peut pas distinguer, depuis l'interface, une donnée simulée d'une donnée réelle.
 
-**Notes:** Contrainte sourcée directement du brief (§Scope) : "l'expérience doit rester crédible... sans que tout soit branché en réel." Voir aussi §Cross-Cutting NFRs — Crédibilité du mock.
+**Notes:** Contrainte sourcée directement du brief (§Scope) : "l'expérience doit rester crédible... sans que tout soit branché en réel." Elle reste valable avec un drive réel, puisque Octopod et Mattermost restent simulés. Voir aussi §Cross-Cutting NFRs — Crédibilité du mock.
 
 ### 4.2 Espace de travail multi-agents
 
@@ -193,7 +196,7 @@ Le composer permet de choisir, parmi une liste fermée de modèles IA, celui qui
 
 #### FR-13: Panneau Livrables
 
-Le panneau Livrables liste les documents en cours de production avec l'IA sur le projet. Cliquer un livrable ouvre l'Éditeur assisté sur ce document (voir §4.4).
+Le panneau Livrables liste les documents en cours de production avec l'IA sur le projet, ainsi que les présentations du dossier Drive du projet (voir FR-28). Cliquer un livrable ouvre l'Éditeur assisté sur ce document (voir §4.4).
 
 **Consequences (testable):**
 - Quand aucun livrable n'existe encore, le panneau affiche une invite courte à en créer un depuis la conversation ou un workflow — jamais une zone vide silencieuse. [ASSUMPTION: copie exacte non écrite, héritée d'`EXPERIENCE.md` — à trancher en Finalize.]
@@ -290,13 +293,91 @@ Le consultant conserve à tout moment la main sur le contenu final du document ;
 - Il n'existe aucun mode "auto-application" des suggestions ancrées ou de la révision globale.
 
 **Feature-specific NFRs:**
-- Le délai entre l'ouverture d'un livrable et l'affichage des suggestions ancrées existantes doit rester perçu comme immédiat par le consultant (pas de chargement visible qui casse le sentiment de "guidage déjà là" du climax UJ-1).
+- Le délai entre l'ouverture d'un livrable et l'affichage des suggestions ancrées existantes doit rester perçu comme immédiat par le consultant (pas de chargement visible qui casse le sentiment de "guidage déjà là" du climax UJ-1). Exception : l'import d'une présentation Drive (FR-29), qui passe par le réseau. La réouverture d'un livrable déjà importé reste soumise à cette exigence.
+
+### 4.5 Livrables et contexte Google Drive
+
+**Description :** Le drive du projet devient un vrai Google Drive. L'app lit le dossier Drive du projet pour alimenter le panneau Contexte. Elle importe les présentations Google Slides existantes comme livrables adossés à Drive, à retravailler avec l'IA dans l'Éditeur assisté, puis réécrit le fichier après validation du consultant. Elle crée aussi de nouvelles présentations depuis la conversation. Ajoutée par le Sprint Change Proposal du 2026-10-02 ; prolonge UJ-1 et UJ-2 sans y être illustrée (voir §2.3).
+
+**Pourquoi :** en pratique, les consultants OCTO produisent leurs livrables, souvent des présentations, dans le dossier Drive du projet. Tant que les livrables ne vivent que dans l'app, l'outil reste une démonstration : le consultant doit recopier le résultat à la main dans le fichier partagé avec l'équipe. Le drive est l'intégration qui rapporte le plus pour le moindre risque (Octopod et Mattermost restent simulés).
+
+**Functional Requirements:**
+
+#### FR-25: Connexion du compte Google
+
+Le consultant connecte son compte Google une seule fois depuis l'app. L'état "connecté / non connecté" est visible, et le consultant peut se déconnecter.
+
+**Consequences (testable):**
+- La connexion survit au redémarrage de l'app.
+- Hors mode démo, tant qu'aucun compte n'est connecté, les panneaux Contexte et Livrables n'affichent aucun contenu de drive. Ils montrent seulement une invite à connecter Google Drive, à côté des documents ajoutés hors-drive (FR-4) et des livrables déjà ouverts dans l'app.
+- En mode démo, le panneau Contexte reste simulé et aucune mention de Google (bouton, invite) n'apparaît. Les fonctions de livrables adossés à Drive (FR-28 à FR-31) sont indisponibles : le panneau Livrables ne montre que les livrables de l'app.
+
+#### FR-26: Dossier Drive du projet
+
+À la sélection d'un projet, l'app retrouve son dossier Drive : le sous-dossier du dossier racine qui porte exactement le nom du projet (voir §3).
+
+**Consequences (testable):**
+- Dossier absent ou en double : un message clair l'indique dans les panneaux concernés, et l'app ne crée jamais ce dossier elle-même.
+- Dossier racine non configuré : les fonctions Drive sont indisponibles et un message l'indique.
+
+**Notes:** [ASSUMPTION: le nom doit correspondre à l'identique, casse et accents compris ; les projets des testeurs ont déjà un dossier nommé ainsi.]
+
+#### FR-27: Panneau Contexte depuis le vrai Drive
+
+Le panneau Contexte (FR-3) liste en lecture seule les fichiers situés directement dans le dossier Drive du projet. Le consultant choisit explicitement, fichier par fichier, ceux qui servent de contexte à l'agent ; seuls ces fichiers sont lus et envoyés au modèle IA. Seuls les Google Docs, Slides et Sheets peuvent être choisis (contenu exporté en texte) ; les autres fichiers sont listés mais non sélectionnables.
+
+**Consequences (testable):**
+- Aucun fichier du Drive n'est envoyé au modèle IA tant que le consultant ne l'a pas choisi comme contexte ; ce choix est visible et réversible dans le panneau.
+- Un fichier qui ne peut pas servir de contexte porte une mention l'indiquant.
+- Les documents ajoutés hors-drive (FR-4) restent affichés et utilisés comme aujourd'hui.
+
+**Notes:** [ASSUMPTION: les sous-dossiers du dossier Drive du projet ne sont pas parcourus en round 1.]
+
+#### FR-28: Présentations du dossier dans le panneau Livrables
+
+Le panneau Livrables (FR-13) liste aussi les présentations Google Slides du dossier Drive du projet, distinguées des livrables déjà ouverts dans l'app.
+
+**Consequences (testable):**
+- Cliquer une présentation déjà importée rouvre son livrable existant ; un simple clic ne la réimporte jamais.
+
+#### FR-29: Import d'une présentation comme livrable
+
+Ouvrir une présentation du dossier l'importe comme livrable adossé à Drive : chaque zone de texte, y compris dans un groupe d'éléments, devient un paragraphe de l'Éditeur assisté, regroupé par diapositive. Le consultant peut ensuite demander des suggestions à l'IA. Importer une présentation puis demander des suggestions vaut choix explicite de l'envoyer au modèle IA (voir §Constraints and Guardrails).
+
+**Consequences (testable):**
+- L'import ne modifie jamais le fichier Drive.
+- Tableaux, images et notes du présentateur ne sont ni affichés ni modifiables ; ils restent intacts dans le fichier.
+- Comme pour tout livrable (§4.4), le texte ne change dans l'app que par des suggestions acceptées. Les suggestions sont générées à la demande du consultant, jamais automatiquement à l'import.
+- Sur un livrable adossé à Drive, l'IA ne propose que des suggestions ancrées sur les zones de texte existantes : elle n'ajoute, ne supprime ni ne réordonne aucune diapositive ni zone. Une révision globale (FR-23) y produit donc des suggestions ancrées, jamais un document régénéré.
+- "Réimporter" est une action explicite qui remplace le contenu par la version Drive actuelle. Les suggestions dont la zone existe encore sont conservées ; les changements acceptés mais non enregistrés sont perdus, après un avertissement.
+
+#### FR-30: Enregistrement dans Drive
+
+Une action explicite "Enregistrer dans Drive" réécrit dans le fichier le texte des zones modifiées par des suggestions acceptées.
+
+**Consequences (testable):**
+- Rien n'est écrit dans Drive sans cette action (prolonge FR-24).
+- Si le fichier a été modifié dans Drive depuis l'import, l'enregistrement est refusé avec un message clair proposant de réimporter ; rien n'est écrasé.
+- Après un enregistrement réussi, la version enregistrée devient la nouvelle référence : un enregistrement suivant n'est refusé que si le fichier a de nouveau changé dans Drive entre-temps.
+- Seul le texte est réécrit ; le consultant est prévenu que la mise en forme interne d'une zone modifiée peut être simplifiée. [ASSUMPTION: cette simplification est acceptable pour un deck client en round 1.]
+
+#### FR-31: Création d'une présentation depuis la conversation
+
+Le consultant peut demander à l'agent de créer une présentation. L'agent propose une suite de diapositives (titre et contenu) ; l'app crée ensuite le fichier Google Slides dans le dossier Drive du projet, qui s'ouvre comme livrable adossé à Drive (FR-29).
+
+**Consequences (testable):**
+- Le fichier n'est créé qu'après validation explicite du consultant, depuis la proposition affichée dans la conversation.
+- Le fichier porte le titre proposé par l'agent pour la présentation.
+
+**Feature-specific NFRs:**
+- Les identifiants et jetons Google ne quittent jamais le poste et ne sont jamais exposés au navigateur.
+- Le mode démo ne dépend jamais d'une connexion Google.
 
 ## 5. Non-Goals (Explicit)
 
 - Ne construit pas une plateforme à l'échelle des déploiements des grands cabinets cités dans le brief (McKinsey Lilli, Deloitte Sidekick/Zora, Accenture AI Refinery, Bain Sage, PwC ChatPwC, BCG Deckster) — c'est un prototype volontairement léger.
 - Ne vise pas de ROI chiffré ni de métrique de productivité mesurée pour ce round.
-- Ne connecte pas réellement Octopod/drive/Mattermost en round 1 (FR-6 — voir §6.2 pour le détail et la note associée).
+- Ne connecte pas réellement Octopod ni Mattermost en round 1 (FR-6, voir §6.2) ; le drive, lui, est réellement connecté (§4.5).
 - Ne couvre pas les livrables de code — le round 1 porte sur les réponses avant-vente et les livrables de mission hors code uniquement (brief, §The Solution).
 - Ne cible pas un profil de consultant en particulier (junior/senior, avant-vente/mission) — horizontal pour tous, sans personnalisation par rôle.
 - Ne propose pas de version mobile ou tablette (voir `EXPERIENCE.md.Responsive & Platform` — desktop uniquement, ≥1280px).
@@ -307,13 +388,17 @@ Le consultant conserve à tout moment la main sur le contenu final du document ;
 
 ### 6.1 In Scope
 
-- Les 4 features de §4, sur les deux cas d'usage du brief (réponses avant-vente, livrables de mission hors code).
+- Les 5 features de §4, sur les deux cas d'usage du brief (réponses avant-vente, livrables de mission hors code).
 - Web desktop uniquement, largeur cible ≥1280px.
-- Intégrations Octopod/drive/Mattermost mockées mais crédibles (FR-6).
+- Mono-poste : chaque consultant fait tourner sa propre instance de l'app, avec sa propre base locale et au plus un compte Google connecté (choix d'architecture du round 1). Le partage des livrables avec l'équipe projet (FR-10) passe par le dossier Drive du projet (§4.5).
+- Intégrations Octopod/Mattermost mockées mais crédibles (FR-6).
+- Intégration réelle de Google Drive : livrables adossés à Drive (Google Slides) et panneau Contexte (§4.5).
 
 ### 6.2 Out of Scope for MVP
 
-- Intégrations réelles avec Octopod, le drive, ou Mattermost — déférées à une version ultérieure, une fois le round 1 validé. [NOTE FOR PM: c'est le principal écart entre ce qui est testé et ce qui devra être construit si le round 1 réussit — à cadrer explicitement avec le porteur de projet avant toute suite.]
+- Intégrations réelles avec Octopod et Mattermost — déférées à une version ultérieure, une fois le round 1 validé. Le drive n'est plus concerné depuis le Sprint Change Proposal du 2026-10-02 (§4.5).
+- Livrables adossés à des fichiers Drive d'un autre format que Google Slides (Google Docs, .pptx, .docx). Les livrables propres à l'app (§4.4) ne sont pas concernés.
+- Gestion multi-utilisateur des connexions Google : un seul compte connecté par poste, cohérent avec l'architecture mono-poste (§6.1).
 - Mécanisme technique d'ajout d'une skill à un projet (OQ-6).
 - Méthode de qualification/réponse avant-vente formalisée, si elle n'existe pas déjà chez OCTO (OQ-1).
 - Source de données pour les références de missions et les experts OCTO (OQ-2).
@@ -326,6 +411,7 @@ Le consultant conserve à tout moment la main sur le contenu final du document ;
 **Primary**
 - **SM-1** : Complétion du parcours minimal — chaque testeur du groupe round 1 parvient, sans blocage signalé en debrief, à se connecter à un projet, trouver les skills dont il a besoin, et les utiliser. Validates FR-1, FR-11, FR-12.
 - **SM-2** : Réaction qualitative alignée avec la citation cible du brief (guidage perçu, gain de vitesse et de qualité perçu), recueillie en entretien avec chaque testeur. Validates FR-17, FR-20, FR-21.
+- **SM-3** : Boucle Drive complète — un testeur importe une vraie présentation du dossier Drive de son projet, accepte des suggestions IA et enregistre dans Drive sans blocage. Une modification faite en parallèle dans Google Slides n'est jamais écrasée, et le mode démo fonctionne à l'identique sans compte Google. Validates FR-25 à FR-31.
 
 **Counter-metrics (do not optimize)**
 - **SM-C1** : Ne pas optimiser le taux d'acceptation des suggestions ancrées à la hausse pour lui-même — un rejet à bon escient (nom d'expert non vérifié, chiffre halluciné, comme dans les edge cases d'UJ-1 et UJ-2) est un signal de succès du produit, pas un échec à corriger. Counterbalances SM-2.
@@ -338,11 +424,13 @@ Le consultant conserve à tout moment la main sur le contenu final du document ;
 4. **OQ-4** — Quel comportement exact pour le retour d'une demande de révision globale (FR-23) — nouvelle suggestion ancrée, message en conversation, autre ?
 5. **OQ-5** — Échéance du round 1 de test — aucune n'est définie à ce stade (brief, §Scope).
 6. **OQ-6** — Quel mécanisme technique pour ajouter une skill à un projet (FR-11) ? À trancher en architecture.
+7. **OQ-7** — Mise en page des présentations créées (FR-31) : modèle de slides OCTO ou mise en page Google par défaut ? À trancher avant la story de création (Epic 5).
+8. **OQ-8** — Pour SM-1/SM-2, les testeurs du round 1 utilisent-ils le vrai Drive (compte Google connecté) ou le mode démo ? À trancher avant la session de test ; sans effet sur la construction.
 
 ## 9. Assumptions Index
 
 - §1 Vision, §"Why Now" — les chiffres de marché cités dans le brief sont volontairement absents ici (allégés dans le brief lui-même après relecture) ; seule l'existence de plateformes concurrentes est affirmée, pas leur ampleur exacte.
-- §4.2, FR-13 ; §4.3, FR-14 ; §4.3, FR-15 ; §4.4, FR-23 — voir la note `[ASSUMPTION: ...]` inline à chaque FR.
+- §4.2, FR-13 ; §4.3, FR-14 ; §4.3, FR-15 ; §4.4, FR-23 ; §4.5, FR-26, FR-27, FR-30 — voir la note `[ASSUMPTION: ...]` inline à chaque FR.
 - Hérité d'`EXPERIENCE.md` : palette/typographie par défaut (pas de charte OCTO fournie), vouvoiement non confirmé explicitement, aucun raccourci clavier au-delà d'Entrée/Échap, plancher d'accessibilité proposé par défaut, desktop-only déduit du contexte.
 
 ## Why Now
@@ -350,6 +438,8 @@ Le consultant conserve à tout moment la main sur le contenu final du document ;
 Le brief documente que plusieurs grands cabinets de conseil ont déjà déployé leurs propres plateformes d'agents IA à l'échelle du cabinet — ce n'est plus une hypothèse mais une référence que les clients commencent à connaître (brief, §Executive Summary et addendum §Contexte marché). L'écart qu'OCTO a aujourd'hui (moins de la moitié des consultants utilisent l'IA de façon structurée) n'est donc pas seulement un problème de productivité interne : il devient un problème de crédibilité face aux clients, et un facteur d'attraction/rétention face aux cabinets déjà équipés. Rien dans ce constat n'oblige OCTO à construire à la même échelle — round 1 teste l'idée à un coût très inférieur avant d'investir davantage.
 
 ## Constraints and Guardrails
+
+**Données envoyées au modèle IA** — Le contenu d'un fichier du dossier Drive du projet n'est envoyé au modèle IA (API Anthropic) que sur choix explicite du consultant : sélection comme contexte (FR-27), ou import d'une présentation suivi d'une demande de suggestions (FR-29). Le dossier n'est jamais lu ni envoyé automatiquement.
 
 **Confidentialité** — La confidentialité de la conversation (FR-10) est une contrainte dure, pas une préférence : aucune surface du produit, présente ou future, ne doit exposer le contenu d'une conversation à quelqu'un d'autre que son auteur. Seuls les livrables et assets produits sont partagés à l'équipe projet.
 
