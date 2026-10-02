@@ -1,6 +1,8 @@
 import { getActiveConversation, listConversations } from '@/actions/conversation';
 import { getDemoModeActive } from '@/actions/demo';
 import { listDocuments } from '@/actions/document';
+import { resolveDriveMode } from '@/actions/drive-mode';
+import { getGoogleAccount } from '@/actions/google-connection';
 import { listLivrables } from '@/actions/livrable';
 import { getLastMattermostMessage } from '@/actions/mattermost';
 import { getActiveProject, listProjects } from '@/actions/project';
@@ -11,6 +13,7 @@ import { ConversationHistory } from '@/components/ConversationHistory';
 import { ConversationList } from '@/components/ConversationList';
 import { DemoModeToggle } from '@/components/DemoModeToggle';
 import { DemoResetAvantVente } from '@/components/DemoResetAvantVente';
+import { GoogleConnection } from '@/components/GoogleConnection';
 import { LivrablesPanel } from '@/components/LivrablesPanel';
 import { MattermostPanel } from '@/components/MattermostPanel';
 import { ProactiveSuggestion } from '@/components/ProactiveSuggestion';
@@ -33,7 +36,7 @@ export const dynamic = 'force-dynamic';
 // composer — Story 2.1/2.5), right (Contexte, then Livrables, then
 // Mattermost panels — Story 1.3/2.6/1.5, order fixed by
 // `epic-2-context.md`).
-export default async function Home() {
+export default async function Home({ searchParams }: PageProps<'/'>) {
   const activeProjectResult = await getActiveProject();
 
   // A failed read is not the same state as "no project selected yet": the
@@ -95,6 +98,9 @@ export default async function Home() {
     livrablesResult,
     projectsResult,
     demoModeResult,
+    driveMode,
+    googleAccountResult,
+    resolvedSearchParams,
   ] = await Promise.all([
     listConversations(activeProject.id),
     getActiveConversation(activeProject.id),
@@ -118,6 +124,13 @@ export default async function Home() {
     // `DemoModeToggle`'s initial `active` prop below; there is no shared
     // request-scoped cache to reuse between the two Server Components.
     getDemoModeActive(),
+    // Story 5.1 — the single drive-mode decision point (`demo` >
+    // `unconfigured` > `disconnected` > `connected`), plus the connected
+    // account's email (never its token) for the top bar.
+    resolveDriveMode(),
+    getGoogleAccount(),
+    // `?google=connection-failed`, set by the OAuth callback route.
+    searchParams,
   ]);
   const conversations = conversationsResult.ok ? conversationsResult.data : null;
   const activeConversationId =
@@ -129,6 +142,11 @@ export default async function Home() {
   const livrables = livrablesResult.ok ? livrablesResult.data : null;
   const projects = projectsResult.ok ? projectsResult.data : null;
   const demoModeActive = demoModeResult.ok ? demoModeResult.data : false;
+  const googleAccountEmail =
+    googleAccountResult.ok && googleAccountResult.data
+      ? googleAccountResult.data.accountEmail
+      : null;
+  const googleConnectionFailed = resolvedSearchParams.google === 'connection-failed';
   // Story 3.1 — Stepper de workflow. Read from the active conversation's
   // own `stepKey` (AD-6: never the other way around) — a fixture
   // conversation or a failed read both fall back to `null`, which
@@ -184,6 +202,18 @@ export default async function Home() {
     <div>
       <header className="top-bar">
         <ProjectSelector projects={projects} activeProject={activeProject} />
+        {/* Story 5.1 — right of the project selector (EXPERIENCE.md);
+            not rendered at all in demo mode (no mention of Google). The
+            mode comes from `resolveDriveMode`, never from
+            `demoModeActive` above, so the two can't disagree about which
+            case applies. */}
+        {driveMode !== 'demo' && (
+          <GoogleConnection
+            mode={driveMode}
+            accountEmail={googleAccountEmail}
+            connectionFailed={googleConnectionFailed}
+          />
+        )}
         <DemoModeToggle active={demoModeActive} />
       </header>
       {/* Story 3.2 — Workflow du cas "livrable de mission" (FR-15). A

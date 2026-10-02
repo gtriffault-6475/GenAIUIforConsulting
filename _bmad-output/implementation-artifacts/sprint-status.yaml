@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-14-2026 15:47
-last_updated: 10-02-2026 12:00
+last_updated: 10-02-2026 14:00
 project: GenAI4Consulting
 project_key: NOKEY
 tracking_system: file-system
@@ -66,8 +66,8 @@ development_status:
   4-5-contrôle-du-consultant-sur-le-document-final: done
   epic-4-retrospective: done
 
-  epic-5: backlog
-  5-1-connexion-du-compte-google: backlog
+  epic-5: in-progress
+  5-1-connexion-du-compte-google: review
   5-2-dossier-drive-du-projet-et-panneau-contexte-réel: backlog
   5-3-import-d-une-présentation-comme-livrable: backlog
   5-4-suggestions-ia-sur-une-présentation-importée: backlog
