@@ -280,6 +280,22 @@ export async function sendMessage(
     // behavior (I/O matrix: "comportement identique à aujourd'hui -- pas de
     // régression") — logged only, falling back to no injection, exactly as
     // if no livrable existed yet for this conversation.
+    //
+    // Story 5.3 — guard until Story 5.4: a conversation whose livrable is
+    // an imported presentation (`source = 'drive'`) is offered no tool at
+    // all — `propose_livrable_content` would regenerate the presentation
+    // and its text box ids. Read on its own, before the content injection
+    // below, so a failure there can never drop the guard: an unreadable
+    // livrable row fails the call rather than offering the tool. Its text
+    // is not injected below either: a Drive file reaches the model only on
+    // an explicit choice (epic-5-context.md — selected as context, or
+    // suggestions requested, Story 5.4).
+    const [conversationLivrable] = await db
+      .select({ source: livrable.source })
+      .from(livrable)
+      .where(eq(livrable.conversationId, conversationId));
+    const offersLivrableTool = conversationLivrable?.source !== 'drive';
+
     let effectiveLoadedSkills = loadedSkills;
     try {
       const [existingLivrableForContext] = await db
@@ -287,7 +303,7 @@ export async function sendMessage(
         .from(livrable)
         .where(eq(livrable.conversationId, conversationId));
 
-      if (existingLivrableForContext) {
+      if (existingLivrableForContext && offersLivrableTool) {
         const parsedContent = JSON.parse(
           existingLivrableForContext.content,
         ) as { blocks?: { text?: unknown }[] };
@@ -327,8 +343,7 @@ export async function sendMessage(
       demoModeActive,
       history: historyRows,
       model,
-      tool: PROPOSE_LIVRABLE_CONTENT_TOOL,
-      executeTool,
+      ...(offersLivrableTool ? { tool: PROPOSE_LIVRABLE_CONTENT_TOOL, executeTool } : {}),
     });
 
     if (!agentResult.ok) {

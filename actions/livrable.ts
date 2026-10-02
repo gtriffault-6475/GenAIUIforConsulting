@@ -1,13 +1,24 @@
 'use server';
 
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull } from 'drizzle-orm';
 
+import { currentDriveProvider } from '@/actions/current-drive-provider';
+import { getDrivePresentation, listDrivePresentations } from '@/actions/document';
+import { resolveDriveMode } from '@/actions/drive-mode';
+import { deleteRevokedGoogleConnection } from '@/actions/google-credentials';
 import type { ActionResult } from '@/actions/types';
 import { sendMessage } from '@/actions/message';
 import { seedIfEmpty } from '@/actions/seed-if-empty';
 import { db } from '@/db/client';
-import { livrable, suggestion } from '@/db/schema';
+import { conversation, livrable, suggestion } from '@/db/schema';
+import {
+  hasModifiedBlocks,
+  keepsSuggestionAfterReimport,
+  toSlideBlocks,
+  type LivrableBlock,
+} from '@/domain/livrable';
 import { resolveAnchorPosition } from '@/domain/suggestion';
+import type { PresentationContent } from '@/integrations';
 import { MODELS } from '@/skills/models';
 import type { ProposedLivrableContent } from '@/skills/propose_livrable_content';
 
@@ -17,6 +28,10 @@ import type { ProposedLivrableContent } from '@/skills/propose_livrable_content'
 // dans une seule transaction synchrone"), so that insert lives here rather
 // than in `actions/suggestion.ts` — every other read/write of `SUGGESTION`
 // stays that file's exclusive concern (its own header comment).
+// Story 5.3 adds two more exceptions of the same kind: `importPresentation`
+// inserts the dedicated CONVERSATION with its LIVRABLE (AD-14), and
+// `reimportPresentation` deletes the stale unresolved SUGGESTION rows in
+// the same transaction as the new blocks.
 // Components never touch `db/` directly; they call this Server Action.
 
 // The shape `LivrablesPanel` sees: a livrable row reduced to the field
@@ -27,9 +42,12 @@ import type { ProposedLivrableContent } from '@/skills/propose_livrable_content'
 // conversation content reaches a surface other than the conversation's
 // own view (FR-10 boundary, Story 2.3), even indirectly by exposing which
 // conversation a livrable came from.
+//
+// Story 5.3 — `source` drives the Slides icon of a drive livrable.
 export type LivrableSummary = {
   id: string;
   title: string;
+  source: 'local' | 'drive';
 };
 
 type FixtureLivrable = {
@@ -111,10 +129,15 @@ function seedFixturesIfEmpty(projectId: string): void {
 // as `anchorRef`. Still never carries `conversationId` — nothing in this
 // story needs it, and exposing it here would be the same FR-10-adjacent
 // leak `LivrableSummary`'s comment already rules out for the panel.
+//
+// Story 5.3 — `source` tells the editor to group the blocks by slide and
+// offer "Réimporter"; a drive livrable's blocks carry their slide and
+// `driveText` (AD-13).
 export type LivrableDetail = {
   id: string;
   title: string;
-  blocks: { id: string; text: string }[];
+  source: 'local' | 'drive';
+  blocks: LivrableBlock[];
 };
 
 // Reads a single LIVRABLE row by id alone, no project filter (Boundaries:
@@ -156,7 +179,8 @@ export async function getLivrable(
       data: {
         id: row.id,
         title: row.title,
-        blocks: content.blocks as { id: string; text: string }[],
+        source: row.source,
+        blocks: content.blocks as LivrableBlock[],
       },
     };
   } catch (error) {
@@ -175,7 +199,7 @@ export async function listLivrables(
     seedFixturesIfEmpty(projectId);
 
     const rows = await db
-      .select({ id: livrable.id, title: livrable.title })
+      .select({ id: livrable.id, title: livrable.title, source: livrable.source })
       .from(livrable)
       .where(eq(livrable.projectId, projectId));
 
@@ -441,12 +465,23 @@ export async function requestGlobalRevision(
 ): Promise<ActionResult<{ assistantFailed: boolean; error?: string }>> {
   try {
     const [row] = await db
-      .select({ conversationId: livrable.conversationId })
+      .select({ conversationId: livrable.conversationId, source: livrable.source })
       .from(livrable)
       .where(eq(livrable.id, livrableId));
 
     if (!row) {
       return { ok: false, error: 'Ce livrable est introuvable.' };
+    }
+
+    // Story 5.3 — guard until Story 5.4: the global revision goes through
+    // `propose_livrable_content`, which would regenerate the presentation
+    // and its text box ids. The editor hides the field; this refuses a
+    // direct call too.
+    if (row.source === 'drive') {
+      return {
+        ok: false,
+        error: "La révision globale n'est pas encore disponible pour une présentation importée.",
+      };
     }
 
     if (row.conversationId === null) {
@@ -466,5 +501,247 @@ export async function requestGlobalRevision(
       ok: false,
       error: 'Impossible de soumettre cette révision globale.',
     };
+  }
+}
+
+// Story 5.3 — the presentations the Livrables panel offers in its "Dans
+// le Drive du projet" group: those of the project folder (as listed by the
+// last resync, `actions/document.ts`'s `listDrivePresentations`) not yet
+// imported as a livrable of this project — an imported presentation only
+// appears once, under "En cours". `null`: no such group (demo mode, not
+// connected, or the last listing of the folder failed).
+export type ImportablePresentation = {
+  documentId: string;
+  name: string;
+};
+
+export async function listImportablePresentations(
+  projectId: string,
+): Promise<ActionResult<ImportablePresentation[] | null>> {
+  try {
+    const presentationsResult = await listDrivePresentations(projectId);
+    if (!presentationsResult.ok) return presentationsResult;
+    if (presentationsResult.data === null) return { ok: true, data: null };
+
+    const imported = await db
+      .select({ driveFileId: livrable.driveFileId })
+      .from(livrable)
+      .where(and(eq(livrable.projectId, projectId), isNotNull(livrable.driveFileId)));
+    const importedIds = new Set(imported.map((row) => row.driveFileId));
+
+    return {
+      ok: true,
+      data: presentationsResult.data
+        .filter((presentation) => !importedIds.has(presentation.driveFileId))
+        .map(({ documentId, name }) => ({ documentId, name })),
+    };
+  } catch (error) {
+    console.error('listImportablePresentations failed', error);
+    return {
+      ok: false,
+      error: 'Impossible de récupérer les présentations du dossier Drive.',
+    };
+  }
+}
+
+const IMPORT_FAILED = "Impossible d'importer cette présentation.";
+const DRIVE_DISCONNECTED = 'Connectez Google Drive pour enregistrer.';
+
+// Story 5.3 — reads a presentation through the current (`connected`)
+// provider. On `token_revoked` the dead connection is deleted (AD-1, back
+// to `disconnected`). Never modifies the file.
+async function readDrivePresentation(
+  driveFileId: string,
+): Promise<{ ok: true; data: PresentationContent } | { ok: false }> {
+  const current = currentDriveProvider('connected');
+  if (!current) return { ok: false };
+  const result = await current.provider.readPresentation(driveFileId);
+  if (!result.ok) {
+    if (result.error === 'token_revoked' && current.refreshToken) {
+      deleteRevokedGoogleConnection(current.refreshToken);
+    }
+    console.error('readDrivePresentation failed', { driveFileId, error: result.error });
+    return { ok: false };
+  }
+  return { ok: true, data: result.data };
+}
+
+function findDriveLivrableId(
+  projectId: string,
+  driveFileId: string,
+): string | null {
+  const [row] = db
+    .select({ id: livrable.id })
+    .from(livrable)
+    .where(and(eq(livrable.projectId, projectId), eq(livrable.driveFileId, driveFileId)))
+    .all();
+  return row?.id ?? null;
+}
+
+// Story 5.3 — Import d'une présentation comme livrable (FR-28, AD-13,
+// AD-14). `documentId` is the presentation's `DOCUMENT` row (Livrables
+// panel), refused unless it belongs to `projectId`. An already imported presentation reopens its livrable. Otherwise
+// the presentation is read (`presentations.get`, never a write, no AI
+// call) and, in one synchronous transaction, a dedicated CONVERSATION
+// titled after the presentation and the `drive` LIVRABLE are inserted —
+// the CONVERSATION insert lives here rather than in
+// `actions/conversation.ts` so both rows land atomically (same exception
+// as `createLivrableWithSuggestions`' SUGGESTION rows). The active
+// conversation is left unchanged. Refused outside the `connected` mode; a
+// failed read creates nothing.
+export async function importPresentation(
+  projectId: string,
+  documentId: string,
+): Promise<ActionResult<{ livrableId: string }>> {
+  try {
+    if ((await resolveDriveMode()) !== 'connected') {
+      return { ok: false, error: IMPORT_FAILED };
+    }
+
+    // Same gate as the panel's list: the row belongs to this project and
+    // the project's last listing is a successful `google` one.
+    const presentationResult = await getDrivePresentation(projectId, documentId);
+    if (!presentationResult.ok || presentationResult.data === null) {
+      return { ok: false, error: IMPORT_FAILED };
+    }
+    const { driveFileId, name } = presentationResult.data;
+
+    const existingId = findDriveLivrableId(projectId, driveFileId);
+    if (existingId) return { ok: true, data: { livrableId: existingId } };
+
+    const read = await readDrivePresentation(driveFileId);
+    if (!read.ok) return { ok: false, error: IMPORT_FAILED };
+
+    const title = read.data.title.trim() || name;
+    const blocks = toSlideBlocks(read.data.slides);
+
+    const livrableId = db.transaction((tx) => {
+      // Imported in between (double click, second tab): reopen that one.
+      const [already] = tx
+        .select({ id: livrable.id })
+        .from(livrable)
+        .where(and(eq(livrable.projectId, projectId), eq(livrable.driveFileId, driveFileId)))
+        .all();
+      if (already) return already.id;
+
+      const conversationId = crypto.randomUUID();
+      const newLivrableId = crypto.randomUUID();
+      tx.insert(conversation)
+        .values({ id: conversationId, projectId, title, stepKey: null })
+        .run();
+      tx.insert(livrable)
+        .values({
+          id: newLivrableId,
+          projectId,
+          conversationId,
+          title,
+          content: JSON.stringify({ blocks }),
+          source: 'drive',
+          driveFileId,
+        })
+        .run();
+      return newLivrableId;
+    });
+
+    return { ok: true, data: { livrableId } };
+  } catch (error) {
+    console.error('importPresentation failed', error);
+    return { ok: false, error: IMPORT_FAILED };
+  }
+}
+
+// Story 5.3 — "Réimporter" (AD-13): replaces a drive livrable's blocks with
+// the presentation as it is now in Drive. Explicit action only, refused
+// outside the `connected` mode. When a block is modified (`text ≠
+// driveText`, `domain/livrable.ts`), the editor asks for confirmation
+// first: without `discardLocalChanges` the re-import is refused
+// (`needsConfirmation`), re-checked inside the transaction against the
+// current content. Suggestions: an unresolved (`pending`/`revising`) one is
+// kept only if its text box still exists, its Drive text did not change
+// and the block was not modified in the app (`keepsSuggestionAfterReimport`),
+// otherwise deleted; `accepted`/`rejected` ones stay as history. A failed read changes nothing. Like the
+// import, never writes to the file and never calls the AI. The title is
+// left unchanged.
+export async function reimportPresentation(
+  livrableId: string,
+  discardLocalChanges: boolean,
+): Promise<ActionResult<{ needsConfirmation: boolean }>> {
+  const failed = { ok: false as const, error: "Impossible de réimporter cette présentation." };
+  try {
+    if ((await resolveDriveMode()) !== 'connected') {
+      return { ok: false, error: DRIVE_DISCONNECTED };
+    }
+
+    const [row] = await db
+      .select({ source: livrable.source, driveFileId: livrable.driveFileId, content: livrable.content })
+      .from(livrable)
+      .where(eq(livrable.id, livrableId));
+    if (!row) return { ok: false, error: 'Ce livrable est introuvable.' };
+    if (row.source !== 'drive' || !row.driveFileId) return failed;
+
+    const parseBlocks = (content: string): LivrableBlock[] | null => {
+      const parsed = JSON.parse(content) as { blocks?: unknown };
+      return Array.isArray(parsed?.blocks) ? (parsed.blocks as LivrableBlock[]) : null;
+    };
+
+    const currentBlocks = parseBlocks(row.content);
+    if (!currentBlocks) {
+      console.error('reimportPresentation: malformed content.blocks', livrableId);
+      return failed;
+    }
+    if (hasModifiedBlocks(currentBlocks) && !discardLocalChanges) {
+      return { ok: true, data: { needsConfirmation: true } };
+    }
+
+    const read = await readDrivePresentation(row.driveFileId);
+    if (!read.ok) return failed;
+    const nextBlocks = toSlideBlocks(read.data.slides);
+
+    const outcome = db.transaction((tx): 'done' | 'needs_confirmation' | 'missing' | 'malformed' => {
+      // Re-read: a suggestion may have been accepted during the Drive read.
+      const [fresh] = tx
+        .select({ content: livrable.content })
+        .from(livrable)
+        .where(eq(livrable.id, livrableId))
+        .all();
+      if (!fresh) return 'missing';
+      const previousBlocks = parseBlocks(fresh.content);
+      if (!previousBlocks) return 'malformed';
+      if (hasModifiedBlocks(previousBlocks) && !discardLocalChanges) {
+        return 'needs_confirmation';
+      }
+
+      tx.update(livrable)
+        .set({ content: JSON.stringify({ blocks: nextBlocks }) })
+        .where(eq(livrable.id, livrableId))
+        .run();
+
+      const unresolved = tx
+        .select({ id: suggestion.id, anchorRef: suggestion.anchorRef })
+        .from(suggestion)
+        .where(
+          and(
+            eq(suggestion.livrableId, livrableId),
+            inArray(suggestion.status, ['pending', 'revising']),
+          ),
+        )
+        .all();
+      for (const item of unresolved) {
+        if (!keepsSuggestionAfterReimport(previousBlocks, nextBlocks, item.anchorRef)) {
+          tx.delete(suggestion).where(eq(suggestion.id, item.id)).run();
+        }
+      }
+      return 'done';
+    });
+
+    if (outcome === 'missing') return { ok: false, error: 'Ce livrable est introuvable.' };
+    if (outcome === 'malformed') {
+      console.error('reimportPresentation: malformed content.blocks', livrableId);
+      return failed;
+    }
+    return { ok: true, data: { needsConfirmation: outcome === 'needs_confirmation' } };
+  } catch (error) {
+    console.error('reimportPresentation failed', error);
+    return failed;
   }
 }

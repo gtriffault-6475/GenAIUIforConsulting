@@ -54,12 +54,39 @@ export function isExportableMimeType(mimeType: string | null): boolean {
   return mimeType !== null && Object.hasOwn(EXPORT_FORMAT_BY_MIME_TYPE, mimeType);
 }
 
+// Story 5.3 — the Google Slides type, the only one importable as a
+// livrable.
+export const PRESENTATION_MIME_TYPE = 'application/vnd.google-apps.presentation';
+
+// Story 5.3 — the text of a presentation, as read by `readPresentation`.
+// A text box is a shape holding text (inside a group too, at any depth),
+// in the slide's element order; its text has Slides' final paragraph
+// break removed. Tables, images, videos, charts and speaker notes are
+// never read. Every slide is listed, those without text included (empty
+// `textBoxes`), so a slide's rank in `slides` is its number in the file.
+export type PresentationTextBox = {
+  objectId: string;
+  text: string;
+};
+
+export type PresentationSlide = {
+  objectId: string;
+  textBoxes: PresentationTextBox[];
+};
+
+export type PresentationContent = {
+  title: string;
+  slides: PresentationSlide[];
+};
+
 export interface DriveProvider {
   listFiles(projectName: string): Promise<DriveResult<DriveFile[]>>;
   // Story 5.7 — the text of one file, for the agent. Only ever called for
   // a file the consultant selected as context (NFR8). A file of a type
   // outside `EXPORT_FORMAT_BY_MIME_TYPE` answers `not_found`.
   exportText(fileId: string): Promise<DriveResult<string>>;
+  // Story 5.3 — read-only (`presentations.get`): never modifies the file.
+  readPresentation(fileId: string): Promise<DriveResult<PresentationContent>>;
 }
 
 // Story 5.1 (AD-1, epic-5-context.md "Mode drive") — computed once by

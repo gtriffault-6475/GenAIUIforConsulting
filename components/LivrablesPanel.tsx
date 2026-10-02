@@ -1,6 +1,8 @@
 import Link from 'next/link';
 
-import type { LivrableSummary } from '@/actions/livrable';
+import type { ImportablePresentation, LivrableSummary } from '@/actions/livrable';
+import { ImportPresentationButton } from '@/components/ImportPresentationButton';
+import { SlidesIcon } from '@/components/SlidesIcon';
 
 // Right-sidebar Livrables panel (Story 2.6 — Panneau Livrables), rendered
 // between `ContextPanel` and `MattermostPanel` in `workspace-sidebar-right`
@@ -19,9 +21,22 @@ import type { LivrableSummary } from '@/actions/livrable';
 // l'IA" alongside "icône skills" as an `ai-accent` use case, and the
 // `Main.dc.html` mockup's Livrables section uses the same icon+label row
 // shape as the Skills cards.
+//
+// Story 5.3 — two groups once Google Drive is connected (epic-5-context.md
+// "Panneau Livrables"): "En cours" (the livrables opened in the app) and
+// "Dans le Drive du projet" (the folder's presentations not yet imported,
+// `ImportPresentationButton`). `importable` is `null` when there is no
+// Drive group (demo mode, not connected, last listing failed): the panel
+// is then exactly as before, without group headings. A drive livrable
+// carries the Slides icon in place of the page icon.
 export function LivrablesPanel({
+  projectId,
   livrables,
+  importable,
 }: {
+  projectId: string;
+  // Story 5.3 — `null`: no "Dans le Drive du projet" group.
+  importable: ImportablePresentation[] | null;
   // `null` means the read failed — distinct from a genuinely empty list,
   // which gets its own short creation prompt below rather than a silent
   // empty area (this story's Always). Same convention as `SkillsPanel`'s
@@ -41,6 +56,12 @@ export function LivrablesPanel({
     >
       <span className="text-label">Livrables</span>
 
+      {importable !== null && (
+        <span id="livrables-group-current" className="text-caption livrable-group-heading">
+          En cours
+        </span>
+      )}
+
       {livrables === null ? (
         <p className="text-caption">
           Impossible de charger les livrables du projet.
@@ -57,14 +78,8 @@ export function LivrablesPanel({
         </p>
       ) : (
         <ul
-          style={{
-            listStyle: 'none',
-            margin: 0,
-            padding: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 'var(--space-2)',
-          }}
+          className="livrable-list"
+          aria-labelledby={importable !== null ? 'livrables-group-current' : undefined}
         >
           {livrables.map((item) => (
             // `<li>` keeps its list semantics; the `<Link>` inside carries
@@ -81,23 +96,52 @@ export function LivrablesPanel({
                 // app that turns a styled block into a link.
                 style={{ textDecoration: 'none' }}
               >
-                <svg
-                  className="skill-card-icon"
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  strokeWidth="2"
-                  aria-hidden="true"
-                >
-                  <path d="M6 2h9l5 5v13a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2z" />
-                  <path d="M15 2v5h5" />
-                </svg>
+                {item.source === 'drive' ? (
+                  <SlidesIcon />
+                ) : (
+                  <svg
+                    className="skill-card-icon"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    strokeWidth="2"
+                    aria-hidden="true"
+                  >
+                    <path d="M6 2h9l5 5v13a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2z" />
+                    <path d="M15 2v5h5" />
+                  </svg>
+                )}
                 <span className="text-body-strong">{item.title}</span>
               </Link>
             </li>
           ))}
         </ul>
+      )}
+
+      {importable !== null && (
+        <>
+          <span id="livrables-group-drive" className="text-caption livrable-group-heading">
+            Dans le Drive du projet
+          </span>
+          {importable.length === 0 ? (
+            <p className="text-caption">
+              Aucune autre présentation dans le dossier du projet.
+            </p>
+          ) : (
+            <ul className="livrable-list" aria-labelledby="livrables-group-drive">
+              {importable.map((item) => (
+                <li key={item.documentId}>
+                  <ImportPresentationButton
+                    projectId={projectId}
+                    documentId={item.documentId}
+                    name={item.name}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
       )}
     </section>
   );

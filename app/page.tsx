@@ -3,7 +3,7 @@ import { getDemoModeActive } from '@/actions/demo';
 import { listDocuments } from '@/actions/document';
 import { resolveDriveMode } from '@/actions/drive-mode';
 import { getGoogleAccount } from '@/actions/google-connection';
-import { listLivrables } from '@/actions/livrable';
+import { listImportablePresentations, listLivrables } from '@/actions/livrable';
 import { getLastMattermostMessage } from '@/actions/mattermost';
 import { getActiveProject, listProjects } from '@/actions/project';
 import { listProjectSkills } from '@/actions/skill';
@@ -132,6 +132,15 @@ export default async function Home({ searchParams }: PageProps<'/'>) {
     // `?google=connection-failed`, set by the OAuth callback route.
     searchParams,
   ]);
+  // Story 5.3 — the Livrables panel's "Dans le Drive du projet" group.
+  // Read after `listDocuments` above, never alongside it: it reads the
+  // presentation rows that resync just wrote (sync-then-read). A failed
+  // read only drops the group (logged).
+  const importableResult = await listImportablePresentations(activeProject.id);
+  if (!importableResult.ok) {
+    console.error('Home: listImportablePresentations failed', importableResult.error);
+  }
+  const importablePresentations = importableResult.ok ? importableResult.data : null;
   const conversations = conversationsResult.ok ? conversationsResult.data : null;
   const activeConversationId =
     activeConversationResult.ok && activeConversationResult.data
@@ -286,7 +295,11 @@ export default async function Home({ searchParams }: PageProps<'/'>) {
             documents={documents}
             driveStatus={driveStatus}
           />
-          <LivrablesPanel livrables={livrables} />
+          <LivrablesPanel
+            projectId={activeProject.id}
+            livrables={livrables}
+            importable={importablePresentations}
+          />
           <MattermostPanel result={mattermostResult} />
         </aside>
       </div>
