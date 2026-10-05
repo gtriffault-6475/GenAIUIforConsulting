@@ -82,4 +82,8 @@ export const mockDriveProvider: DriveProvider = {
     }
     return { ok: false, error: 'not_found' };
   },
+  // The demo mode has no Drive livrables (EXPERIENCE.md): never reached.
+  async readPresentation() {
+    return { ok: false, error: 'unknown' };
+  },
 };

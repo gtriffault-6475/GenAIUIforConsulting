@@ -19,6 +19,7 @@ import { ProactiveSuggestion } from '@/components/ProactiveSuggestion';
 import { ProjectSelector } from '@/components/ProjectSelector';
 import { SkillsPanel } from '@/components/SkillsPanel';
 import { Stepper } from '@/components/Stepper';
+import { GOOGLE_SLIDES_MIME } from '@/domain/document';
 import { computeStepStatuses, STEPS } from '@/domain/workflow';
 
 // Reads APP_STATE (mutable, changed by the `selectProject` Server Action)
@@ -138,6 +139,23 @@ export default async function Home() {
   const livrables = livrablesResult.ok ? livrablesResult.data : null;
   const projects = projectsResult.ok ? projectsResult.data : null;
   const demoModeActive = demoModeResult.ok ? demoModeResult.data : false;
+  // Story 5.3 — the "Dans le Drive du projet" group reuses the Contexte
+  // panel's resync (one Drive listing per render, AD-1): the folder's
+  // Google Slides files not imported yet. Absent in demo mode (the demo
+  // has no Drive livrables); also hidden when the panel data or the
+  // livrables list failed to load (imported decks would look new).
+  const driveLivrables =
+    contextPanel === null || demoModeActive || livrables === null
+      ? null
+      : {
+          projectName: contextPanel.projectName,
+          state: contextPanel.drive.state,
+          presentations: contextPanel.drive.files.filter(
+            (file) =>
+              file.mimeType === GOOGLE_SLIDES_MIME &&
+              !(livrables ?? []).some((item) => item.driveFileId === file.driveFileId),
+          ),
+        };
   // Story 3.1 — Stepper de workflow. Read from the active conversation's
   // own `stepKey` (AD-6: never the other way around) — a fixture
   // conversation or a failed read both fall back to `null`, which
@@ -261,7 +279,11 @@ export default async function Home() {
             future panel added to this right sidebar must do the same. */}
         <aside className="workspace-sidebar-right">
           <ContextPanel projectId={activeProject.id} data={contextPanel} />
-          <LivrablesPanel livrables={livrables} />
+          <LivrablesPanel
+            projectId={activeProject.id}
+            livrables={livrables}
+            drive={driveLivrables}
+          />
           <MattermostPanel result={mattermostResult} />
         </aside>
       </div>

@@ -15,6 +15,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "0.126.0",
     "@googleapis/drive": "26.0.2",
+    "@googleapis/slides": "10.1.0",
     "drizzle-orm": "1.0.0-rc.4",
     "google-auth-library": "11.1.0",
     "next": "16.3.5",

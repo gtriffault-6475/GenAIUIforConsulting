@@ -1331,3 +1331,90 @@ body.demo-mode-active {
   gap: var(--space-2);
   margin-top: var(--space-3);
 }
+
+/* Story 5.3 — Livrables panel groups ("En cours", "Dans le Drive du
+   projet") and the import button, which looks like the livrable links
+   above it (`.card.skill-card`) but is a real button. */
+.livrables-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.livrables-group-title {
+  margin-top: var(--space-2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.livrables-import {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.livrables-import:hover,
+.livrables-import:focus-visible {
+  background: var(--color-selected-tint);
+}
+
+.livrables-import:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+/* Story 5.3 — editor of a Drive livrable: title + "Réimporter" in the
+   header, paragraphs grouped under "Diapositive N". */
+.livrable-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.livrable-slide {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border);
+}
+
+.livrable-slide:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.reimport {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-1);
+  max-width: 320px;
+}
+
+.reimport-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+
+.reimport-confirm-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* A Slides text box can hold several lines: keep its line breaks. */
+.livrable-slide .text-body {
+  white-space: pre-line;
+}

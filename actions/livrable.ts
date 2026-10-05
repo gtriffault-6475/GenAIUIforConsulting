@@ -6,7 +6,15 @@ import type { ActionResult } from '@/actions/types';
 import { sendMessage } from '@/actions/message';
 import { seedIfEmpty } from '@/actions/seed-if-empty';
 import { db } from '@/db/client';
-import { livrable, suggestion } from '@/db/schema';
+import { conversation, livrable, suggestion } from '@/db/schema';
+import { findDrivePresentation } from '@/actions/document-context';
+import { getActiveDriveProvider, type DriveMode } from '@/actions/google-connection';
+import {
+  hasUnsavedDriveChanges,
+  reimportKeepsSuggestion,
+  slidesToBlocks,
+  type LivrableBlock,
+} from '@/domain/livrable';
 import { resolveAnchorPosition } from '@/domain/suggestion';
 import { MODELS } from '@/skills/models';
 import type { ProposedLivrableContent } from '@/skills/propose_livrable_content';
@@ -30,6 +38,9 @@ import type { ProposedLivrableContent } from '@/skills/propose_livrable_content'
 export type LivrableSummary = {
   id: string;
   title: string;
+  // Story 5.3 — `drive` = imported from a Google Slides presentation.
+  source: 'local' | 'drive';
+  driveFileId: string | null;
 };
 
 type FixtureLivrable = {
@@ -114,7 +125,13 @@ function seedFixturesIfEmpty(projectId: string): void {
 export type LivrableDetail = {
   id: string;
   title: string;
-  blocks: { id: string; text: string }[];
+  blocks: LivrableBlock[];
+  // Story 5.3 — drive livrables are grouped by slide and can be
+  // reimported, the latter only while Google is connected. `driveMode`
+  // lets the editor say why it cannot (and say nothing in demo mode).
+  source: 'local' | 'drive';
+  canReimport: boolean;
+  driveMode: DriveMode | null;
 };
 
 // Reads a single LIVRABLE row by id alone, no project filter (Boundaries:
@@ -151,12 +168,26 @@ export async function getLivrable(
       };
     }
 
+    // Never fail the editor over this: unknown mode = cannot reimport.
+    let driveMode: DriveMode | null = null;
+    if (row.source === 'drive') {
+      try {
+        driveMode = (await getActiveDriveProvider()).mode;
+      } catch (error) {
+        console.error('getLivrable: could not resolve the drive mode', error);
+      }
+    }
+    const canReimport = driveMode === 'connected';
+
     return {
       ok: true,
       data: {
         id: row.id,
         title: row.title,
-        blocks: content.blocks as { id: string; text: string }[],
+        blocks: content.blocks as LivrableBlock[],
+        source: row.source,
+        canReimport,
+        driveMode,
       },
     };
   } catch (error) {
@@ -175,7 +206,12 @@ export async function listLivrables(
     seedFixturesIfEmpty(projectId);
 
     const rows = await db
-      .select({ id: livrable.id, title: livrable.title })
+      .select({
+        id: livrable.id,
+        title: livrable.title,
+        source: livrable.source,
+        driveFileId: livrable.driveFileId,
+      })
       .from(livrable)
       .where(eq(livrable.projectId, projectId));
 
@@ -466,5 +502,162 @@ export async function requestGlobalRevision(
       ok: false,
       error: 'Impossible de soumettre cette révision globale.',
     };
+  }
+}
+
+// Story 5.3 — Import d'une présentation comme livrable (AD-13, AD-14).
+// Reads the presentation (never writes to Drive) and creates, in one
+// synchronous transaction, the `source = 'drive'` livrable and its
+// dedicated conversation titled after the presentation. Writing
+// CONVERSATION here is a documented AD-2 exception, like
+// `actions/demo.ts`: the two rows must land together so a livrable never
+// exists without its conversation. The active conversation is left
+// untouched. A presentation already imported on this project returns its
+// existing livrable — checked before reading Drive and again inside the
+// transaction; a concurrent import that wins the unique index race is
+// read back instead of failing.
+export async function importDrivePresentation(
+  projectId: string,
+  documentId: string,
+): Promise<ActionResult<{ livrableId: string }>> {
+  const failure = {
+    ok: false as const,
+    error: "Impossible d'importer cette présentation. Réessayez.",
+  };
+  try {
+    const file = findDrivePresentation(projectId, documentId);
+    if (!file) return failure;
+
+    const findExisting = () =>
+      db
+        .select({ id: livrable.id })
+        .from(livrable)
+        .where(and(eq(livrable.projectId, projectId), eq(livrable.driveFileId, file.driveFileId)))
+        .get();
+
+    const already = findExisting();
+    if (already) return { ok: true, data: { livrableId: already.id } };
+
+    const { mode, provider } = await getActiveDriveProvider();
+    if (mode !== 'connected' || !provider) return failure;
+
+    const presentation = await provider.readPresentation(file.driveFileId);
+    if (!presentation.ok) {
+      console.error('importDrivePresentation: readPresentation failed', presentation.error);
+      return failure;
+    }
+
+    const title = presentation.data.title.trim() || file.name;
+    const blocks = slidesToBlocks(presentation.data);
+    const livrableId = crypto.randomUUID();
+    const conversationId = crypto.randomUUID();
+
+    try {
+      const existingId = db.transaction((tx) => {
+        const raced = tx
+          .select({ id: livrable.id })
+          .from(livrable)
+          .where(and(eq(livrable.projectId, projectId), eq(livrable.driveFileId, file.driveFileId)))
+          .get();
+        if (raced) return raced.id;
+
+        tx.insert(conversation)
+          .values({ id: conversationId, projectId, title, stepKey: null })
+          .run();
+        tx.insert(livrable)
+          .values({
+            id: livrableId,
+            projectId,
+            conversationId,
+            title,
+            content: JSON.stringify({ blocks }),
+            source: 'drive',
+            driveFileId: file.driveFileId,
+          })
+          .run();
+        return livrableId;
+      });
+      return { ok: true, data: { livrableId: existingId } };
+    } catch (error) {
+      const winner = findExisting();
+      if (winner) return { ok: true, data: { livrableId: winner.id } };
+      throw error;
+    }
+  } catch (error) {
+    console.error('importDrivePresentation failed', error);
+    return failure;
+  }
+}
+
+// Story 5.3 — "Réimporter" (AD-13). Replaces every block by the current
+// Drive version; a pending/revising suggestion survives only if its zone
+// still exists and Drive's text for it did not change, otherwise it is
+// deleted; resolved (accepted/rejected) suggestions stay as history. The
+// confirmation about unsaved accepted changes happens in the page
+// (`components/ReimportButton.tsx`) before this is called. SUGGESTION is
+// written here for the same reason as `createLivrableWithSuggestions`:
+// blocks and suggestions must change in one transaction.
+//
+// `confirmed`: the consultant accepted losing unsaved accepted changes.
+// The check is redone here, inside the transaction, so a suggestion
+// accepted after the page rendered (another tab) is never lost silently:
+// without confirmation, the action returns `needsConfirmation` instead.
+export async function reimportDriveLivrable(
+  livrableId: string,
+  confirmed: boolean,
+): Promise<ActionResult<{ needsConfirmation: boolean }>> {
+  const failure = {
+    ok: false as const,
+    error: 'Impossible de réimporter cette présentation. Réessayez.',
+  };
+  try {
+    const row = db.select().from(livrable).where(eq(livrable.id, livrableId)).get();
+    if (!row || row.source !== 'drive' || !row.driveFileId) return failure;
+
+    const { mode, provider } = await getActiveDriveProvider();
+    if (mode !== 'connected' || !provider) return failure;
+
+    const presentation = await provider.readPresentation(row.driveFileId);
+    if (!presentation.ok) {
+      console.error('reimportDriveLivrable: readPresentation failed', presentation.error);
+      return failure;
+    }
+    const newBlocks = slidesToBlocks(presentation.data);
+
+    const needsConfirmation = db.transaction((tx) => {
+      const current = tx.select().from(livrable).where(eq(livrable.id, livrableId)).get();
+      if (!current) return false;
+      const parsed = JSON.parse(current.content) as { blocks?: unknown };
+      const oldBlocks = Array.isArray(parsed?.blocks) ? (parsed.blocks as LivrableBlock[]) : [];
+      if (!confirmed && hasUnsavedDriveChanges(oldBlocks)) return true;
+
+      const open = tx
+        .select({ id: suggestion.id, anchorRef: suggestion.anchorRef })
+        .from(suggestion)
+        .where(
+          and(
+            eq(suggestion.livrableId, livrableId),
+            inArray(suggestion.status, ['pending', 'revising']),
+          ),
+        )
+        .all();
+      const dropped = open
+        .filter((item) => !reimportKeepsSuggestion(oldBlocks, newBlocks, item.anchorRef))
+        .map((item) => item.id);
+      if (dropped.length > 0) {
+        tx.delete(suggestion).where(inArray(suggestion.id, dropped)).run();
+      }
+
+      tx.update(livrable)
+        .set({ content: JSON.stringify({ blocks: newBlocks }) })
+        .where(eq(livrable.id, livrableId))
+        .run();
+      return false;
+    });
+
+    return { ok: true, data: { needsConfirmation } };
+  } catch (error) {
+    console.error('reimportDriveLivrable failed', error);
+    return failure;
   }
 }
