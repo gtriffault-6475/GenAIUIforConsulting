@@ -396,6 +396,10 @@ export const presentationProposal = sqliteTable(
     slides: text('slides').notNull(),
     status: text('status', { enum: ['pending', 'created'] }).notNull().default('pending'),
     livrableId: text('livrable_id').references(() => livrable.id),
+    // Retro A8 — the deck copied for this proposal, set as soon as the copy
+    // succeeds so a retry after a failed import reuses it instead of
+    // copying the template again; cleared if that deck is gone.
+    driveFileId: text('drive_file_id'),
     // ISO-8601 string, same convention as `message.createdAt`.
     createdAt: text('created_at').notNull(),
   },

@@ -14,7 +14,7 @@ import {
 } from '@/actions/livrable';
 import { listLoadedSkillInstructions } from '@/actions/skill';
 import { db } from '@/db/client';
-import { resolveDriveMode } from '@/actions/google-connection';
+import { getGoogleConnectionStatus, resolveDriveMode } from '@/actions/google-connection';
 import { conversation, livrable, message, presentationProposal } from '@/db/schema';
 import {
   presentationGuidance,
@@ -360,9 +360,12 @@ export async function sendMessage(
       })
       .from(livrable)
       .where(eq(livrable.conversationId, conversationId));
+    // One read for both the mode and the template flag (retro A8).
+    const connectionStatus = await getGoogleConnectionStatus();
     const agentToolContext: AgentToolContext = {
       livrableSource: conversationLivrable?.source ?? null,
-      driveMode: await resolveDriveMode(),
+      driveMode: connectionStatus.ok ? connectionStatus.data.mode : await resolveDriveMode(),
+      slidesTemplateConfigured: connectionStatus.ok && connectionStatus.data.slidesTemplateConfigured,
     };
     const toolNames = selectAgentTools(agentToolContext);
     const TOOLS: Record<AgentToolName, Anthropic.Tool> = {
