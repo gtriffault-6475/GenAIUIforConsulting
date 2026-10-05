@@ -7,9 +7,9 @@ import {
   setDocumentUsedAsContext,
   type ContextPanelData,
   type DocumentSummary,
-  type DriveListingState,
 } from '@/actions/document';
 import { AddDocumentForm } from '@/components/AddDocumentForm';
+import { driveStateMessage } from '@/components/drive-state-message';
 import { useOverlay } from '@/components/OverlayProvider';
 
 const OVERLAY_ID = 'add-document-form';
@@ -28,19 +28,6 @@ const OVERLAY_ID = 'add-document-form';
 // Docs/Slides/Sheets file gets a "Utiliser comme contexte" checkbox (a real
 // labelled form control); other formats say "non lisible par l'agent".
 // Manual documents are always sent to the agent, so they have no box.
-const DRIVE_STATE_MESSAGES: Record<'disconnected' | 'unconfigured' | 'error', string> = {
-  disconnected: 'Connectez Google Drive pour afficher les fichiers du projet.',
-  unconfigured: "Google Drive n'est pas configuré pour cette installation.",
-  error: 'Impossible de lire le Drive du projet. Réessayez plus tard.',
-};
-
-function driveStateMessage(state: DriveListingState, projectName: string): string | null {
-  if (state === 'ok') return null;
-  if (state === 'folder_missing') return `Aucun dossier « ${projectName} » dans le Drive racine.`;
-  if (state === 'folder_duplicate') return `Plusieurs dossiers portent le nom « ${projectName} ».`;
-  return DRIVE_STATE_MESSAGES[state];
-}
-
 export function ContextPanel({
   projectId,
   data,

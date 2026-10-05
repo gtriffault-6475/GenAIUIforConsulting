@@ -243,3 +243,7 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-2-dossier-drive-du-projet-et-panneau-contexte-reel.md`
   summary: No committed automated check for Story 5.2 — Google error mapping (invalid_client vs invalid_grant vs quota), resync rules (purges, kept selections, re-export on modified date, retry after a failed export), the agent-context filter (origin, selection, readability), and the migration backfill on a database with pre-existing manual documents.
   evidence: Verification-gap review (pass 1). All verified once by scratch scripts and Playwright (Implementation Notes) but none re-runs; the invalid_client regression was actually caught that way. `createGoogleDriveProvider` already accepts an `apiOverride` for a stub-based check. No test suite by standing decision.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-3-import-d-une-presentation-comme-livrable.md`
+  summary: No committed automated check for Story 5.3 — Slides parsing (`toDrivePresentation`: groups, skipped tables/images/empty boxes, slide numbering, trailing newline), the reimport suggestion rule, unsaved-change detection, `applyAcceptedSuggestion` keeping slide fields, and the duplicate-conversation migration backfill on an existing database.
+  evidence: Verification-gap review (pass 1). All verified once by scratch scripts (stubbed Slides API, SQLite integration with a stubbed provider, in-memory migration) — none re-runs. `toDrivePresentation` is already exported for a fixture-based check. No test suite by standing decision.

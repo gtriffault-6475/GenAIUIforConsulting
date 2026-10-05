@@ -55,6 +55,8 @@ export type DocumentSummary = {
   source: 'drive' | 'manual';
   folderPath: string | null;
   mimeType: string | null;
+  // Story 5.3 — lets the Livrables panel tell imported presentations apart.
+  driveFileId: string | null;
   readable: boolean;
   usedAsContext: boolean;
 };
@@ -84,6 +86,7 @@ function toSummary(row: DocumentRow): DocumentSummary {
     source: row.source,
     folderPath: row.folderPath,
     mimeType: row.mimeType,
+    driveFileId: row.driveFileId,
     readable: row.source === 'manual' || isAgentReadable(row.mimeType),
     usedAsContext: row.usedAsContext,
   };
@@ -374,6 +377,7 @@ export async function addManualDocument({
         source: 'manual',
         folderPath: trimmedFolderPath,
         mimeType: null,
+        driveFileId: null,
         readable: true,
         usedAsContext: true,
       },

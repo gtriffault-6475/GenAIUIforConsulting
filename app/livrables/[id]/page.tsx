@@ -3,7 +3,13 @@ import Link from 'next/link';
 import { getLivrable } from '@/actions/livrable';
 import { listSuggestions } from '@/actions/suggestion';
 import { GlobalRevisionField } from '@/components/GlobalRevisionField';
+import { ReimportButton } from '@/components/ReimportButton';
 import { SuggestionsPanel } from '@/components/SuggestionsPanel';
+import {
+  groupBlocksBySlide,
+  hasUnsavedDriveChanges,
+  type LivrableBlock,
+} from '@/domain/livrable';
 
 // Story 4.1 — Éditeur assisté (FR-19). First route of the app besides `/`.
 // Story 4.2 (FR-24) adds `listSuggestions` alongside `getLivrable` and
@@ -134,7 +140,18 @@ export default async function LivrablePage({
                 gap: 'var(--space-3)',
               }}
             >
-              <h1 className="text-heading">{result.data.title}</h1>
+              <div className="livrable-header">
+                <h1 className="text-heading">{result.data.title}</h1>
+                {/* Story 5.3 — Drive livrables only. */}
+                {result.data.source === 'drive' && result.data.driveMode !== 'demo' && (
+                  <ReimportButton
+                    livrableId={result.data.id}
+                    canReimport={result.data.canReimport}
+                    showConnectHint={result.data.driveMode === 'disconnected'}
+                    hasUnsavedChanges={hasUnsavedDriveChanges(result.data.blocks)}
+                  />
+                )}
+              </div>
               {/* Rendered in `content.blocks`' own array order, keyed by
                   `block.id` — never the block's text — since Story 4.2's
                   anchored suggestions target this same stable id and it
@@ -152,34 +169,11 @@ export default async function LivrablePage({
                   Ce livrable ne contient aucun contenu pour le moment.
                 </p>
               ) : (
-                result.data.blocks.map((block) => {
-                  const isActiveTarget = activeAnchorRefs.has(block.id);
-                  return (
-                    <p
-                      key={block.id}
-                      className={
-                        isActiveTarget ? 'text-body ai-tint-block' : 'text-body'
-                      }
-                    >
-                      {block.text}
-                      {/* Non-visual counterpart to the tint (bmad-review
-                          blind-hunter finding, oneshot pass): the color
-                          alone conveys nothing to a screen reader, and the
-                          suggestion's own card is a separate DOM subtree
-                          below this one with no structural link back here.
-                          A child span (not `aria-label` on the `<p>`
-                          itself, which would replace the paragraph's own
-                          text as its accessible name instead of adding to
-                          it) appends this without being seen. */}
-                      {isActiveTarget && (
-                        <span className="sr-only">
-                          {' '}
-                          (suggestion IA en attente)
-                        </span>
-                      )}
-                    </p>
-                  );
-                })
+                <LivrableBlocks
+                  blocks={result.data.blocks}
+                  bySlide={result.data.source === 'drive'}
+                  activeAnchorRefs={activeAnchorRefs}
+                />
               )}
             </div>
 
@@ -192,10 +186,87 @@ export default async function LivrablePage({
             {/* Story 4.4 (FR-23, UX-DR15) — révision globale, distincte des
                 suggestions ancrées ci-dessus, toujours en bas de la
                 colonne. */}
-            <GlobalRevisionField livrableId={result.data.id} />
+            {/* Not on a presentation imported from Drive: the agent may
+                not regenerate it (Story 5.3); Story 5.4 brings anchored
+                suggestions for those instead. */}
+            {result.data.source !== 'drive' && (
+              <GlobalRevisionField livrableId={result.data.id} />
+            )}
           </div>
         )}
       </main>
     </div>
+  );
+}
+
+// One paragraph of the livrable, tinted while an anchored suggestion
+// targets it.
+function BlockParagraph({
+  block,
+  isActiveTarget,
+}: {
+  block: LivrableBlock;
+  isActiveTarget: boolean;
+}) {
+  return (
+    <p
+      className={
+        isActiveTarget ? 'text-body ai-tint-block' : 'text-body'
+      }
+    >
+      {/* A Slides soft line break (vertical tab) shows as a line break. */}
+      {block.text.replace(/\u000b/g, '\n')}
+      {/* Non-visual counterpart to the tint (bmad-review
+          blind-hunter finding, oneshot pass): the color
+          alone conveys nothing to a screen reader, and the
+          suggestion's own card is a separate DOM subtree
+          below this one with no structural link back here.
+          A child span (not `aria-label` on the `<p>`
+          itself, which would replace the paragraph's own
+          text as its accessible name instead of adding to
+          it) appends this without being seen. */}
+      {isActiveTarget && (
+        <span className="sr-only">
+          {' '}
+          (suggestion IA en attente)
+        </span>
+      )}
+    </p>
+  );
+}
+
+// Rendered in `content.blocks`' own array order, keyed by `block.id`.
+// Story 5.3 — a presentation imported from Drive is read slide by slide,
+// under "Diapositive N" headings.
+function LivrableBlocks({
+  blocks,
+  bySlide,
+  activeAnchorRefs,
+}: {
+  blocks: LivrableBlock[];
+  bySlide: boolean;
+  activeAnchorRefs: Set<string | null>;
+}) {
+  const renderBlock = (block: LivrableBlock) => (
+    <BlockParagraph
+      key={block.id}
+      block={block}
+      isActiveTarget={activeAnchorRefs.has(block.id)}
+    />
+  );
+  if (!bySlide) return <>{blocks.map(renderBlock)}</>;
+  return (
+    <>
+      {groupBlocksBySlide(blocks).map((group) => (
+        <section
+          key={`slide-${group.slideNumber}`}
+          className="livrable-slide"
+          aria-label={`Diapositive ${group.slideNumber}`}
+        >
+          <h2 className="text-label">Diapositive {group.slideNumber}</h2>
+          {group.blocks.map(renderBlock)}
+        </section>
+      ))}
+    </>
   );
 }

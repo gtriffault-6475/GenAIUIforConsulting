@@ -37,9 +37,21 @@ export type DriveFile = {
   modifiedTime: string;
 };
 
+// Story 5.3 — a Google Slides presentation as read for import: every
+// slide in order (`slideNumber` is its 1-based rank, slides without text
+// included) with its text boxes (shapes holding text, including inside
+// groups). Tables, images and speaker notes are not part of it.
+export type DriveTextBox = { objectId: string; text: string };
+
+export type DrivePresentation = {
+  title: string;
+  slides: { slideId: string; slideNumber: number; textBoxes: DriveTextBox[] }[];
+};
+
 export interface DriveProvider {
   listFiles(projectName: string): Promise<DriveResult<DriveFile[]>>;
   exportText(fileId: string, mimeType: string): Promise<DriveResult<string>>;
+  readPresentation(fileId: string): Promise<DriveResult<DrivePresentation>>;
 }
 
 // Story 5.1 (AD-1) — computed only by `resolveDriveMode`

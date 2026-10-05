@@ -189,9 +189,21 @@ export async function sendMessage(
       }
 
       const [existingLivrable] = await db
-        .select({ id: livrable.id })
+        .select({ id: livrable.id, source: livrable.source })
         .from(livrable)
         .where(eq(livrable.conversationId, conversationId));
+
+      // Story 5.3 safety (until Story 5.4 picks the tools per
+      // conversation, AD-14): a livrable imported from Google Slides is
+      // never regenerated — its block ids are the Slides objectIds the
+      // save to Drive depends on (AD-9, AD-13).
+      if (existingLivrable?.source === 'drive') {
+        return {
+          ok: false,
+          error:
+            "Ce livrable vient d'une présentation Google Slides : il ne peut pas être régénéré par l'agent.",
+        };
+      }
 
       if (existingLivrable) {
         const updated = await updateLivrableWithSuggestions(

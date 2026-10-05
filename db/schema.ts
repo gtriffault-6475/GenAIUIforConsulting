@@ -272,15 +272,34 @@ export const projectSkill = sqliteTable(
 // `CREATE TABLE`, not an `ALTER TABLE` on a table with existing rows), so
 // none of them need a `.default(...)` the way `message.createdAt` did —
 // see that column's comment for why a default would matter there.
-export const livrable = sqliteTable('livrable', {
-  id: text('id').primaryKey(),
-  projectId: text('project_id')
-    .notNull()
-    .references(() => project.id),
-  conversationId: text('conversation_id').references(() => conversation.id),
-  title: text('title').notNull(),
-  content: text('content').notNull(),
-});
+//
+// Story 5.3 — `source = 'drive'` marks a livrable imported from a Google
+// Slides presentation (`driveFileId`, unique per project: a presentation
+// is imported once, AD-13); its blocks carry `slideId`, `slideNumber` and
+// `driveText` (AD-9). `conversationId` is unique when set: a conversation
+// has at most one livrable (AD-14).
+export const livrable = sqliteTable(
+  'livrable',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => project.id),
+    conversationId: text('conversation_id').references(() => conversation.id),
+    title: text('title').notNull(),
+    content: text('content').notNull(),
+    source: text('source', { enum: ['local', 'drive'] }).notNull().default('local'),
+    driveFileId: text('drive_file_id'),
+  },
+  (table) => [
+    uniqueIndex('livrable_project_id_drive_file_id_unique')
+      .on(table.projectId, table.driveFileId)
+      .where(sql`${table.driveFileId} is not null`),
+    uniqueIndex('livrable_conversation_id_unique')
+      .on(table.conversationId)
+      .where(sql`${table.conversationId} is not null`),
+  ],
+);
 
 // An AI-authored suggestion on a LIVRABLE (Story 4.2 — Génération des
 // suggestions ancrées à l'écriture), per the Structural Seed. `type`

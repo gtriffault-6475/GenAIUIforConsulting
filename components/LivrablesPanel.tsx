@@ -1,32 +1,71 @@
+'use client';
+
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useState, useTransition } from 'react';
 
-import type { LivrableSummary } from '@/actions/livrable';
+import type { DocumentSummary, DriveListingState } from '@/actions/document';
+import { importDrivePresentation, type LivrableSummary } from '@/actions/livrable';
+import { driveStateMessage } from '@/components/drive-state-message';
 
-// Right-sidebar Livrables panel (Story 2.6 — Panneau Livrables), rendered
-// between `ContextPanel` and `MattermostPanel` in `workspace-sidebar-right`
-// (order fixed by `epic-2-context.md`'s UX pattern). Server Component —
-// like `MattermostPanel.tsx`: no mutation, no overlay, no client-side
-// state. Cards are now a `<Link>` to the Éditeur assisté (Story 4.1) —
-// the click-through this story's own comment had deferred — wrapping the
-// same icon+title content rather than changing the card's look.
-//
-// Reuses `.card`/`.skill-card`/`.skill-card-icon` from Story 2.4 rather
-// than introducing a livrable-specific class (Code Map: "réutilise .card,
-// pas de nouvelle classe si les styles existants suffisent") — the layout
-// those classes already provide (small icon + title, icon alone tinted
-// `--color-ai-accent`) is exactly what DESIGN.md prescribes for a
-// livrable card too: it lists "icône livrable en cours de travail avec
-// l'IA" alongside "icône skills" as an `ai-accent` use case, and the
-// `Main.dc.html` mockup's Livrables section uses the same icon+label row
-// shape as the Skills cards.
+// Story 2.6 — Panneau Livrables; Story 5.3 (EXPERIENCE.md "Panneau
+// Livrables") adds a second group. "En cours": livrables open in the app,
+// Drive-backed or not. "Dans le Drive du projet": the folder's Google
+// Slides presentations not imported yet — clicking one imports it, then
+// opens the editor. That group is absent in demo mode (`drive === null`)
+// and shows the Contexte panel's message when the Drive cannot be read.
+// A Slides icon marks every Drive-backed item.
+export type DriveLivrables = {
+  projectName: string;
+  state: DriveListingState;
+  presentations: DocumentSummary[];
+};
+
+function DocumentIcon() {
+  return (
+    <svg
+      className="skill-card-icon"
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      strokeWidth="2"
+      aria-hidden="true"
+    >
+      <path d="M6 2h9l5 5v13a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2z" />
+      <path d="M15 2v5h5" />
+    </svg>
+  );
+}
+
+// A presentation board on an easel: the Slides marker, drawn in the same
+// stroke style as the document icon.
+function SlidesIcon() {
+  return (
+    <svg
+      className="skill-card-icon"
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      strokeWidth="2"
+      role="img"
+      aria-label="Présentation Google Slides"
+    >
+      <rect x="3" y="4" width="18" height="12" rx="1.5" />
+      <path d="M12 16v4M8 20h8" />
+    </svg>
+  );
+}
+
 export function LivrablesPanel({
+  projectId,
   livrables,
+  drive,
 }: {
-  // `null` means the read failed — distinct from a genuinely empty list,
-  // which gets its own short creation prompt below rather than a silent
-  // empty area (this story's Always). Same convention as `SkillsPanel`'s
-  // `skills` prop / `ConversationList`'s `conversations` prop.
+  projectId: string;
   livrables: LivrableSummary[] | null;
+  drive: DriveLivrables | null;
 }) {
   return (
     <section
@@ -41,64 +80,103 @@ export function LivrablesPanel({
     >
       <span className="text-label">Livrables</span>
 
+      {drive !== null && <span className="text-caption livrables-group-title">En cours</span>}
       {livrables === null ? (
-        <p className="text-caption">
-          Impossible de charger les livrables du projet.
-        </p>
+        <p className="text-caption">Impossible de charger les livrables du projet.</p>
       ) : livrables.length === 0 ? (
-        // Honest about the real creation mechanism — the agent, inside a
-        // conversation — rather than a button that would simulate a
-        // creation flow that does not exist yet (`propose_livrable_content`
-        // is an agent tool deferred to Epic 4, AD-3). Never a silent empty
-        // area, per this story's Always.
         <p className="text-caption">
-          Aucun livrable pour le moment. Demandez à l&rsquo;agent d&rsquo;en
-          créer un dans une conversation.
+          Aucun livrable pour le moment. Demandez à l&rsquo;agent d&rsquo;en créer un dans une
+          conversation.
         </p>
       ) : (
-        <ul
-          style={{
-            listStyle: 'none',
-            margin: 0,
-            padding: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 'var(--space-2)',
-          }}
-        >
+        <ul className="livrables-list">
           {livrables.map((item) => (
-            // `<li>` keeps its list semantics; the `<Link>` inside carries
-            // the actual card look (`card skill-card`) and all the
-            // interactivity — same icon+title content as before, just now
-            // clickable (Story 4.1).
             <li key={item.id}>
               <Link
                 href={`/livrables/${item.id}`}
                 className="card skill-card"
-                // The global `a { color: inherit }` rule already keeps the
-                // card's text color; only the browser's default underline
-                // needs resetting here, same as every other place in this
-                // app that turns a styled block into a link.
                 style={{ textDecoration: 'none' }}
               >
-                <svg
-                  className="skill-card-icon"
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  strokeWidth="2"
-                  aria-hidden="true"
-                >
-                  <path d="M6 2h9l5 5v13a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2z" />
-                  <path d="M15 2v5h5" />
-                </svg>
+                {item.source === 'drive' ? <SlidesIcon /> : <DocumentIcon />}
                 <span className="text-body-strong">{item.title}</span>
               </Link>
             </li>
           ))}
         </ul>
       )}
+
+      {drive !== null && <DriveGroup projectId={projectId} drive={drive} />}
     </section>
+  );
+}
+
+function DriveGroup({ projectId, drive }: { projectId: string; drive: DriveLivrables }) {
+  const message = driveStateMessage(drive.state, drive.projectName);
+  return (
+    <>
+      <span className="text-caption livrables-group-title">Dans le Drive du projet</span>
+      {message ? (
+        <div className="context-panel-drive-state" style={{ marginTop: 0 }}>
+          <p className="text-caption">{message}</p>
+          {drive.state === 'disconnected' && (
+            <a className="google-connection-connect" href="/api/google/oauth/start">
+              Connecter Google Drive
+            </a>
+          )}
+        </div>
+      ) : drive.presentations.length === 0 ? (
+        <p className="text-caption">Aucune autre présentation dans le dossier du projet.</p>
+      ) : (
+        <ul className="livrables-list">
+          {drive.presentations.map((file) => (
+            <DrivePresentationItem key={file.id} projectId={projectId} file={file} />
+          ))}
+        </ul>
+      )}
+    </>
+  );
+}
+
+function DrivePresentationItem({
+  projectId,
+  file,
+}: {
+  projectId: string;
+  file: DocumentSummary;
+}) {
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+  const router = useRouter();
+
+  function handleImport() {
+    setError(null);
+    startTransition(async () => {
+      const result = await importDrivePresentation(projectId, file.id);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      router.push(`/livrables/${result.data.livrableId}`);
+    });
+  }
+
+  return (
+    <li>
+      <button
+        type="button"
+        className="card skill-card livrables-import"
+        disabled={isPending}
+        onClick={handleImport}
+      >
+        <SlidesIcon />
+        <span className="text-body-strong">{file.name}</span>
+        {isPending && <span className="text-caption">Import…</span>}
+      </button>
+      {error && (
+        <p className="text-caption context-panel-error" role="alert">
+          {error}
+        </p>
+      )}
+    </li>
   );
 }

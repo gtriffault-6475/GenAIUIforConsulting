@@ -3,7 +3,7 @@ import { and, eq } from 'drizzle-orm';
 import { resolveDriveMode } from '@/actions/google-connection';
 import { db } from '@/db/client';
 import { document } from '@/db/schema';
-import { isAgentReadable } from '@/domain/document';
+import { GOOGLE_SLIDES_MIME, isAgentReadable } from '@/domain/document';
 import type { DriveMode } from '@/integrations/ports/drive-provider';
 import type { ContextDocument } from '@/skills/buildRequest';
 
@@ -49,4 +49,28 @@ export async function listAgentContextDocuments(
     console.error('listAgentContextDocuments failed, sending without documents', error);
     return [];
   }
+}
+
+// Story 5.3 — the Drive presentation behind a Contexte/Livrables row, for
+// `importDrivePresentation` (`actions/livrable.ts`): only a Google Slides
+// file of the current Google resync, of this project.
+export function findDrivePresentation(
+  projectId: string,
+  documentId: string,
+): { driveFileId: string; name: string } | null {
+  const row = db
+    .select()
+    .from(document)
+    .where(and(eq(document.id, documentId), eq(document.projectId, projectId)))
+    .get();
+  if (
+    !row ||
+    row.source !== 'drive' ||
+    row.origin !== 'google' ||
+    row.mimeType !== GOOGLE_SLIDES_MIME ||
+    !row.driveFileId
+  ) {
+    return null;
+  }
+  return { driveFileId: row.driveFileId, name: row.name };
 }

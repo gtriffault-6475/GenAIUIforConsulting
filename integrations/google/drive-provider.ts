@@ -1,9 +1,17 @@
 import { drive, type drive_v3 } from '@googleapis/drive';
+import { slides, type slides_v1 } from '@googleapis/slides';
 import { OAuth2Client } from 'google-auth-library';
 
 import { exportMimeTypeFor } from '@/domain/document';
 
-import type { DriveError, DriveFile, DriveProvider, DriveResult } from '../ports/drive-provider';
+import type {
+  DriveError,
+  DriveFile,
+  DrivePresentation,
+  DriveProvider,
+  DriveResult,
+  DriveTextBox,
+} from '../ports/drive-provider';
 
 // Story 5.2 — the real drive adapter (AD-1), wired by
 // `integrations/index.ts` only in `connected` mode. Never reads the
@@ -108,21 +116,60 @@ async function listAll(
   return files;
 }
 
+// Story 5.3 — a shape's text: its text runs concatenated, minus the final
+// paragraph newline Slides always ends a text box with.
+function shapeText(shape: slides_v1.Schema$Shape | undefined): string {
+  const runs = (shape?.text?.textElements ?? [])
+    .map((element) => element.textRun?.content ?? '')
+    .join('');
+  return runs.endsWith('\n') ? runs.slice(0, -1) : runs;
+}
+
+// Text boxes of a slide in reading order of the API, recursing into
+// groups; tables, images, videos and lines are skipped, and so are boxes
+// without text.
+function collectTextBoxes(
+  elements: slides_v1.Schema$PageElement[] | undefined,
+  into: DriveTextBox[],
+): DriveTextBox[] {
+  for (const element of elements ?? []) {
+    if (element.elementGroup) {
+      collectTextBoxes(element.elementGroup.children, into);
+    } else if (element.shape && element.objectId) {
+      const text = shapeText(element.shape);
+      if (text.trim() !== '') into.push({ objectId: element.objectId, text });
+    }
+  }
+  return into;
+}
+
+export function toDrivePresentation(
+  presentation: slides_v1.Schema$Presentation,
+): DrivePresentation {
+  return {
+    // Empty when untitled: the caller falls back to the Drive file name.
+    title: presentation.title ?? '',
+    slides: (presentation.slides ?? []).map((slide, index) => ({
+      slideId: slide.objectId ?? `slide-${index + 1}`,
+      slideNumber: index + 1,
+      textBoxes: collectTextBoxes(slide.pageElements, []),
+    })),
+  };
+}
+
 export function createGoogleDriveProvider(
   credentials: GoogleDriveCredentials,
-  // Injectable for scratch verification against a stubbed Drive API.
+  // Injectable for scratch verification against stubbed Google APIs.
   apiOverride?: drive_v3.Drive,
+  slidesOverride?: slides_v1.Slides,
 ): DriveProvider {
-  const api =
-    apiOverride ??
-    (() => {
-      const auth = new OAuth2Client({
-        clientId: credentials.clientId,
-        clientSecret: credentials.clientSecret,
-      });
-      auth.setCredentials({ refresh_token: credentials.refreshToken });
-      return drive({ version: 'v3', auth });
-    })();
+  const auth = new OAuth2Client({
+    clientId: credentials.clientId,
+    clientSecret: credentials.clientSecret,
+  });
+  auth.setCredentials({ refresh_token: credentials.refreshToken });
+  const api = apiOverride ?? drive({ version: 'v3', auth });
+  const slidesApi = slidesOverride ?? slides({ version: 'v1', auth });
 
   return {
     async listFiles(projectName) {
@@ -163,6 +210,23 @@ export function createGoogleDriveProvider(
         return { ok: true, data: typeof response.data === 'string' ? response.data : String(response.data ?? '') };
       } catch (error) {
         return fail('exportText', error);
+      }
+    },
+
+    // Read-only: `presentations.get`, never a write (Story 5.3).
+    async readPresentation(fileId) {
+      try {
+        const response = await slidesApi.presentations.get(
+          {
+            presentationId: fileId,
+            fields:
+              'title,slides(objectId,pageElements(objectId,shape(text(textElements(textRun(content)))),elementGroup))',
+          },
+          { timeout: REQUEST_TIMEOUT_MS },
+        );
+        return { ok: true, data: toDrivePresentation(response.data) };
+      } catch (error) {
+        return fail('readPresentation', error);
       }
     },
   };
