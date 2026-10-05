@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-14-2026 15:47
-last_updated: 10-05-2026 14:45
+last_updated: 10-05-2026 14:57
 project: GenAI4Consulting
 project_key: NOKEY
 tracking_system: file-system
@@ -314,7 +314,7 @@ action_items:
     action: "Give PRESENTATION_PROPOSAL an owner file, move server-only Google helpers
       out of the use-server module, update AD-2 headers, consider splitting actions/livrable.ts"
     owner: "dev loop"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-5-retro-2026-10-05.md"
   - id: "epic-5-retro-item-36-reconcile-epics-md-5-2-keeps-other-origi"
     epic: 5
