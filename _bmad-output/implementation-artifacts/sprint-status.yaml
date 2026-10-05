@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-14-2026 15:47
-last_updated: 10-05-2026 00:00
+last_updated: 10-05-2026 13:30
 project: GenAI4Consulting
 project_key: NOKEY
 tracking_system: file-system
@@ -73,7 +73,7 @@ development_status:
   5-4-suggestions-ia-sur-une-présentation-importée: review
   5-5-enregistrement-dans-drive: review
   5-6-création-d-une-présentation-depuis-la-conversation: review
-  epic-5-retrospective: optional
+  epic-5-retrospective: done
 action_items:
   - id: "epic-1-retro-item-1-implémenter-button-ai-primary-ai-suggest"
     epic: 1
@@ -249,3 +249,98 @@ action_items:
     owner: "dev loop"
     status: done
     ref: "_bmad-output/implementation-artifacts/epic-4-retro-2026-09-23.md"
+  - id: "epic-5-retro-item-26-exclude-drive-source-livrables-with-thei"
+    epic: 5
+    action: "Exclude drive-source livrables (with their conversation and suggestions)
+      from resetAvantVenteWorkflow"
+    owner: "dev loop"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-5-retro-2026-10-05.md"
+  - id: "epic-5-retro-item-27-show-the-latest-pending-presentation-pro"
+    epic: 5
+    action: "Show the latest pending presentation proposal to the agent when the consultant
+      adjusts it"
+    owner: "dev loop"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-5-retro-2026-10-05.md"
+  - id: "epic-5-retro-item-28-stop-sending-the-demo-reference-document"
+    epic: 5
+    action: "Stop sending the demo reference document to the agent outside demo mode"
+    owner: "dev loop"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-5-retro-2026-10-05.md"
+  - id: "epic-5-retro-item-29-pass-excludedrivefileid-in-reworksuggest"
+    epic: 5
+    action: "Pass excludeDriveFileId in reworkSuggestion for Drive livrables"
+    owner: "dev loop"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-5-retro-2026-10-05.md"
+  - id: "epic-5-retro-item-30-read-autotext-in-readpresentation-and-re"
+    epic: 5
+    action: "Read autoText in readPresentation and refuse or flag writes to zones
+      containing it (confirm in real Google test first)"
+    owner: "dev loop"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-5-retro-2026-10-05.md"
+  - id: "epic-5-retro-item-31-let-propose_anchored_suggestions-skip-un"
+    epic: 5
+    action: "Let propose_anchored_suggestions skip unknown zones and rely on skippedMissing"
+    owner: "dev loop"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-5-retro-2026-10-05.md"
+  - id: "epic-5-retro-item-32-cap-the-injected-presentation-text-frame"
+    epic: 5
+    action: "Cap the injected presentation text, frame it as data, and neutralize
+      </document> in context documents"
+    owner: "dev loop"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-5-retro-2026-10-05.md"
+  - id: "epic-5-retro-item-33-story-5-6-remember-the-copied-file-id-fo"
+    epic: 5
+    action: "Story 5.6: remember the copied file id for retry and offer propose_presentation
+      only when the template is configured"
+    owner: "product"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-5-retro-2026-10-05.md"
+  - id: "epic-5-retro-item-34-use-parselivrableblocks-in-reimportdrive"
+    epic: 5
+    action: "Use parseLivrableBlocks in reimportDriveLivrable and share the folder
+      error messages"
+    owner: "dev loop"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-5-retro-2026-10-05.md"
+  - id: "epic-5-retro-item-35-give-presentation_proposal-an-owner-file"
+    epic: 5
+    action: "Give PRESENTATION_PROPOSAL an owner file, move server-only Google helpers
+      out of the use-server module, update AD-2 headers, consider splitting actions/livrable.ts"
+    owner: "dev loop"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-5-retro-2026-10-05.md"
+  - id: "epic-5-retro-item-36-reconcile-epics-md-5-2-keeps-other-origi"
+    epic: 5
+    action: "Reconcile epics.md (5.2 keeps other-origin rows, 5.6 copies the OCTO
+      template) and the db/schema.ts purge comment"
+    owner: "product"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-5-retro-2026-10-05.md"
+  - id: "epic-5-retro-item-37-run-the-real-google-test-checklist-and-m"
+    epic: 5
+    action: "Run the real Google test checklist and measure connected workspace load
+      time"
+    owner: "Gautier"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-5-retro-2026-10-05.md"
+  - id: "epic-5-retro-item-38-mark-a-story-in-progress-on-main-or-open"
+    epic: 5
+    action: "Mark a story in-progress on main (or open a draft PR) before starting
+      it, to avoid a parallel series"
+    owner: "Gautier"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-5-retro-2026-10-05.md"
+  - id: "epic-5-retro-item-39-add-an-existing-flows-touched-section-to"
+    epic: 5
+    action: "Add an 'existing flows touched' section to story specs (readers and writers
+      of changed tables, including demo and reset)"
+    owner: "product"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-5-retro-2026-10-05.md"
