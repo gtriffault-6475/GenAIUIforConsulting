@@ -1,0 +1,1 @@
+ALTER TABLE `presentation_proposal` ADD `drive_file_id` text;

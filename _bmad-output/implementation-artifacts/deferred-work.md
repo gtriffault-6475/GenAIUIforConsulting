@@ -282,3 +282,7 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-6-presentation-tool-use.md`
   summary: **Resolved (same day, owner follow-up, `presentationGuidance` in `domain/agent-tools.ts`).** Original: When Google Drive is not connected (or the conversation already has a livrable), nothing tells the agent that a presentation needs a connected Drive; it may still write slides as text or as a text livrable.
   evidence: `selectAgentTools` offers `propose_presentation` only in `connected` mode without livrable, and the presentation rule is injected only then; owner chose only the "force the tool" fix on 2026-10-05.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-6-a8-creation-retry-and-template-gate.md`
+  summary: A copied deck the consultant moved to the Drive trash may still be readable through Slides, so a retry would import it instead of creating a fresh copy (unverified, medium).
+  evidence: `readPresentation` maps only HTTP 404 to `not_found`; settle with a real Google check of `presentations.get` on a trashed file during the Google test.

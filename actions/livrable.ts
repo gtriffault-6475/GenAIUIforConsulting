@@ -1,6 +1,6 @@
 'use server';
 
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 
 import type { ActionResult } from '@/actions/types';
 import { sendMessage } from '@/actions/message';
@@ -22,7 +22,7 @@ import { folderDuplicateMessage, folderMissingMessage } from '@/domain/drive-mes
 import { resolveAnchorPosition } from '@/domain/suggestion';
 import { MODELS } from '@/skills/models';
 import { parseStoredSlides } from '@/skills/propose_presentation';
-import type { DriveProvider } from '@/integrations/ports/drive-provider';
+import type { DriveError, DriveProvider } from '@/integrations/ports/drive-provider';
 import type { ProposedLivrableContent } from '@/skills/propose_livrable_content';
 
 // AD-2 — this is the only file allowed to read or write LIVRABLE. The one
@@ -542,7 +542,7 @@ export async function importDrivePresentation(
     }
 
     const imported = await importDriveFile(projectId, file.driveFileId, file.name, provider);
-    return imported ? { ok: true, data: { livrableId: imported } } : failure;
+    return imported.ok ? { ok: true, data: { livrableId: imported.livrableId } } : failure;
   } catch (error) {
     console.error('importDrivePresentation failed', error);
     return failure;
@@ -564,21 +564,22 @@ function findImportedLivrable(projectId: string, driveFileId: string): string | 
 // A deck already imported on this project returns its existing livrable —
 // checked before reading Drive and again inside the transaction; a
 // concurrent import that wins the unique index race is read back instead
-// of failing. `null` = the deck could not be read (logged). Not exported:
+// of failing. `{ ok: false, error }` = the deck could not be read (logged),
+// with the Drive error so callers can tell `not_found` apart. Not exported:
 // every export of this 'use server' file is a callable Server Action.
 async function importDriveFile(
   projectId: string,
   driveFileId: string,
   fallbackTitle: string,
   provider: DriveProvider,
-): Promise<string | null> {
+): Promise<{ ok: true; livrableId: string } | { ok: false; error: DriveError }> {
   const already = findImportedLivrable(projectId, driveFileId);
-  if (already) return already;
+  if (already) return { ok: true, livrableId: already };
 
   const presentation = await provider.readPresentation(driveFileId);
   if (!presentation.ok) {
     console.error('importDriveFile: readPresentation failed', presentation.error);
-    return null;
+    return { ok: false, error: presentation.error };
   }
 
   const title = presentation.data.title.trim() || fallbackTitle;
@@ -587,7 +588,7 @@ async function importDriveFile(
   const conversationId = crypto.randomUUID();
 
   try {
-    return db.transaction((tx) => {
+    const id = db.transaction((tx) => {
       const raced = tx
         .select({ id: livrable.id })
         .from(livrable)
@@ -611,9 +612,10 @@ async function importDriveFile(
         .run();
       return livrableId;
     });
+    return { ok: true, livrableId: id };
   } catch (error) {
     const winner = findImportedLivrable(projectId, driveFileId);
-    if (winner) return winner;
+    if (winner) return { ok: true, livrableId: winner };
     throw error;
   }
 }
@@ -624,7 +626,11 @@ async function importDriveFile(
 // like Story 5.3 and marks the proposal `created`. A proposal already
 // created returns its livrable; two clicks racing in this server process
 // share the same creation (no second deck). On any failure the proposal
-// stays `pending`.
+// stays `pending`. Retro A8: the copied deck's id is stored on the proposal
+// as soon as the copy succeeds, so a retry imports that deck instead of
+// copying the template again; the id is forgotten only if Drive answers
+// `not_found`. A deck the consultant imported meanwhile from the folder
+// panel is the same livrable (Story 5.3 dedupe) and is linked as is.
 export type CreatePresentationResult = { livrableId: string };
 
 const creationsInFlight = new Map<string, Promise<ActionResult<CreatePresentationResult>>>();
@@ -656,6 +662,7 @@ async function runPresentationCreation(
         slides: presentationProposal.slides,
         status: presentationProposal.status,
         livrableId: presentationProposal.livrableId,
+        driveFileId: presentationProposal.driveFileId,
         projectId: conversation.projectId,
         projectName: project.name,
       })
@@ -677,37 +684,58 @@ async function runPresentationCreation(
       return { ok: false, error: 'Connectez Google Drive pour créer la présentation.' };
     }
 
-    const created = await provider.createPresentation(row.projectName, row.title, slides);
-    if (!created.ok) {
-      console.error('createPresentationFromProposal: createPresentation failed', created.error);
-      if (created.error === 'unconfigured') {
-        return {
-          ok: false,
-          error: "Le modèle de présentation OCTO n'est pas configuré pour cette installation.",
-        };
+    // Retro A8: a deck already copied for this proposal (previous attempt
+    // whose import failed) is imported again, never copied a second time.
+    let fileId = row.driveFileId;
+    if (!fileId) {
+      const created = await provider.createPresentation(row.projectName, row.title, slides);
+      if (!created.ok) {
+        console.error('createPresentationFromProposal: createPresentation failed', created.error);
+        if (created.error === 'unconfigured') {
+          return {
+            ok: false,
+            error: "Le modèle de présentation OCTO n'est pas configuré pour cette installation.",
+          };
+        }
+        // Retrying cannot help: same folder messages as the panels (Story 5.2).
+        if (created.error === 'folder_missing') {
+          return { ok: false, error: folderMissingMessage(row.projectName) };
+        }
+        if (created.error === 'folder_duplicate') {
+          return { ok: false, error: folderDuplicateMessage(row.projectName) };
+        }
+        return failure;
       }
-      // Retrying cannot help: same folder messages as the panels (Story 5.2).
-      if (created.error === 'folder_missing') {
-        return { ok: false, error: folderMissingMessage(row.projectName) };
-      }
-      if (created.error === 'folder_duplicate') {
-        return { ok: false, error: folderDuplicateMessage(row.projectName) };
-      }
-      return failure;
+      fileId = created.data.fileId;
+      db.update(presentationProposal)
+        .set({ driveFileId: fileId })
+        .where(
+          and(
+            eq(presentationProposal.id, proposalId),
+            isNull(presentationProposal.driveFileId),
+            eq(presentationProposal.status, 'pending'),
+          ),
+        )
+        .run();
     }
 
-    const livrableId = await importDriveFile(
-      row.projectId,
-      created.data.fileId,
-      row.title,
-      provider,
-    );
-    if (!livrableId) {
+    const imported = await importDriveFile(row.projectId, fileId, row.title, provider);
+    if (!imported.ok) {
       console.error(
-        `createPresentationFromProposal: deck created (${created.data.fileId}) but not imported`,
+        `createPresentationFromProposal: deck ${fileId} not imported (${imported.error})`,
       );
+      // Drive no longer finds the copy (deleted, or not visible to the
+      // connected account): forget it so the next click creates a fresh
+      // one. Other errors keep it and the next click retries the import.
+      if (imported.error === 'not_found') {
+        db.update(presentationProposal)
+          .set({ driveFileId: null })
+          .where(eq(presentationProposal.id, proposalId))
+          .run();
+      }
       return failure;
     }
+    const livrableId = imported.livrableId;
 
     db.update(presentationProposal)
       .set({ status: 'created', livrableId })
