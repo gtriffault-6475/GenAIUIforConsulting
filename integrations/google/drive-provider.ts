@@ -204,35 +204,48 @@ export function chooseSlideLayouts(layouts: slides_v1.Schema$Page[]): {
   cover: SlideLayoutChoice;
   content: SlideLayoutChoice;
 } {
-  let cover: SlideLayoutChoice | null = null;
-  let content: SlideLayoutChoice | null = null;
-  for (const layout of layouts) {
-    if (!layout.objectId) continue;
-    const placeholders = layoutPlaceholders(layout);
-    const find = (type: string) => placeholders.find((item) => item.type === type) ?? null;
-    if (!cover && find('CENTERED_TITLE')) {
-      cover = {
-        reference: { layoutId: layout.objectId },
-        title: find('CENTERED_TITLE'),
-        body: find('SUBTITLE') ?? find('BODY'),
-      };
+  // Owner test (2026-10-05): a template converted from PowerPoint may have
+  // no centered-title layout and no predefined layouts in its master, so
+  // the template's own layouts are always preferred, from the closest
+  // match down; Google's predefined layouts are a last resort only.
+  const candidates = layouts
+    .filter((layout) => layout.objectId)
+    .map((layout) => {
+      const placeholders = layoutPlaceholders(layout);
+      const find = (type: string) => placeholders.find((item) => item.type === type) ?? null;
+      return { id: layout.objectId as string, find };
+    });
+  const pick = (
+    match: (find: (type: string) => PlaceholderRef | null) => SlideLayoutChoice | null,
+  ): SlideLayoutChoice | null => {
+    for (const candidate of candidates) {
+      const choice = match(candidate.find);
+      if (choice) return { ...choice, reference: { layoutId: candidate.id } };
     }
-    if (!content && find('TITLE') && find('BODY')) {
-      content = { reference: { layoutId: layout.objectId }, title: find('TITLE'), body: find('BODY') };
-    }
-  }
-  return {
-    cover: cover ?? {
-      reference: { predefinedLayout: 'TITLE' },
-      title: { type: 'CENTERED_TITLE', index: 0 },
-      body: { type: 'SUBTITLE', index: 0 },
-    },
-    content: content ?? {
+    return null;
+  };
+  const none = { reference: {} };
+
+  const content =
+    pick((find) => (find('TITLE') && find('BODY') ? { ...none, title: find('TITLE'), body: find('BODY') } : null)) ??
+    pick((find) => (find('TITLE') ? { ...none, title: find('TITLE'), body: find('SUBTITLE') } : null)) ?? {
       reference: { predefinedLayout: 'TITLE_AND_BODY' },
       title: { type: 'TITLE', index: 0 },
       body: { type: 'BODY', index: 0 },
-    },
-  };
+    };
+  const cover =
+    pick((find) =>
+      find('CENTERED_TITLE')
+        ? { ...none, title: find('CENTERED_TITLE'), body: find('SUBTITLE') ?? find('BODY') }
+        : null,
+    ) ??
+    pick((find) => (find('TITLE') && find('SUBTITLE') ? { ...none, title: find('TITLE'), body: find('SUBTITLE') } : null)) ??
+    ('layoutId' in content.reference ? content : null) ?? {
+      reference: { predefinedLayout: 'TITLE' },
+      title: { type: 'CENTERED_TITLE', index: 0 },
+      body: { type: 'SUBTITLE', index: 0 },
+    };
+  return { cover, content };
 }
 
 // Story 5.6 — the single `batchUpdate` filling a fresh copy of the
@@ -396,6 +409,7 @@ export function createGoogleDriveProvider(
       const templateId = credentials.slidesTemplateId?.trim();
       if (!templateId) return { ok: false, error: 'unconfigured' };
       let copiedId: string | null = null;
+      let layoutSummary = '(not read)';
       try {
         const folder = await resolveProjectFolder(projectName);
         if (!folder.ok) return folder;
@@ -423,6 +437,10 @@ export function createGoogleDriveProvider(
           },
           { timeout: REQUEST_TIMEOUT_MS },
         );
+        // Diagnostic only: the placeholder types of each template layout.
+        layoutSummary = (deck.data.layouts ?? [])
+          .map((layout) => `${layout.objectId}[${layoutPlaceholders(layout).map((p) => p.type).join(',')}]`)
+          .join(' ');
         const templateSlideIds = (deck.data.slides ?? [])
           .map((slide) => slide.objectId)
           .filter((id): id is string => Boolean(id));
@@ -440,7 +458,7 @@ export function createGoogleDriveProvider(
       } catch (error) {
         if (copiedId) {
           console.error(
-            `googleDriveProvider.createPresentation: deck copied (${copiedId}) but not filled`,
+            `googleDriveProvider.createPresentation: deck copied (${copiedId}) but not filled; template layouts: ${layoutSummary}`,
           );
         }
         return fail('createPresentation', error);
