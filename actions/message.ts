@@ -519,6 +519,11 @@ export async function sendMessage(
     // agent handles a presentation request in this conversation — the
     // tool when offered, otherwise what the consultant must do first.
     const presentationRule = presentationGuidance(agentToolContext);
+    // Diagnostic for the owner's tests: why a presentation was or was not
+    // offered (no content, only the mode, flags and tool names).
+    console.info(
+      `sendMessage: drive=${agentToolContext.driveMode} template=${agentToolContext.slidesTemplateConfigured} livrable=${agentToolContext.livrableSource ?? 'none'} tools=${toolNames.join(',')}`,
+    );
     if (presentationRule) {
       effectiveLoadedSkills = [
         ...effectiveLoadedSkills,

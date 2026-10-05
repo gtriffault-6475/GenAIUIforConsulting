@@ -43,7 +43,7 @@ export function selectAgentTools({
 // `null` = nothing to say: demo mode (never any Google wording) and a
 // conversation of an imported deck (anchored suggestions only).
 const PRESENTATION_REQUEST =
-  "Quand le consultant demande une présentation, des slides, des diapositives, un deck ou un support de présentation (même s'il l'appelle « livrable »)";
+  "Quand le consultant demande une présentation, des slides, des diapositives, un deck ou un support de présentation (même s'il l'appelle « livrable »), ou vous demande si vous savez en créer une dans le Drive du projet";
 const NO_TEXT_SLIDES =
   "n'écrivez pas les diapositives dans votre réponse ni sous forme de livrable texte — sauf s'il demande explicitement un plan en texte dans la conversation. Cette règle prime sur les skills chargés pour la forme du livrable.";
 
@@ -51,7 +51,7 @@ export function presentationGuidance(context: AgentToolContext): string | null {
   const { livrableSource, driveMode, slidesTemplateConfigured } = context;
   if (driveMode === 'demo' || livrableSource === 'drive') return null;
   if (selectAgentTools(context).includes('propose_presentation')) {
-    return `${PRESENTATION_REQUEST}, appelez toujours l'outil propose_presentation (propose_livrable_content sert uniquement aux documents texte : note, réponse à un appel d'offres…) ; ${NO_TEXT_SLIDES}`;
+    return `Cette application sait créer des présentations Google Slides dans le Drive du projet, au modèle OCTO, grâce à l'outil propose_presentation : ne dites jamais que vous n'avez pas accès au Drive. ${PRESENTATION_REQUEST}, appelez toujours l'outil propose_presentation (propose_livrable_content sert uniquement aux documents texte : note, réponse à un appel d'offres…) ; ${NO_TEXT_SLIDES}`;
   }
   const where = livrableSource === 'local' ? ', dans une nouvelle conversation (celle-ci a déjà un livrable)' : '';
   if (driveMode === 'connected' && slidesTemplateConfigured) {
