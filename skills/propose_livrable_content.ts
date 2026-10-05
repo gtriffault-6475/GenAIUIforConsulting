@@ -13,7 +13,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 export const PROPOSE_LIVRABLE_CONTENT_TOOL: Anthropic.Tool = {
   name: 'propose_livrable_content',
   description:
-    "Crée un nouveau livrable (document) pour le projet à partir d'un contenu rédigé, avec des suggestions d'amélioration ancrées à des paragraphes précis. À utiliser uniquement quand le consultant demande explicitement la rédaction d'un document (par exemple une réponse à un appel d'offres ou une note de cadrage de mission) — jamais pour une simple réponse conversationnelle qui ne produit pas de document.",
+    "Crée un nouveau livrable (document) pour le projet à partir d'un contenu rédigé, avec des suggestions d'amélioration ancrées à des paragraphes précis. À utiliser uniquement quand le consultant demande explicitement la rédaction d'un document (par exemple une réponse à un appel d'offres ou une note de cadrage de mission) — jamais pour une simple réponse conversationnelle qui ne produit pas de document, ni pour une présentation (slides, diapositives, deck, support de présentation) quand l'outil propose_presentation est disponible.",
   input_schema: {
     type: 'object',
     properties: {

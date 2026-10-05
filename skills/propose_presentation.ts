@@ -10,7 +10,7 @@ export const MAX_PROPOSED_SLIDES = 30;
 export const PROPOSE_PRESENTATION_TOOL: Anthropic.Tool = {
   name: 'propose_presentation',
   description:
-    "Propose au consultant une nouvelle présentation Google Slides (titre et diapositives dans l'ordre). Rien n'est créé : le consultant voit la proposition sous votre réponse et décide de la créer dans le Drive du projet, au modèle OCTO, ou de vous demander de l'ajuster. À utiliser quand le consultant demande une présentation, un support ou des slides.",
+    "Propose au consultant une nouvelle présentation Google Slides (titre et diapositives dans l'ordre). À appeler systématiquement dès que le consultant demande une présentation, des slides, des diapositives, un deck ou un support de présentation — y compris s'il parle de « livrable » pour désigner ce support. N'écrivez pas le plan ou le contenu des diapositives dans votre réponse à la place de cet outil, sauf si le consultant demande explicitement un plan en texte. Rien n'est créé : le consultant voit la proposition sous votre réponse et décide de la créer dans le Drive du projet, au modèle OCTO, ou de vous demander de l'ajuster ; votre réponse la présente en une ou deux phrases.",
   input_schema: {
     type: 'object',
     properties: {
