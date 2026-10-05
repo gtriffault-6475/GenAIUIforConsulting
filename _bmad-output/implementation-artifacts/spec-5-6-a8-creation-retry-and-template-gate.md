@@ -89,3 +89,5 @@ context:
 
 **Manual checks (if no CLI):**
 - Scratch on SQLite with a stubbed provider: the three matrix rows; tool list and guidance with and without template.
+
+Follow-up (owner's real Google test, 2026-10-05): the OCTO template is stored in Drive as a PowerPoint file; `files.copy` kept that type and `presentations.get` failed with "The document must not be an Office file" (FAILED_PRECONDITION), leaving an unfilled copy in the folder. The copy now asks for `mimeType: application/vnd.google-apps.presentation`, so Drive converts it to Google Slides. README updated. Verified: tsc clean, fresh-db build OK, adapter stub check of the copy request. The conversion itself needs the owner's re-test.
