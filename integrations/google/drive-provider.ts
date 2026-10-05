@@ -4,7 +4,7 @@ import { drive, type drive_v3 } from '@googleapis/drive';
 import { slides, type slides_v1 } from '@googleapis/slides';
 import { OAuth2Client } from 'google-auth-library';
 
-import { exportMimeTypeFor } from '@/domain/document';
+import { GOOGLE_SLIDES_MIME, exportMimeTypeFor } from '@/domain/document';
 
 import type {
   DriveError,
@@ -405,7 +405,10 @@ export function createGoogleDriveProvider(
             fileId: templateId,
             supportsAllDrives: true,
             fields: 'id',
-            requestBody: { name: title, parents: [folder.data] },
+            // The OCTO template may be stored as a PowerPoint file: asking
+            // for the Google Slides type makes Drive convert the copy, which
+            // the Slides API can then fill (it refuses Office files).
+            requestBody: { name: title, parents: [folder.data], mimeType: GOOGLE_SLIDES_MIME },
           },
           { timeout: CREATE_TIMEOUT_MS },
         );
