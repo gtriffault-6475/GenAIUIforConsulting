@@ -5,10 +5,11 @@ import { and, eq } from 'drizzle-orm';
 import type { ActionResult } from '@/actions/types';
 import { listAgentContextDocuments, readDemoModeActive } from '@/actions/document-context';
 import { insertMessage } from '@/actions/insert-message';
+import { listConversationProposals } from '@/actions/presentation-proposal';
 import { seedIfEmpty } from '@/actions/seed-if-empty';
 import { listLoadedSkillInstructions } from '@/actions/skill';
 import { db } from '@/db/client';
-import { conversation, message, presentationProposal, project } from '@/db/schema';
+import { conversation, message, project } from '@/db/schema';
 import { STEPS } from '@/domain/workflow';
 import { proposeStartingPoint } from '@/skills/propose_starting_point';
 import { parseStoredSlides, type ProposedSlide } from '@/skills/propose_presentation';
@@ -334,18 +335,7 @@ export async function getActiveConversation(projectId: string): Promise<
     // leave it `NULL`) — `MessageSummary.assistantFailed` is always a real
     // boolean, never `null`. `assistantErrorText` is left as-is: `null` is
     // a legitimate value there, not one to coalesce away.
-    const proposalRows = db
-      .select({
-        id: presentationProposal.id,
-        messageId: presentationProposal.messageId,
-        title: presentationProposal.title,
-        slides: presentationProposal.slides,
-        status: presentationProposal.status,
-        livrableId: presentationProposal.livrableId,
-      })
-      .from(presentationProposal)
-      .where(eq(presentationProposal.conversationId, conversationRow.id))
-      .all();
+    const proposalRows = listConversationProposals(conversationRow.id);
     const proposalsByMessage = new Map(
       proposalRows.map((row) => [
         row.messageId,

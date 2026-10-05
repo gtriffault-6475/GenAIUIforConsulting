@@ -361,9 +361,9 @@ export const suggestion = sqliteTable(
 // Story 5.1 — Connexion du compte Google (AD-12). Singleton row, same
 // fixed-id pattern as APP_STATE: one Google account per workstation. The
 // refresh token lives only here, server-side — no Server Action or prop
-// ever returns it to the client. `actions/google-connection.ts` is the
-// sole writer (the OAuth callback route goes through it); disconnecting
-// deletes the row.
+// ever returns it to the client. `actions/google-drive.ts` (server-only,
+// retro A10) is the sole writer (the OAuth callback route goes through it);
+// disconnecting deletes the row.
 export const GOOGLE_CONNECTION_ID = 'singleton';
 
 export const googleConnection = sqliteTable('google_connection', {
@@ -376,12 +376,12 @@ export const googleConnection = sqliteTable('google_connection', {
 
 // Story 5.6 — a presentation the agent proposed in a conversation
 // (`propose_presentation`), waiting for the consultant's "Créer dans
-// Drive". Inserted by `actions/message.ts` in the same transaction as the
-// assistant reply that carries it (`messageId`, at most one proposal per
-// reply: one tool call per response). `slides` is the JSON array of
-// `{ title, content }` validated by `skills/propose_presentation.ts`.
-// `actions/livrable.ts`'s `createPresentationFromProposal` is the only
-// writer of `status`/`livrableId` (`created` once the deck is imported).
+// Drive". Inserted in the same transaction as the assistant reply that
+// carries it (`messageId`, at most one proposal per reply: one tool call
+// per response). `slides` is the JSON array of `{ title, content }`
+// validated by `skills/propose_presentation.ts`. Every read and write goes
+// through `actions/presentation-proposal.ts` (retro A10, AD-2); `status`/
+// `livrableId`/`driveFileId` change only during "Créer dans Drive".
 export const presentationProposal = sqliteTable(
   'presentation_proposal',
   {

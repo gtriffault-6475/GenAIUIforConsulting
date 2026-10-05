@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 
 import { getDemoModeActive } from '@/actions/demo';
-import { resolveDriveMode } from '@/actions/google-connection';
+import { resolveDriveMode } from '@/actions/google-drive';
 import { db } from '@/db/client';
 import { document } from '@/db/schema';
 import { GOOGLE_SLIDES_MIME, isAgentReadable } from '@/domain/document';

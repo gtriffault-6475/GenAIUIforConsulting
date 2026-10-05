@@ -286,3 +286,7 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-6-a8-creation-retry-and-template-gate.md`
   summary: A copied deck the consultant moved to the Drive trash may still be readable through Slides, so a retry would import it instead of creating a fresh copy (unverified, medium).
   evidence: `readPresentation` maps only HTTP 404 to `not_found`; settle with a real Google check of `presentations.get` on a trashed file during the Google test.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-epic-5-retro-a10-ownership.md`
+  summary: Other 'use server' modules still export server-internal writers callable from the browser (`createLivrableWithSuggestions`, `updateLivrableWithSuggestions` in `actions/livrable.ts`; `seedDemoReferenceDocument`, `resolveDemoReferenceDocumentId` in `actions/document.ts`), and comments in `integrations/index.ts`, `integrations/google/oauth.ts`, `integrations/ports/drive-provider.ts` still name `actions/google-connection.ts`.
+  evidence: Retro A10 review; the A10 spec limited the change to PRESENTATION_PROPOSAL and the Google helpers and forbade touching `integrations/`.

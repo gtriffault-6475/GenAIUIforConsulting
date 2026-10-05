@@ -52,6 +52,7 @@ graph LR
 - **Binds:** all
 - **Prevents:** un composant React qui importe le client DB ou un provider directement, créant un deuxième chemin de mutation que `actions/` ne voit pas.
 - **Rule:** Seuls les fichiers de `actions/` importent `db/` et `integrations/`. Les composants (`app/`, `components/`) appellent une Server Action ; ils ne lisent la base qu'au travers d'une fonction exposée par `actions/` ou `domain/`. Un handler d'outil dans `skills/` ne mute jamais la base : il retourne son résultat à l'action appelante, seule habilitée à persister.
+- **Note (2026-10-05, rétrospective Epic 5, A10) :** une table n'a qu'un fichier propriétaire dans `actions/` ; les autres passent par ses fonctions. Les helpers appelés seulement côté serveur vivent dans des modules `actions/` **sans** `'use server'` (toute exportation d'un module `'use server'` devient une Server Action appelable par le navigateur) : `actions/presentation-proposal.ts` (propriétaire de `PRESENTATION_PROPOSAL`), `actions/google-drive.ts` (seul écrivain de `GOOGLE_CONNECTION`, mode drive, fournisseur avec identifiants, aller-retour OAuth), `actions/document-context.ts`, `actions/anchored-suggestions.ts`, `actions/insert-message.ts`.
 
 ### AD-3 — Suggestions générées à l'écriture, jamais à la lecture
 
@@ -112,7 +113,7 @@ graph LR
 
 - **Binds:** FR-25, NFR §4.5 (jetons jamais exposés)
 - **Prevents:** un jeton Google qui atteint le navigateur ; deux façons de se connecter ou deux emplacements de stockage du jeton ; un route handler qui deviendrait un second chemin de mutation hors d'`actions/`.
-- **Rule:** Flux OAuth "authorization code" côté serveur, avec un client OAuth Google Cloud de type "Interne" et le scope `https://www.googleapis.com/auth/drive`. Deux route handlers, `app/api/google/oauth/start` et `app/api/google/oauth/callback` — seule exception assumée à AD-2, car une redirection OAuth ne peut pas être une Server Action — vérifient un paramètre `state` anti-CSRF ; le callback n'écrit le jeton que via une fonction de `actions/google-connection.ts`. Le refresh token vit dans la table singleton `GOOGLE_CONNECTION`, jamais renvoyé au client ; la déconnexion supprime la ligne. Un seul compte connecté par poste.
+- **Rule:** Flux OAuth "authorization code" côté serveur, avec un client OAuth Google Cloud de type "Interne" et le scope `https://www.googleapis.com/auth/drive`. Deux route handlers, `app/api/google/oauth/start` et `app/api/google/oauth/callback` — seule exception assumée à AD-2, car une redirection OAuth ne peut pas être une Server Action — vérifient un paramètre `state` anti-CSRF ; le callback n'écrit le jeton que via une fonction de `actions/google-drive.ts` (module serveur, non `'use server'` depuis la rétrospective Epic 5, A10 ; `actions/google-connection.ts` ne garde que les Server Actions appelées par l'interface). Le refresh token vit dans la table singleton `GOOGLE_CONNECTION`, jamais renvoyé au client ; la déconnexion supprime la ligne. Un seul compte connecté par poste.
 
 ### AD-13 — Livrable adossé à Drive : import explicite, réécriture contrôlée
 
@@ -259,7 +260,7 @@ genai4consulting/
 | 4.2 Espace de travail multi-agents | `actions/conversation.ts`, `skills/` | AD-2, AD-4 |
 | 4.3 Orchestrateur de workflow | `domain/workflow.ts`, `actions/conversation.ts` | AD-5 |
 | 4.4 Éditeur assisté par IA | `actions/livrable.ts`, `actions/suggestion.ts`, `domain/suggestion.ts`, `skills/propose_livrable_content.ts` | AD-3, AD-5, AD-8 |
-| 4.5 Livrables et contexte Google Drive | `actions/google-connection.ts`, `actions/document.ts`, `actions/livrable.ts`, `actions/message.ts`, `domain/` (blocs modifiés, choix des outils), `integrations/google/*`, `integrations/index.ts`, `app/api/google/oauth/*`, `skills/buildRequest.ts` | AD-1, AD-9, AD-11, AD-12, AD-13, AD-14 |
+| 4.5 Livrables et contexte Google Drive | `actions/google-connection.ts`, `actions/google-drive.ts`, `actions/presentation-proposal.ts`, `actions/document.ts`, `actions/livrable.ts`, `actions/message.ts`, `domain/` (blocs modifiés, choix des outils), `integrations/google/*`, `integrations/index.ts`, `app/api/google/oauth/*`, `skills/buildRequest.ts` | AD-1, AD-9, AD-11, AD-12, AD-13, AD-14 |
 
 ## Deferred
 
