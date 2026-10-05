@@ -86,4 +86,7 @@ export const mockDriveProvider: DriveProvider = {
   async readPresentation() {
     return { ok: false, error: 'unknown' };
   },
+  async writePresentationText() {
+    return { ok: false, error: 'unknown' };
+  },
 };

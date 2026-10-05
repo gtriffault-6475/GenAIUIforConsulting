@@ -255,3 +255,7 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-4-suggestions-ia-sur-une-presentation-importee.md`
   summary: No committed automated check for Story 5.4 — `selectAgentTools`, `parseProposeAnchoredSuggestionsInput`, `addAnchoredSuggestions` skip rules, `excludeDriveFileId`, the unoffered-tool guard and the demo gating in `sendToAgent`.
   evidence: Verification-gap review (pass 1): inverting the tool selection or dropping the unoffered-tool guard would let `propose_livrable_content` overwrite a Drive livrable with tsc and build still green. Verified by scratch scripts and browser runs only. No test suite by standing decision; these pure functions are the cheapest first targets.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-5-enregistrement-dans-drive.md`
+  summary: No committed automated check for Story 5.5 — `planDriveSave` (already saved / conflict / to write), `isRevisionMismatch` against real Google error payloads, the retry-once cycle and the guarded `driveText` update in `saveLivrableToDrive`, and the `batchUpdate` request body.
+  evidence: Verification-gap review (pass 1): dropping the "zone gone" conflict or the retry would overwrite a colleague's Slides edits or show a generic error, with tsc and build still green. Verified only by scratch scripts against stubbed APIs. The exact Google payload for a refused `requiredRevisionId` is unverified until a real-credential test; record it then. No test suite by standing decision.

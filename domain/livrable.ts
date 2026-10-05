@@ -14,11 +14,12 @@ export type LivrableBlock = {
 };
 
 // One block per text box, in slide order, `driveText = text` at import.
+// Blank text boxes are left out (nothing to work on).
 export function slidesToBlocks(presentation: {
   slides: { slideId: string; slideNumber: number; textBoxes: { objectId: string; text: string }[] }[];
 }): LivrableBlock[] {
   return presentation.slides.flatMap((slide) =>
-    slide.textBoxes.map((box) => ({
+    slide.textBoxes.filter((box) => box.text.trim() !== '').map((box) => ({
       id: box.objectId,
       text: box.text,
       slideId: slide.slideId,
@@ -91,4 +92,26 @@ export function parseLivrableBlocks(content: string): LivrableBlock[] {
   } catch {
     return [];
   }
+}
+
+// Story 5.5 (AD-13) — sorts the modified zones against the deck just read:
+// - `alreadySaved`: Slides already holds the block's text (a previous save
+//   applied by Google but not recorded locally — a timeout, two tabs):
+//   nothing to write, only `driveText` to catch up;
+// - `conflicts`: the zone is gone, or its Slides text is neither the
+//   `driveText` it was edited from nor the block's text. Any conflict
+//   blocks the whole save;
+// - `toWrite`: the rest.
+export function planDriveSave(
+  modifiedBlocks: LivrableBlock[],
+  remoteTexts: ReadonlyMap<string, string>,
+): { toWrite: LivrableBlock[]; alreadySaved: LivrableBlock[]; conflicts: string[] } {
+  const plan = { toWrite: [] as LivrableBlock[], alreadySaved: [] as LivrableBlock[], conflicts: [] as string[] };
+  for (const block of modifiedBlocks) {
+    const remote = remoteTexts.get(block.id);
+    if (remote === block.text) plan.alreadySaved.push(block);
+    else if (remote === undefined || remote !== block.driveText) plan.conflicts.push(block.id);
+    else plan.toWrite.push(block);
+  }
+  return plan;
 }

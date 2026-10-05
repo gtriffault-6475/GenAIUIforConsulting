@@ -55,6 +55,20 @@ function errorReasons(e: GoogleLikeError): string[] {
   return [...(e.errors ?? []), ...nested].map((item) => item.reason ?? '');
 }
 
+// Story 5.5 — a refused `requiredRevisionId` (HTTP 400 mentioning the
+// revision), as opposed to any other invalid request.
+export function isRevisionMismatch(error: unknown): boolean {
+  const e = (error ?? {}) as GoogleLikeError;
+  const status = e.response?.status ?? e.status ?? (typeof e.code === 'number' ? e.code : undefined);
+  if (status !== 400) return false;
+  const body = e.response?.data?.error;
+  const bodyMessage =
+    body && typeof body === 'object' ? String((body as { message?: unknown }).message ?? '') : '';
+  const bodyStatus =
+    body && typeof body === 'object' ? String((body as { status?: unknown }).status ?? '') : '';
+  return bodyStatus === 'FAILED_PRECONDITION' || /revision/i.test(`${e.message ?? ''} ${bodyMessage}`);
+}
+
 export function toDriveError(error: unknown): DriveError {
   const e = (error ?? {}) as GoogleLikeError;
   const status = e.response?.status ?? e.status ?? (typeof e.code === 'number' ? e.code : undefined);
@@ -126,8 +140,10 @@ function shapeText(shape: slides_v1.Schema$Shape | undefined): string {
 }
 
 // Text boxes of a slide in reading order of the API, recursing into
-// groups; tables, images, videos and lines are skipped, and so are boxes
-// without text.
+// groups; tables, images, videos and lines are skipped. Shapes without
+// text are kept (text '') so a zone emptied by a save is still found by
+// the next save's conflict check; the import (`slidesToBlocks`) is what
+// leaves blank boxes out of the livrable.
 function collectTextBoxes(
   elements: slides_v1.Schema$PageElement[] | undefined,
   into: DriveTextBox[],
@@ -136,8 +152,7 @@ function collectTextBoxes(
     if (element.elementGroup) {
       collectTextBoxes(element.elementGroup.children, into);
     } else if (element.shape && element.objectId) {
-      const text = shapeText(element.shape);
-      if (text.trim() !== '') into.push({ objectId: element.objectId, text });
+      into.push({ objectId: element.objectId, text: shapeText(element.shape) });
     }
   }
   return into;
@@ -149,6 +164,7 @@ export function toDrivePresentation(
   return {
     // Empty when untitled: the caller falls back to the Drive file name.
     title: presentation.title ?? '',
+    revisionId: presentation.revisionId ?? '',
     slides: (presentation.slides ?? []).map((slide, index) => ({
       slideId: slide.objectId ?? `slide-${index + 1}`,
       slideNumber: index + 1,
@@ -220,13 +236,43 @@ export function createGoogleDriveProvider(
           {
             presentationId: fileId,
             fields:
-              'title,slides(objectId,pageElements(objectId,shape(text(textElements(textRun(content)))),elementGroup))',
+              'title,revisionId,slides(objectId,pageElements(objectId,shape(text(textElements(textRun(content)))),elementGroup))',
           },
           { timeout: REQUEST_TIMEOUT_MS },
         );
         return { ok: true, data: toDrivePresentation(response.data) };
       } catch (error) {
         return fail('readPresentation', error);
+      }
+    },
+
+    // Story 5.5 (AD-13) — the only write to Drive: per zone, delete its
+    // whole text then insert the new text (formatting of the zone may be
+    // simplified, the consultant is warned), all in one atomic
+    // `batchUpdate` guarded by `requiredRevisionId`. No other request.
+    async writePresentationText(fileId, edits, requiredRevisionId) {
+      try {
+        const requests: slides_v1.Schema$Request[] = edits.flatMap((edit) => [
+          { deleteText: { objectId: edit.objectId, textRange: { type: 'ALL' } } },
+          ...(edit.text === ''
+            ? []
+            : [{ insertText: { objectId: edit.objectId, insertionIndex: 0, text: edit.text } }]),
+        ]);
+        await slidesApi.presentations.batchUpdate(
+          {
+            presentationId: fileId,
+            requestBody: { requests, writeControl: { requiredRevisionId } },
+          },
+          { timeout: REQUEST_TIMEOUT_MS },
+        );
+        return { ok: true, data: undefined };
+      } catch (error) {
+        // Google answers 400 when the deck moved past `requiredRevisionId`.
+        if (isRevisionMismatch(error)) {
+          console.error('googleDriveProvider.writePresentationText: revision mismatch', error);
+          return { ok: false, error: 'revision_conflict' };
+        }
+        return fail('writePresentationText', error);
       }
     },
   };

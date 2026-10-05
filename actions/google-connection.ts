@@ -122,6 +122,8 @@ function forgetConnectionOnRevokedToken(provider: DriveProvider): DriveProvider 
     exportText: async (fileId, mimeType) =>
       forgetIfRevoked(await provider.exportText(fileId, mimeType)),
     readPresentation: async (fileId) => forgetIfRevoked(await provider.readPresentation(fileId)),
+    writePresentationText: async (fileId, edits, requiredRevisionId) =>
+      forgetIfRevoked(await provider.writePresentationText(fileId, edits, requiredRevisionId)),
   };
 }
 
