@@ -3,6 +3,7 @@
 import { eq } from 'drizzle-orm';
 
 import type { ActionResult } from '@/actions/types';
+import { addAnchoredSuggestions } from '@/actions/anchored-suggestions';
 import { listAgentContextDocuments } from '@/actions/document-context';
 import { getDemoModeActive } from '@/actions/demo';
 import { seedDemoReferenceDocument } from '@/actions/document';
@@ -14,7 +15,14 @@ import {
 import { listLoadedSkillInstructions } from '@/actions/skill';
 import { db } from '@/db/client';
 import { conversation, livrable, message } from '@/db/schema';
+import { selectAgentTools, type AgentToolName } from '@/domain/agent-tools';
+import { parseLivrableBlocks } from '@/domain/livrable';
+import type Anthropic from '@anthropic-ai/sdk';
 import type { ExecuteToolResult } from '@/skills/buildRequest';
+import {
+  PROPOSE_ANCHORED_SUGGESTIONS_TOOL,
+  parseProposeAnchoredSuggestionsInput,
+} from '@/skills/propose_anchored_suggestions';
 import { sendToAgent } from '@/skills/buildRequest';
 import { MODELS, resolveModelLabel } from '@/skills/models';
 import {
@@ -180,7 +188,7 @@ export async function sendMessage(
     // `propose_livrable_content` tool — must update that existing livrable
     // rather than create a second one for the same conversation. No
     // existing row: unchanged creation behavior (Story 4.2).
-    const executeTool = async (
+    const executeProposeLivrableContent = async (
       input: unknown,
     ): Promise<ExecuteToolResult> => {
       const parsed = parseProposeLivrableContentInput(input);
@@ -289,14 +297,97 @@ export async function sendMessage(
     // behavior (I/O matrix: "comportement identique à aujourd'hui -- pas de
     // régression") — logged only, falling back to no injection, exactly as
     // if no livrable existed yet for this conversation.
-    let effectiveLoadedSkills = loadedSkills;
-    try {
-      const [existingLivrableForContext] = await db
+    // Story 5.4 (AD-14) — the conversation's livrable (at most one) decides
+    // the tools offered and how its content is shown to the agent. Read
+    // outside the content-injection try/catch on purpose: if this read
+    // fails, the turn fails (caught below as `assistantFailed`) rather than
+    // falling back to the tools of a conversation without livrable, which
+    // would offer `propose_livrable_content` on a Drive livrable.
+    const [conversationLivrable] = await db
+      .select({
+        id: livrable.id,
+        source: livrable.source,
+        content: livrable.content,
+        driveFileId: livrable.driveFileId,
+      })
+      .from(livrable)
+      .where(eq(livrable.conversationId, conversationId));
+    const toolNames = selectAgentTools({ livrableSource: conversationLivrable?.source ?? null });
+    const TOOLS: Record<AgentToolName, Anthropic.Tool> = {
+      propose_livrable_content: PROPOSE_LIVRABLE_CONTENT_TOOL,
+      propose_anchored_suggestions: PROPOSE_ANCHORED_SUGGESTIONS_TOOL,
+    };
+
+    // Story 5.4 — anchored suggestions on a Drive livrable's existing
+    // zones (`skills/propose_anchored_suggestions.ts`); the block ids are
+    // re-read here so the call is validated against the current content.
+    const executeProposeAnchoredSuggestions = async (
+      input: unknown,
+    ): Promise<ExecuteToolResult> => {
+      if (conversationLivrable?.source !== 'drive') {
+        return { ok: false, error: "Cette conversation n'a pas de présentation importée." };
+      }
+      const [current] = await db
         .select({ content: livrable.content })
         .from(livrable)
-        .where(eq(livrable.conversationId, conversationId));
+        .where(eq(livrable.id, conversationLivrable.id));
+      const blockIds = new Set(parseLivrableBlocks(current?.content ?? '').map((block) => block.id));
+      const parsed = parseProposeAnchoredSuggestionsInput(input, blockIds);
+      if (!parsed.ok) return { ok: false, error: parsed.error };
 
-      if (existingLivrableForContext) {
+      const outcome = addAnchoredSuggestions(conversationLivrable.id, parsed.data);
+      const notes = [
+        outcome.skippedOpen.length > 0 &&
+          `Zones ignorées car le consultant n'a pas encore traité la suggestion précédente : ${outcome.skippedOpen.join(', ')}.`,
+        outcome.skippedMissing.length > 0 &&
+          `Zones ignorées car elles n'existent plus dans la présentation : ${outcome.skippedMissing.join(', ')}.`,
+        outcome.skippedUnchanged.length > 0 &&
+          `Zones ignorées car le texte proposé est identique au texte actuel : ${outcome.skippedUnchanged.join(', ')}.`,
+      ].filter(Boolean);
+      return {
+        ok: true,
+        content: [`${outcome.added} suggestion(s) ancrée(s) ajoutée(s).`, ...notes].join(' '),
+      };
+    };
+
+    const executeTool = async (name: string, input: unknown): Promise<ExecuteToolResult> => {
+      if (name === 'propose_livrable_content') return executeProposeLivrableContent(input);
+      if (name === 'propose_anchored_suggestions') return executeProposeAnchoredSuggestions(input);
+      return { ok: false, error: `L'outil "${name}" est inconnu.` };
+    };
+
+    let effectiveLoadedSkills = loadedSkills;
+    try {
+      const existingLivrableForContext = conversationLivrable;
+
+      // Story 5.4 (AD-11) — a Drive livrable is shown with its block ids
+      // and slide numbers, the handles `propose_anchored_suggestions`
+      // needs; its text is the current one (accepted changes included).
+      if (existingLivrableForContext?.source === 'drive') {
+        const blocks = parseLivrableBlocks(existingLivrableForContext.content);
+        // One line per zone: the text is JSON-quoted so a multi-line text
+        // box never reads as an unlabelled extra zone.
+        const zones =
+          blocks.length === 0
+            ? '(Aucune zone de texte : il n\'y a rien à suggérer sur cette présentation.)'
+            : blocks
+                .map(
+                  (block) =>
+                    `[${block.id}] (Diapositive ${block.slideNumber ?? '?'}) ${JSON.stringify(block.text)}`,
+                )
+                .join('\n');
+        effectiveLoadedSkills = [
+          ...loadedSkills,
+          {
+            skillKey: '__current_livrable_context',
+            instructions:
+              'Présentation Google Slides liée à cette conversation, zone de texte par zone de texte ' +
+              "(identifiant entre crochets, numéro de diapositive, puis texte entre guillemets). Pour l'améliorer, proposez des " +
+              'suggestions ancrées sur ces identifiants avec propose_anchored_suggestions ; ne réécrivez ' +
+              `jamais la présentation entière :\n${zones}`,
+          },
+        ];
+      } else if (existingLivrableForContext) {
         const parsedContent = JSON.parse(
           existingLivrableForContext.content,
         ) as { blocks?: { text?: unknown }[] };
@@ -333,10 +424,13 @@ export async function sendMessage(
     const agentResult = await sendToAgent({
       loadedSkills: effectiveLoadedSkills,
       // Story 5.2 (AD-11): manual documents + selected drive documents.
-      contextDocuments: await listAgentContextDocuments(projectId),
+      contextDocuments: await listAgentContextDocuments(projectId, {
+        // AD-11: the presentation itself is already sent above, with ids.
+        excludeDriveFileId: conversationLivrable?.driveFileId ?? null,
+      }),
       history: historyRows,
       model,
-      tool: PROPOSE_LIVRABLE_CONTENT_TOOL,
+      tools: toolNames.map((name) => TOOLS[name]),
       executeTool,
     });
 

@@ -29,7 +29,16 @@ import { requestGlobalRevision } from '@/actions/livrable';
 // `Composer.tsx`/`SuggestionCard.tsx` — closes the residual window
 // `useTransition`'s `isPending` alone leaves open between a click and
 // React's next commit.
-export function GlobalRevisionField({ livrableId }: { livrableId: string }) {
+// Story 5.4 — on a presentation imported from Drive (`zoneByZone`), the
+// agent answers with anchored suggestions only (AD-14): a short note says
+// so under the label, so a document-wide rewrite is never promised.
+export function GlobalRevisionField({
+  livrableId,
+  zoneByZone = false,
+}: {
+  livrableId: string;
+  zoneByZone?: boolean;
+}) {
   const [instructions, setInstructions] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -108,6 +117,11 @@ export function GlobalRevisionField({ livrableId }: { livrableId: string }) {
       >
         Révision globale
       </label>
+      {zoneByZone && (
+        <p className="text-caption">
+          Sur une présentation importée, l&rsquo;IA répond par des suggestions zone par zone.
+        </p>
+      )}
       <textarea
         id="global-revision-instructions"
         aria-label="Instructions pour une révision globale du livrable"

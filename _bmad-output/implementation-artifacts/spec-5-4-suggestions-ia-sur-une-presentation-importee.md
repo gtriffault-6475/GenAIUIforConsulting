@@ -2,7 +2,8 @@
 title: 'Story 5.4 — Suggestions IA sur une présentation importée'
 type: 'feature'
 created: '2026-10-05'
-status: 'draft'
+status: 'done'
+baseline_commit: 'c9078644af62a174e264c9e82708ac6216e7b4f1'
 route: 'dispatch'
 review_loop_iteration: 0
 context:
@@ -63,12 +64,12 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `domain/agent-tools.ts` -- pure tool selection.
-- [ ] `skills/propose_anchored_suggestions.ts` -- tool definition + parser.
-- [ ] `skills/buildRequest.ts` -- tool list + dispatch by name (real and demo paths).
-- [ ] `actions/suggestion.ts` -- `addAnchoredSuggestions`.
-- [ ] `actions/document-context.ts`, `actions/message.ts` -- tool selection, dispatch, id-bearing content, context exclusion.
-- [ ] `app/livrables/[id]/page.tsx` -- global revision back on Drive livrables.
+- [x] `domain/agent-tools.ts` -- pure tool selection.
+- [x] `skills/propose_anchored_suggestions.ts` -- tool definition + parser.
+- [x] `skills/buildRequest.ts` -- tool list + dispatch by name (real and demo paths).
+- [x] `actions/suggestion.ts` -- `addAnchoredSuggestions`.
+- [x] `actions/document-context.ts`, `actions/message.ts` -- tool selection, dispatch, id-bearing content, context exclusion.
+- [x] `app/livrables/[id]/page.tsx` -- global revision back on Drive livrables.
 
 **Acceptance Criteria:**
 - Given a Drive livrable's conversation, when a message is sent (real path), then the Messages API request lists exactly one tool, `propose_anchored_suggestions`, and the system prompt contains each block's id and slide number.
@@ -77,9 +78,35 @@ context:
 
 ## Implementation Notes
 
+- Implemented directly from this spec (no subagent dispatch).
+- Persistence of the new tool lives in `actions/anchored-suggestions.ts`, deliberately not a 'use server' file (only the agent's validated tool call may add suggestions, never a browser-callable action) — instead of the Code Map's `actions/suggestion.ts`. Same transaction pattern as `createLivrableWithSuggestions`; also skips a zone that vanished since validation.
+- `sendToAgent` now takes `tools` (list) and `executeTool(name, input)`; a `tool_use` naming a tool not offered gets a tool error without dispatch. Demo path runs the scripted `propose_livrable_content` call only when that tool is offered.
+- `sendMessage` reads the conversation's livrable once (source, content, driveFileId) for: tool selection (`domain/agent-tools.ts`), dispatch, id-bearing content injection for Drive livrables (`[id] (Diapositive N) text` + instruction to use anchored suggestions), and `excludeDriveFileId` for context documents. The Story 5.3 refusal inside `propose_livrable_content` execution stays as a second guard.
+- Global revision field shown again on Drive livrables.
+- Review fixes (pass 1): separate skip reasons (open / missing / unchanged); JSON-quoted zone text; no-op suggestions skipped; parallel tool use disabled; tolerant `parseLivrableBlocks` shared; zero-zone prompt; zone-by-zone note on the global revision field; `TOOLS` typing.
+- Verification: `tsc` clean; fresh-db `npm run build` green. Scratch on a real SQLite DB: tool selection (none/local → propose_livrable_content, drive → propose_anchored_suggestions); parser accepts valid input and rejects unknown id, duplicate id, blank text, empty list, non-object; `addAnchoredSuggestions` skips a zone with a revising suggestion and a vanished zone, never touches content, second call on a now-pending zone skipped. Browser (production server, fake Anthropic endpoint calling the offered tool): Drive conversation request offers exactly `propose_anchored_suggestions`, prompt has `[a] (Diapositive 1) Titre`…, the same presentation selected in Contexte is not resent; suggestions created, blocks untouched; editor shows them; Accept keeps `slideId`/`slideNumber`/`driveText` and changes text; Reject works; global revision on the Drive livrable offers the same single tool and adds suggestions; a forced `propose_livrable_content` call in that conversation gets "n'est pas disponible…" with `is_error`, livrable unchanged; a new conversation still gets `propose_livrable_content` and creates a local livrable. Demo mode, scripted creation phrase in the Drive conversation: scripted reply, no livrable created or changed.
+
 ## Spec Change Log
 
 ## Review Triage Log
+
+Pass 1 (blind-hunter BH, edge-case-hunter EC, verification-gap VG) — no intent_gap / bad_spec; patches applied directly; tsc, fresh-db build, scratch and browser scenario re-run green.
+
+| # | Finding | Verdict | Evidence / route |
+|---|---------|---------|------------------|
+| 1 | BH+EC+VG: one "already pending" reason given for every skipped zone (also vanished ones; `revising` isn't "en attente") | low | Patch: `addAnchoredSuggestions` returns `skippedOpen` / `skippedMissing` / `skippedUnchanged`, each worded separately in the tool result. |
+| 2 | BH+EC: multi-line text boxes make the zone list ambiguous for the agent | medium | Patch: one line per zone, text JSON-quoted; prompt says so. |
+| 3 | BH+EC: suggestion identical to the current text accepted, blocking the zone | low | Patch: skipped as `skippedUnchanged` (verified in the browser run: a second proposal equal to the accepted text is not added). |
+| 4 | EC: parallel `tool_use` blocks would leave one without `tool_result` and fail the second call | medium | Real for any single tool too. Patch: `tool_choice: { type: 'auto', disable_parallel_tool_use: true }` when tools are offered (seen in the captured request). |
+| 5 | BH+EC: unguarded `JSON.parse` / null entries make the tool executor throw (generic failure) | low | Patch: tolerant `parseLivrableBlocks` in `domain/livrable.ts`, used by the executor, the context injection and `addAnchoredSuggestions` (also removes the duplicated parsing BH flagged); a missing livrable yields all-skipped, never a throw. |
+| 6 | EC: Drive livrable with zero zones | low | Patch: the prompt says there is no zone to suggest on. |
+| 7 | BH: global revision wording promises a document-wide rewrite on Drive livrables | low | Patch: note "Sur une présentation importée, l'IA répond par des suggestions zone par zone." under the label. |
+| 8 | BH: `TOOLS` map typed after one tool | low | Patch: `Record<AgentToolName, Anthropic.Tool>`. |
+| 9 | BH+EC: conversation-livrable read moved outside the try/catch | false | Deliberate: falling back to "no livrable" would offer `propose_livrable_content` on a Drive livrable; a failed read fails the turn (`assistantFailed`). Comment added to say so. |
+| 10 | BH+VG+EC: demo mode, Drive conversation — scripted reply claims a livrable was created/updated though the tool did not run | medium | Real, but the frozen intent explicitly says the scripted reply is returned without the tool; changing it means changing the approved spec. Rejected here, surfaced to the owner as a follow-up (only reachable with a Drive livrable imported before switching to demo). |
+| 11 | EC: claim "dispatch by name (real and demo paths)" — demo never dispatches the anchored tool | false | The demo script has no anchored-suggestion entry; the intent only asks the demo path to gate the scripted call. |
+| 12 | BH+EC: Code Map places `addAnchoredSuggestions` in `actions/suggestion.ts` | low | Deviation recorded in Implementation Notes (moved to a non-'use server' module on purpose); editing the spec is out of the review's reach. Rejected. |
+| 13 | BH+VG: no committed tests (tool selection, parser, persistence rules, context exclusion, demo gating, unoffered-tool guard) | medium (no test evidence) | No test suite by standing decision; verified by scratch scripts and browser runs (Implementation Notes). Deferred. |
 
 ## Verification
 
