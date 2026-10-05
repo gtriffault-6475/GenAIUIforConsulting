@@ -1,3 +1,5 @@
+import { randomBytes } from 'node:crypto';
+
 import { drive, type drive_v3 } from '@googleapis/drive';
 import { slides, type slides_v1 } from '@googleapis/slides';
 import { OAuth2Client } from 'google-auth-library';
@@ -11,6 +13,7 @@ import type {
   DriveProvider,
   DriveResult,
   DriveTextBox,
+  NewSlide,
 } from '../ports/drive-provider';
 
 // Story 5.2 — the real drive adapter (AD-1), wired by
@@ -23,6 +26,9 @@ export type GoogleDriveCredentials = {
   clientSecret: string;
   refreshToken: string;
   rootFolderId: string;
+  // Story 5.6 — the OCTO template copied by `createPresentation`; `null`
+  // makes that one method answer `unconfigured`.
+  slidesTemplateId?: string | null;
 };
 
 const FOLDER_MIME = 'application/vnd.google-apps.folder';
@@ -30,6 +36,8 @@ const FOLDER_MIME = 'application/vnd.google-apps.folder';
 // The Contexte panel resyncs on every workspace render: a hanging Google
 // call must not block the page indefinitely.
 const REQUEST_TIMEOUT_MS = 10_000;
+// Story 5.6 — copying a template deck and filling it can take longer.
+const CREATE_TIMEOUT_MS = 30_000;
 
 // Drive query string literal: backslash and single quote must be escaped.
 function quote(value: string): string {
@@ -173,6 +181,103 @@ export function toDrivePresentation(
   };
 }
 
+// Story 5.6 — the layout placeholders a new slide's texts go into.
+type PlaceholderRef = { type: string; index: number };
+type SlideLayoutChoice = {
+  reference: slides_v1.Schema$LayoutReference;
+  title: PlaceholderRef | null;
+  body: PlaceholderRef | null;
+};
+
+function layoutPlaceholders(layout: slides_v1.Schema$Page): PlaceholderRef[] {
+  return (layout.pageElements ?? [])
+    .map((element) => element.shape?.placeholder)
+    .filter((placeholder): placeholder is slides_v1.Schema$Placeholder => Boolean(placeholder?.type))
+    .map((placeholder) => ({ type: placeholder.type as string, index: placeholder.index ?? 0 }));
+}
+
+// Owner decision (spec-5-6): the cover is the first template layout with
+// a centered-title placeholder, the other slides use the first layout with
+// a title and a body placeholder; Google's predefined `TITLE` /
+// `TITLE_AND_BODY` layouts when the template has none.
+export function chooseSlideLayouts(layouts: slides_v1.Schema$Page[]): {
+  cover: SlideLayoutChoice;
+  content: SlideLayoutChoice;
+} {
+  let cover: SlideLayoutChoice | null = null;
+  let content: SlideLayoutChoice | null = null;
+  for (const layout of layouts) {
+    if (!layout.objectId) continue;
+    const placeholders = layoutPlaceholders(layout);
+    const find = (type: string) => placeholders.find((item) => item.type === type) ?? null;
+    if (!cover && find('CENTERED_TITLE')) {
+      cover = {
+        reference: { layoutId: layout.objectId },
+        title: find('CENTERED_TITLE'),
+        body: find('SUBTITLE') ?? find('BODY'),
+      };
+    }
+    if (!content && find('TITLE') && find('BODY')) {
+      content = { reference: { layoutId: layout.objectId }, title: find('TITLE'), body: find('BODY') };
+    }
+  }
+  return {
+    cover: cover ?? {
+      reference: { predefinedLayout: 'TITLE' },
+      title: { type: 'CENTERED_TITLE', index: 0 },
+      body: { type: 'SUBTITLE', index: 0 },
+    },
+    content: content ?? {
+      reference: { predefinedLayout: 'TITLE_AND_BODY' },
+      title: { type: 'TITLE', index: 0 },
+      body: { type: 'BODY', index: 0 },
+    },
+  };
+}
+
+// Story 5.6 — the single `batchUpdate` filling a fresh copy of the
+// template: one new slide per proposed slide (appended, with its
+// placeholders given known ids), their texts, then the template's own
+// example slides deleted. `idPrefix` keeps the new object ids unique in
+// the deck (5–50 characters, Slides rules).
+export function buildPresentationRequests(
+  layouts: slides_v1.Schema$Page[],
+  templateSlideIds: string[],
+  slides: NewSlide[],
+  idPrefix: string,
+): slides_v1.Schema$Request[] {
+  const { cover, content } = chooseSlideLayouts(layouts);
+  const creates: slides_v1.Schema$Request[] = [];
+  const texts: slides_v1.Schema$Request[] = [];
+  slides.forEach((slide, index) => {
+    const layout = index === 0 ? cover : content;
+    const slideId = `${idPrefix}_${index}`;
+    const mappings: slides_v1.Schema$LayoutPlaceholderIdMapping[] = [];
+    const fill = (placeholder: PlaceholderRef | null, suffix: string, text: string) => {
+      if (!placeholder) {
+        if (text) console.error(`googleDriveProvider.createPresentation: slide ${index + 1} has no ${suffix} placeholder, text dropped`);
+        return;
+      }
+      const objectId = `${slideId}_${suffix}`;
+      mappings.push({ layoutPlaceholder: placeholder, objectId });
+      // `insertText` rejects an empty string: an empty placeholder stays as
+      // the layout shows it.
+      if (text) texts.push({ insertText: { objectId, insertionIndex: 0, text } });
+    };
+    fill(layout.title, 'title', slide.title);
+    fill(layout.body, 'body', slide.content);
+    creates.push({
+      createSlide: {
+        objectId: slideId,
+        slideLayoutReference: layout.reference,
+        placeholderIdMappings: mappings,
+      },
+    });
+  });
+  const deletes = templateSlideIds.map((objectId) => ({ deleteObject: { objectId } }));
+  return [...creates, ...texts, ...deletes];
+}
+
 export function createGoogleDriveProvider(
   credentials: GoogleDriveCredentials,
   // Injectable for scratch verification against stubbed Google APIs.
@@ -187,21 +292,28 @@ export function createGoogleDriveProvider(
   const api = apiOverride ?? drive({ version: 'v3', auth });
   const slidesApi = slidesOverride ?? slides({ version: 'v1', auth });
 
+  // The project folder: exactly this name, directly under the root
+  // folder, never created by the app (FR-26). Throws on a Google error
+  // (the caller's `catch` converts it).
+  async function resolveProjectFolder(projectName: string): Promise<DriveResult<string>> {
+    const folders = await listAll(
+      api,
+      `${quote(credentials.rootFolderId)} in parents and name = ${quote(projectName)} and mimeType = ${quote(FOLDER_MIME)} and trashed = false`,
+    );
+    if (folders.length > 1) return { ok: false, error: 'folder_duplicate' };
+    if (folders.length === 0 || !folders[0].id) return { ok: false, error: 'folder_missing' };
+    return { ok: true, data: folders[0].id };
+  }
+
   return {
     async listFiles(projectName) {
       try {
-        // The project folder: exactly this name, directly under the root
-        // folder, never created by the app (FR-26).
-        const folders = await listAll(
-          api,
-          `${quote(credentials.rootFolderId)} in parents and name = ${quote(projectName)} and mimeType = ${quote(FOLDER_MIME)} and trashed = false`,
-        );
-        if (folders.length === 0) return { ok: false, error: 'folder_missing' };
-        if (folders.length > 1) return { ok: false, error: 'folder_duplicate' };
+        const folder = await resolveProjectFolder(projectName);
+        if (!folder.ok) return folder;
 
         const children = await listAll(
           api,
-          `${quote(folders[0].id ?? '')} in parents and mimeType != ${quote(FOLDER_MIME)} and trashed = false`,
+          `${quote(folder.data)} in parents and mimeType != ${quote(FOLDER_MIME)} and trashed = false`,
         );
         const files: DriveFile[] = children
           .filter((file) => file.id && file.name && file.mimeType)
@@ -273,6 +385,62 @@ export function createGoogleDriveProvider(
           return { ok: false, error: 'revision_conflict' };
         }
         return fail('writePresentationText', error);
+      }
+    },
+
+    // Story 5.6 (AD-13) — copy of the OCTO template into the project
+    // folder, then one `batchUpdate` on that new copy only. A copy left
+    // behind by a failed fill is logged with its id, never deleted or
+    // reused (the consultant may still want it).
+    async createPresentation(projectName, title, newSlides) {
+      const templateId = credentials.slidesTemplateId?.trim();
+      if (!templateId) return { ok: false, error: 'unconfigured' };
+      let copiedId: string | null = null;
+      try {
+        const folder = await resolveProjectFolder(projectName);
+        if (!folder.ok) return folder;
+
+        const copy = await api.files.copy(
+          {
+            fileId: templateId,
+            supportsAllDrives: true,
+            fields: 'id',
+            requestBody: { name: title, parents: [folder.data] },
+          },
+          { timeout: CREATE_TIMEOUT_MS },
+        );
+        copiedId = copy.data.id ?? null;
+        if (!copiedId) return fail('createPresentation', new Error('files.copy returned no id'));
+
+        const deck = await slidesApi.presentations.get(
+          {
+            presentationId: copiedId,
+            fields:
+              'slides(objectId),layouts(objectId,pageElements(shape(placeholder(type,index))))',
+          },
+          { timeout: REQUEST_TIMEOUT_MS },
+        );
+        const templateSlideIds = (deck.data.slides ?? [])
+          .map((slide) => slide.objectId)
+          .filter((id): id is string => Boolean(id));
+        const requests = buildPresentationRequests(
+          deck.data.layouts ?? [],
+          templateSlideIds,
+          newSlides,
+          `g56${randomBytes(4).toString('hex')}`,
+        );
+        await slidesApi.presentations.batchUpdate(
+          { presentationId: copiedId, requestBody: { requests } },
+          { timeout: CREATE_TIMEOUT_MS },
+        );
+        return { ok: true, data: { fileId: copiedId } };
+      } catch (error) {
+        if (copiedId) {
+          console.error(
+            `googleDriveProvider.createPresentation: deck copied (${copiedId}) but not filled`,
+          );
+        }
+        return fail('createPresentation', error);
       }
     },
   };

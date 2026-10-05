@@ -89,4 +89,8 @@ export const mockDriveProvider: DriveProvider = {
   async writePresentationText() {
     return { ok: false, error: 'unknown' };
   },
+  // Never offered in demo mode (`domain/agent-tools.ts`): never reached.
+  async createPresentation() {
+    return { ok: false, error: 'unknown' };
+  },
 };

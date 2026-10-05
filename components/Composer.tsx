@@ -1,9 +1,10 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useRef, useState, useTransition, type FormEvent } from 'react';
+import { useEffect, useRef, useState, useTransition, type FormEvent } from 'react';
 
 import { sendMessage } from '@/actions/message';
+import { COMPOSER_PREFILL_EVENT } from '@/components/composer-prefill';
 import { useOverlay } from '@/components/OverlayProvider';
 import { MODELS } from '@/skills/models';
 
@@ -41,6 +42,28 @@ export function Composer({ conversationId }: { conversationId: string | null }) 
   // the same tick, closing that window; `useTransition` is kept only for
   // its `isPending` (disables the UI) and concurrent-safe scheduling.
   const sendingRef = useRef(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Story 5.6 — "Ajuster" on a presentation proposal puts its prefix at the
+  // start of the field (in front of any typed draft, never losing it) and
+  // focuses it, caret at the end.
+  useEffect(() => {
+    function handlePrefill(event: Event) {
+      const text = (event as CustomEvent<string>).detail;
+      if (typeof text !== 'string') return;
+      setContent((current) =>
+        current.trim() === '' ? text : current.startsWith(text) ? current : `${text}${current}`,
+      );
+      requestAnimationFrame(() => {
+        const input = inputRef.current;
+        if (!input) return;
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+      });
+    }
+    window.addEventListener(COMPOSER_PREFILL_EVENT, handlePrefill);
+    return () => window.removeEventListener(COMPOSER_PREFILL_EVENT, handlePrefill);
+  }, []);
 
   const isOpen = isOverlayOpen(OVERLAY_ID);
   // No active conversation (failed read, or none yet) — the composer stays
@@ -128,6 +151,7 @@ export function Composer({ conversationId }: { conversationId: string | null }) 
     >
       <div className="composer-row">
         <input
+          ref={inputRef}
           type="text"
           aria-label="Message"
           placeholder="Écrivez à l'IA…"

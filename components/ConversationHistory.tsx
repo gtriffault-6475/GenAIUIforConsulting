@@ -1,6 +1,8 @@
 import type { ConversationSummary, MessageSummary } from '@/actions/conversation';
 import type { ActionResult } from '@/actions/types';
+import type { DriveMode } from '@/actions/google-connection';
 import { MessageContent } from '@/components/MessageContent';
+import { PresentationProposalCard } from '@/components/PresentationProposalCard';
 
 // Center-column, read-only history of the active conversation (Story 2.1
 // — Conversations multiples et sélection active). No composer here
@@ -11,11 +13,17 @@ import { MessageContent } from '@/components/MessageContent';
 // active yet" state (`ok: true, data: null`).
 export function ConversationHistory({
   result,
+  driveMode,
+  slidesTemplateConfigured,
 }: {
   result: ActionResult<{
     conversation: ConversationSummary;
     messages: MessageSummary[];
   } | null>;
+  // Story 5.6 — for the presentation proposal cards (`null` = unknown,
+  // the cards' buttons stay disabled).
+  driveMode: DriveMode | null;
+  slidesTemplateConfigured: boolean;
 }) {
   return (
     <section
@@ -76,6 +84,13 @@ export function ConversationHistory({
                     </p>
                   ) : (
                     <MessageContent content={msg.content} />
+                  )}
+                  {msg.role === 'assistant' && msg.presentationProposal && (
+                    <PresentationProposalCard
+                      proposal={msg.presentationProposal}
+                      driveMode={driveMode}
+                      templateConfigured={slidesTemplateConfigured}
+                    />
                   )}
                   {msg.role === 'user' && msg.assistantFailed && (
                     // epic-2-retro-item-16 — durable, not just transient,

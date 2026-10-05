@@ -6,7 +6,7 @@ import type { ActionResult } from '@/actions/types';
 import { sendMessage } from '@/actions/message';
 import { seedIfEmpty } from '@/actions/seed-if-empty';
 import { db } from '@/db/client';
-import { conversation, livrable, suggestion } from '@/db/schema';
+import { conversation, livrable, presentationProposal, project, suggestion } from '@/db/schema';
 import { findDrivePresentation } from '@/actions/document-context';
 import { getActiveDriveProvider, type DriveMode } from '@/actions/google-connection';
 import {
@@ -20,6 +20,8 @@ import {
 } from '@/domain/livrable';
 import { resolveAnchorPosition } from '@/domain/suggestion';
 import { MODELS } from '@/skills/models';
+import { parseStoredSlides } from '@/skills/propose_presentation';
+import type { DriveProvider } from '@/integrations/ports/drive-provider';
 import type { ProposedLivrableContent } from '@/skills/propose_livrable_content';
 
 // AD-2 — this is the only file allowed to read or write LIVRABLE. The one
@@ -532,63 +534,187 @@ export async function importDrivePresentation(
     const file = findDrivePresentation(projectId, documentId);
     if (!file) return failure;
 
-    const findExisting = () =>
-      db
+    const { mode, provider } = await getActiveDriveProvider();
+    if (mode !== 'connected' || !provider) {
+      const existing = findImportedLivrable(projectId, file.driveFileId);
+      return existing ? { ok: true, data: { livrableId: existing } } : failure;
+    }
+
+    const imported = await importDriveFile(projectId, file.driveFileId, file.name, provider);
+    return imported ? { ok: true, data: { livrableId: imported } } : failure;
+  } catch (error) {
+    console.error('importDrivePresentation failed', error);
+    return failure;
+  }
+}
+
+function findImportedLivrable(projectId: string, driveFileId: string): string | null {
+  return (
+    db
+      .select({ id: livrable.id })
+      .from(livrable)
+      .where(and(eq(livrable.projectId, projectId), eq(livrable.driveFileId, driveFileId)))
+      .get()?.id ?? null
+  );
+}
+
+// Story 5.3's import core, shared with Story 5.6's creation: reads the
+// deck, then creates its conversation + Drive livrable in one transaction.
+// A deck already imported on this project returns its existing livrable —
+// checked before reading Drive and again inside the transaction; a
+// concurrent import that wins the unique index race is read back instead
+// of failing. `null` = the deck could not be read (logged). Not exported:
+// every export of this 'use server' file is a callable Server Action.
+async function importDriveFile(
+  projectId: string,
+  driveFileId: string,
+  fallbackTitle: string,
+  provider: DriveProvider,
+): Promise<string | null> {
+  const already = findImportedLivrable(projectId, driveFileId);
+  if (already) return already;
+
+  const presentation = await provider.readPresentation(driveFileId);
+  if (!presentation.ok) {
+    console.error('importDriveFile: readPresentation failed', presentation.error);
+    return null;
+  }
+
+  const title = presentation.data.title.trim() || fallbackTitle;
+  const blocks = slidesToBlocks(presentation.data);
+  const livrableId = crypto.randomUUID();
+  const conversationId = crypto.randomUUID();
+
+  try {
+    return db.transaction((tx) => {
+      const raced = tx
         .select({ id: livrable.id })
         .from(livrable)
-        .where(and(eq(livrable.projectId, projectId), eq(livrable.driveFileId, file.driveFileId)))
+        .where(and(eq(livrable.projectId, projectId), eq(livrable.driveFileId, driveFileId)))
         .get();
+      if (raced) return raced.id;
 
-    const already = findExisting();
-    if (already) return { ok: true, data: { livrableId: already.id } };
+      tx.insert(conversation)
+        .values({ id: conversationId, projectId, title, stepKey: null })
+        .run();
+      tx.insert(livrable)
+        .values({
+          id: livrableId,
+          projectId,
+          conversationId,
+          title,
+          content: JSON.stringify({ blocks }),
+          source: 'drive',
+          driveFileId,
+        })
+        .run();
+      return livrableId;
+    });
+  } catch (error) {
+    const winner = findImportedLivrable(projectId, driveFileId);
+    if (winner) return winner;
+    throw error;
+  }
+}
+
+// Story 5.6 — "Créer dans Drive" on a presentation proposal (AD-13). Copies
+// the OCTO template into the project folder, fills it
+// (`DriveProvider.createPresentation`), then imports the new deck exactly
+// like Story 5.3 and marks the proposal `created`. A proposal already
+// created returns its livrable; two clicks racing in this server process
+// share the same creation (no second deck). On any failure the proposal
+// stays `pending`.
+export type CreatePresentationResult = { livrableId: string };
+
+const creationsInFlight = new Map<string, Promise<ActionResult<CreatePresentationResult>>>();
+
+export async function createPresentationFromProposal(
+  proposalId: string,
+): Promise<ActionResult<CreatePresentationResult>> {
+  const inFlight = creationsInFlight.get(proposalId);
+  if (inFlight) return inFlight;
+  const run = runPresentationCreation(proposalId).finally(() => {
+    creationsInFlight.delete(proposalId);
+  });
+  creationsInFlight.set(proposalId, run);
+  return run;
+}
+
+async function runPresentationCreation(
+  proposalId: string,
+): Promise<ActionResult<CreatePresentationResult>> {
+  const failure = {
+    ok: false as const,
+    error: 'La création de la présentation a échoué. Réessayez.',
+  };
+  try {
+    const row = db
+      .select({
+        id: presentationProposal.id,
+        title: presentationProposal.title,
+        slides: presentationProposal.slides,
+        status: presentationProposal.status,
+        livrableId: presentationProposal.livrableId,
+        projectId: conversation.projectId,
+        projectName: project.name,
+      })
+      .from(presentationProposal)
+      .innerJoin(conversation, eq(conversation.id, presentationProposal.conversationId))
+      .innerJoin(project, eq(project.id, conversation.projectId))
+      .where(eq(presentationProposal.id, proposalId))
+      .get();
+    if (!row) return failure;
+    if (row.status === 'created' && row.livrableId) {
+      return { ok: true, data: { livrableId: row.livrableId } };
+    }
+
+    const slides = parseStoredSlides(row.slides);
+    if (slides.length === 0) return failure;
 
     const { mode, provider } = await getActiveDriveProvider();
-    if (mode !== 'connected' || !provider) return failure;
+    if (mode !== 'connected' || !provider) {
+      return { ok: false, error: 'Connectez Google Drive pour créer la présentation.' };
+    }
 
-    const presentation = await provider.readPresentation(file.driveFileId);
-    if (!presentation.ok) {
-      console.error('importDrivePresentation: readPresentation failed', presentation.error);
+    const created = await provider.createPresentation(row.projectName, row.title, slides);
+    if (!created.ok) {
+      console.error('createPresentationFromProposal: createPresentation failed', created.error);
+      if (created.error === 'unconfigured') {
+        return {
+          ok: false,
+          error: "Le modèle de présentation OCTO n'est pas configuré pour cette installation.",
+        };
+      }
+      // Retrying cannot help: same folder messages as the panels (Story 5.2).
+      if (created.error === 'folder_missing') {
+        return { ok: false, error: `Aucun dossier « ${row.projectName} » dans le Drive racine.` };
+      }
+      if (created.error === 'folder_duplicate') {
+        return { ok: false, error: `Plusieurs dossiers portent le nom « ${row.projectName} ».` };
+      }
       return failure;
     }
 
-    const title = presentation.data.title.trim() || file.name;
-    const blocks = slidesToBlocks(presentation.data);
-    const livrableId = crypto.randomUUID();
-    const conversationId = crypto.randomUUID();
-
-    try {
-      const existingId = db.transaction((tx) => {
-        const raced = tx
-          .select({ id: livrable.id })
-          .from(livrable)
-          .where(and(eq(livrable.projectId, projectId), eq(livrable.driveFileId, file.driveFileId)))
-          .get();
-        if (raced) return raced.id;
-
-        tx.insert(conversation)
-          .values({ id: conversationId, projectId, title, stepKey: null })
-          .run();
-        tx.insert(livrable)
-          .values({
-            id: livrableId,
-            projectId,
-            conversationId,
-            title,
-            content: JSON.stringify({ blocks }),
-            source: 'drive',
-            driveFileId: file.driveFileId,
-          })
-          .run();
-        return livrableId;
-      });
-      return { ok: true, data: { livrableId: existingId } };
-    } catch (error) {
-      const winner = findExisting();
-      if (winner) return { ok: true, data: { livrableId: winner.id } };
-      throw error;
+    const livrableId = await importDriveFile(
+      row.projectId,
+      created.data.fileId,
+      row.title,
+      provider,
+    );
+    if (!livrableId) {
+      console.error(
+        `createPresentationFromProposal: deck created (${created.data.fileId}) but not imported`,
+      );
+      return failure;
     }
+
+    db.update(presentationProposal)
+      .set({ status: 'created', livrableId })
+      .where(eq(presentationProposal.id, proposalId))
+      .run();
+    return { ok: true, data: { livrableId } };
   } catch (error) {
-    console.error('importDrivePresentation failed', error);
+    console.error('createPresentationFromProposal failed', error);
     return failure;
   }
 }

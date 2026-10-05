@@ -263,3 +263,13 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-report-serie-concurrente-epic-5.md`
   summary: DOCUMENT drive rows of the other origin are now kept indefinitely (with their exported text) — e.g. Google rows stay in the local database after disconnecting or changing account / root folder.
   evidence: Review of the port of the parallel series' "hide instead of purge" rule. Needed so selections survive a demo round-trip, but nothing ever cleans them up; a cleanup on disconnect or on account/root-folder change would need a product decision (it would lose the selections the rule is meant to keep).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-6-creation-d-une-presentation-depuis-la-conversation.md`
+  summary: A retry after "copy succeeded, import failed" copies the OCTO template again, leaving an extra deck in the project folder.
+  evidence: `createPresentationFromProposal` keeps the proposal `pending` and only logs the copied file id (accepted by the 5.6 intent); storing that id on the proposal and importing it on retry would avoid duplicates.
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-6-creation-d-une-presentation-depuis-la-conversation.md`
+  summary: If the OCTO template has neither the expected layouts nor Google's predefined TITLE / TITLE_AND_BODY, every creation fails after copying (unverified, medium).
+  evidence: Settled by a first real creation with the OCTO template file (`GOOGLE_SLIDES_TEMPLATE_ID`).
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-6-creation-d-une-presentation-depuis-la-conversation.md`
+  summary: No automated tests for Story 5.6 (tool selection, proposal parser, Slides request builder, creation action, import refactor, proposal persistence, demo reset with proposals).
+  evidence: Standing project decision (no automated tests); scratch checks recorded in the spec's Verification section covered them once.

@@ -34,6 +34,8 @@ export type GoogleConnectionStatus = {
   // Only set in `connected` mode — never shown in demo mode (Story 5.1:
   // "aucune mention de Google" while the demo mode is active).
   accountEmail: string | null;
+  // Story 5.6 — `GOOGLE_SLIDES_TEMPLATE_ID` is set (never its value).
+  slidesTemplateConfigured: boolean;
 };
 
 // One-shot outcome of the last OAuth round-trip, carried from the callback
@@ -56,6 +58,13 @@ function readGoogleConfig():
   const rootFolderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID?.trim();
   if (!clientId || !clientSecret || !rootFolderId) return null;
   return { clientId, clientSecret, rootFolderId };
+}
+
+// Story 5.6 — the OCTO slides template copied by "Créer dans Drive".
+// Optional: without it the rest of the Drive integration works, only the
+// creation of a presentation is unavailable (no blank fallback).
+function readSlidesTemplateId(): string | null {
+  return process.env.GOOGLE_SLIDES_TEMPLATE_ID?.trim() || null;
 }
 
 function readConnectionRow() {
@@ -96,6 +105,7 @@ export async function getActiveDriveProvider(): Promise<{
     clientSecret: config.clientSecret,
     rootFolderId: config.rootFolderId,
     refreshToken: row.refreshToken,
+    slidesTemplateId: readSlidesTemplateId(),
   });
   return { mode, provider: provider && forgetConnectionOnRevokedToken(provider) };
 }
@@ -124,6 +134,8 @@ function forgetConnectionOnRevokedToken(provider: DriveProvider): DriveProvider 
     readPresentation: async (fileId) => forgetIfRevoked(await provider.readPresentation(fileId)),
     writePresentationText: async (fileId, edits, requiredRevisionId) =>
       forgetIfRevoked(await provider.writePresentationText(fileId, edits, requiredRevisionId)),
+    createPresentation: async (projectName, title, slides) =>
+      forgetIfRevoked(await provider.createPresentation(projectName, title, slides)),
   };
 }
 
@@ -134,7 +146,10 @@ export async function getGoogleConnectionStatus(): Promise<
     const mode = await resolveDriveMode();
     const accountEmail =
       mode === 'connected' ? (readConnectionRow()?.accountEmail ?? null) : null;
-    return { ok: true, data: { mode, accountEmail } };
+    return {
+      ok: true,
+      data: { mode, accountEmail, slidesTemplateConfigured: readSlidesTemplateId() !== null },
+    };
   } catch (error) {
     console.error('getGoogleConnectionStatus failed', error);
     return { ok: false, error: "Impossible de lire l'état de la connexion Google." };

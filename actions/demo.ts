@@ -6,7 +6,7 @@ import type { ActionResult } from '@/actions/types';
 import { selectStep } from '@/actions/conversation';
 import { resolveDemoReferenceDocumentId } from '@/actions/document';
 import { db } from '@/db/client';
-import { APP_STATE_ID, appState, conversation, document, livrable, message, project, suggestion } from '@/db/schema';
+import { APP_STATE_ID, appState, conversation, document, livrable, message, presentationProposal, project, suggestion } from '@/db/schema';
 import { STEPS } from '@/domain/workflow';
 
 // spec-simulation-demarrage-avant-vente.md, extended by the Epic 4
@@ -185,6 +185,11 @@ export async function resetAvantVenteWorkflow(
       // conversations (e.g. a second reset in a row), and there is no
       // reason to pay for a no-op statement in that case.
       if (conversationIds.length > 0) {
+        // Story 5.6 — presentation proposals reference MESSAGE and
+        // CONVERSATION (FK): removed first, with the messages they hang on.
+        tx.delete(presentationProposal)
+          .where(inArray(presentationProposal.conversationId, conversationIds))
+          .run();
         tx.delete(message)
           .where(inArray(message.conversationId, conversationIds))
           .run();

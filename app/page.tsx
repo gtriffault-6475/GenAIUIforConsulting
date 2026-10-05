@@ -261,7 +261,13 @@ export default async function Home() {
               stepLabel={startingSuggestionStepLabel}
             />
           )}
-          <ConversationHistory result={activeConversationResult} />
+          <ConversationHistory
+            result={activeConversationResult}
+            driveMode={googleConnectionResult.ok ? googleConnectionResult.data.mode : null}
+            slidesTemplateConfigured={
+              googleConnectionResult.ok && googleConnectionResult.data.slidesTemplateConfigured
+            }
+          />
           {/* `key` forces a fresh `Composer` instance per conversation — its
               draft/error state is local `useState`, never reset by a prop
               change alone. Without this, switching conversations kept the
