@@ -72,7 +72,7 @@ development_status:
   5-3-import-d-une-présentation-comme-livrable: review
   5-4-suggestions-ia-sur-une-présentation-importée: review
   5-5-enregistrement-dans-drive: review
-  5-6-création-d-une-présentation-depuis-la-conversation: backlog
+  5-6-création-d-une-présentation-depuis-la-conversation: review
   epic-5-retrospective: optional
 action_items:
   - id: "epic-1-retro-item-1-implémenter-button-ai-primary-ai-suggest"

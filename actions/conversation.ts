@@ -8,9 +8,10 @@ import { insertMessage } from '@/actions/insert-message';
 import { seedIfEmpty } from '@/actions/seed-if-empty';
 import { listLoadedSkillInstructions } from '@/actions/skill';
 import { db } from '@/db/client';
-import { conversation, message, project } from '@/db/schema';
+import { conversation, message, presentationProposal, project } from '@/db/schema';
 import { STEPS } from '@/domain/workflow';
 import { proposeStartingPoint } from '@/skills/propose_starting_point';
+import { parseStoredSlides, type ProposedSlide } from '@/skills/propose_presentation';
 
 // AD-2 — this is the only file allowed to read or write CONVERSATION.
 // MESSAGE is owned by `actions/message.ts` (`sendMessage` moved there,
@@ -72,6 +73,17 @@ export type MessageSummary = {
   // own fallback sentence only when this is `null` but `assistantFailed` is
   // `true`.
   assistantErrorText: string | null;
+  // Story 5.6 — the presentation proposal carried by this assistant reply
+  // (`propose_presentation`), if any. Same FR-10 boundary as `content`.
+  presentationProposal: PresentationProposalSummary | null;
+};
+
+export type PresentationProposalSummary = {
+  id: string;
+  title: string;
+  slides: ProposedSlide[];
+  status: 'pending' | 'created';
+  livrableId: string | null;
 };
 
 type FixtureMessage = {
@@ -322,9 +334,35 @@ export async function getActiveConversation(projectId: string): Promise<
     // leave it `NULL`) — `MessageSummary.assistantFailed` is always a real
     // boolean, never `null`. `assistantErrorText` is left as-is: `null` is
     // a legitimate value there, not one to coalesce away.
+    const proposalRows = db
+      .select({
+        id: presentationProposal.id,
+        messageId: presentationProposal.messageId,
+        title: presentationProposal.title,
+        slides: presentationProposal.slides,
+        status: presentationProposal.status,
+        livrableId: presentationProposal.livrableId,
+      })
+      .from(presentationProposal)
+      .where(eq(presentationProposal.conversationId, conversationRow.id))
+      .all();
+    const proposalsByMessage = new Map(
+      proposalRows.map((row) => [
+        row.messageId,
+        {
+          id: row.id,
+          title: row.title,
+          slides: parseStoredSlides(row.slides),
+          status: row.status,
+          livrableId: row.livrableId,
+        },
+      ]),
+    );
+
     const messages = rawMessages.map((row) => ({
       ...row,
       assistantFailed: row.assistantFailed ?? false,
+      presentationProposal: proposalsByMessage.get(row.id) ?? null,
     }));
 
     return { ok: true, data: { conversation: conversationRow, messages } };

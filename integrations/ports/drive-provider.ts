@@ -64,7 +64,20 @@ export interface DriveProvider {
     edits: DriveTextBox[],
     requiredRevisionId: string,
   ): Promise<DriveResult<void>>;
+  // Story 5.6 — creates a new deck in the project folder (resolved like
+  // `listFiles`, never created) as a copy of the installation's OCTO
+  // slides template named `title`, with one slide per entry (title and
+  // body text) in place of the template's own slides. `unconfigured`
+  // when no template is set for this installation.
+  createPresentation(
+    projectName: string,
+    title: string,
+    slides: NewSlide[],
+  ): Promise<DriveResult<{ fileId: string }>>;
 }
+
+// Story 5.6 — one slide of a deck to create: its title and body text.
+export type NewSlide = { title: string; content: string };
 
 // Story 5.1 (AD-1) — computed only by `resolveDriveMode`
 // (`actions/google-connection.ts`), strict priority

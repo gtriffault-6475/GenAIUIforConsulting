@@ -14,7 +14,8 @@ import {
 } from '@/actions/livrable';
 import { listLoadedSkillInstructions } from '@/actions/skill';
 import { db } from '@/db/client';
-import { conversation, livrable, message } from '@/db/schema';
+import { resolveDriveMode } from '@/actions/google-connection';
+import { conversation, livrable, message, presentationProposal } from '@/db/schema';
 import { selectAgentTools, type AgentToolName } from '@/domain/agent-tools';
 import { parseLivrableBlocks } from '@/domain/livrable';
 import type Anthropic from '@anthropic-ai/sdk';
@@ -25,6 +26,11 @@ import {
 } from '@/skills/propose_anchored_suggestions';
 import { sendToAgent } from '@/skills/buildRequest';
 import { MODELS, resolveModelLabel } from '@/skills/models';
+import {
+  PROPOSE_PRESENTATION_TOOL,
+  parseProposePresentationInput,
+  type ProposedPresentation,
+} from '@/skills/propose_presentation';
 import {
   PROPOSE_LIVRABLE_CONTENT_TOOL,
   parseProposeLivrableContentInput,
@@ -312,10 +318,28 @@ export async function sendMessage(
       })
       .from(livrable)
       .where(eq(livrable.conversationId, conversationId));
-    const toolNames = selectAgentTools({ livrableSource: conversationLivrable?.source ?? null });
+    const toolNames = selectAgentTools({
+      livrableSource: conversationLivrable?.source ?? null,
+      driveMode: await resolveDriveMode(),
+    });
     const TOOLS: Record<AgentToolName, Anthropic.Tool> = {
       propose_livrable_content: PROPOSE_LIVRABLE_CONTENT_TOOL,
       propose_anchored_suggestions: PROPOSE_ANCHORED_SUGGESTIONS_TOOL,
+      propose_presentation: PROPOSE_PRESENTATION_TOOL,
+    };
+
+    // Story 5.6 — a presentation proposal is only kept in memory here and
+    // persisted below with the reply that presents it (same transaction):
+    // no reply, no proposal. Nothing is created in Drive by the tool.
+    const stash: { proposal: ProposedPresentation | null } = { proposal: null };
+    const executeProposePresentation = async (input: unknown): Promise<ExecuteToolResult> => {
+      const parsed = parseProposePresentationInput(input);
+      if (!parsed.ok) return { ok: false, error: parsed.error };
+      stash.proposal = parsed.data;
+      return {
+        ok: true,
+        content: `La proposition de présentation "${parsed.data.title}" (${parsed.data.slides.length} diapositive(s)) est affichée au consultant sous votre réponse. Rien n'est encore créé : il peut la créer dans le Drive du projet ou vous demander de l'ajuster. Présentez-la brièvement sans la recopier.`,
+      };
     };
 
     // Story 5.4 — anchored suggestions on a Drive livrable's existing
@@ -353,6 +377,7 @@ export async function sendMessage(
     const executeTool = async (name: string, input: unknown): Promise<ExecuteToolResult> => {
       if (name === 'propose_livrable_content') return executeProposeLivrableContent(input);
       if (name === 'propose_anchored_suggestions') return executeProposeAnchoredSuggestions(input);
+      if (name === 'propose_presentation') return executeProposePresentation(input);
       return { ok: false, error: `L'outil "${name}" est inconnu.` };
     };
 
@@ -445,17 +470,35 @@ export async function sendMessage(
       };
     }
 
-    insertMessage(db, {
-      id: crypto.randomUUID(),
-      conversationId,
-      role: 'assistant',
-      content: agentResult.content,
-      // Persist the human-readable label (e.g. "Claude Sonnet 5"), not
-      // the raw API slug (`model`, e.g. "claude-sonnet-5") — matches
-      // `actions/conversation.ts`'s fixture data and keeps
-      // `ConversationHistory` free of technical identifiers. The raw
-      // `model` id is still what was actually sent to `sendToAgent` above.
-      model: resolveModelLabel(model),
+    const assistantMessageId = crypto.randomUUID();
+    const proposal = stash.proposal;
+    db.transaction((tx) => {
+      insertMessage(tx, {
+        id: assistantMessageId,
+        conversationId,
+        role: 'assistant',
+        content: agentResult.content,
+        // Persist the human-readable label (e.g. "Claude Sonnet 5"), not
+        // the raw API slug (`model`, e.g. "claude-sonnet-5") — matches
+        // `actions/conversation.ts`'s fixture data and keeps
+        // `ConversationHistory` free of technical identifiers. The raw
+        // `model` id is still what was actually sent to `sendToAgent` above.
+        model: resolveModelLabel(model),
+      });
+      // Story 5.6 — the proposal is attached to the reply presenting it.
+      if (proposal) {
+        tx.insert(presentationProposal)
+          .values({
+            id: crypto.randomUUID(),
+            conversationId,
+            messageId: assistantMessageId,
+            title: proposal.title,
+            slides: JSON.stringify(proposal.slides),
+            status: 'pending',
+            createdAt: new Date().toISOString(),
+          })
+          .run();
+      }
     });
 
     return { ok: true, data: { assistantFailed: false } };

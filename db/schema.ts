@@ -372,3 +372,31 @@ export const googleConnection = sqliteTable('google_connection', {
   // ISO-8601 string, same convention as `message.createdAt`.
   connectedAt: text('connected_at').notNull(),
 });
+
+// Story 5.6 — a presentation the agent proposed in a conversation
+// (`propose_presentation`), waiting for the consultant's "Créer dans
+// Drive". Inserted by `actions/message.ts` in the same transaction as the
+// assistant reply that carries it (`messageId`, at most one proposal per
+// reply: one tool call per response). `slides` is the JSON array of
+// `{ title, content }` validated by `skills/propose_presentation.ts`.
+// `actions/livrable.ts`'s `createPresentationFromProposal` is the only
+// writer of `status`/`livrableId` (`created` once the deck is imported).
+export const presentationProposal = sqliteTable(
+  'presentation_proposal',
+  {
+    id: text('id').primaryKey(),
+    conversationId: text('conversation_id')
+      .notNull()
+      .references(() => conversation.id),
+    messageId: text('message_id')
+      .notNull()
+      .references(() => message.id),
+    title: text('title').notNull(),
+    slides: text('slides').notNull(),
+    status: text('status', { enum: ['pending', 'created'] }).notNull().default('pending'),
+    livrableId: text('livrable_id').references(() => livrable.id),
+    // ISO-8601 string, same convention as `message.createdAt`.
+    createdAt: text('created_at').notNull(),
+  },
+  (table) => [uniqueIndex('presentation_proposal_message_id_unique').on(table.messageId)],
+);
