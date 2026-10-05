@@ -1,6 +1,6 @@
 import type { NextRequest } from 'next/server';
 
-import { completeGoogleConnection } from '@/actions/google-connection';
+import { completeGoogleConnection } from '@/actions/google-drive';
 
 // Story 5.1 (AD-12) — Google redirects here after the consent screen.
 // Writes nothing itself: `completeGoogleConnection` verifies `state`,

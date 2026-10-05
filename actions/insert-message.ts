@@ -32,7 +32,7 @@ import { message } from '@/db/schema';
 // accepts either `db` itself or an already-open `tx` (never opens its own —
 // `node:sqlite` transactions don't nest), so `seedFixturesIfEmpty`'s call
 // stays inside its own existing `db.transaction`, same atomicity as before.
-type MessageInsertExecutor =
+export type MessageInsertExecutor =
   | typeof db
   | Parameters<Parameters<typeof db.transaction>[0]>[0];
 

@@ -9,13 +9,17 @@ import { getDemoModeActive } from '@/actions/demo';
 import { seedDemoReferenceDocument } from '@/actions/document';
 import { insertMessage } from '@/actions/insert-message';
 import {
+  insertPresentationProposal,
+  listConversationProposals,
+} from '@/actions/presentation-proposal';
+import {
   createLivrableWithSuggestions,
   updateLivrableWithSuggestions,
 } from '@/actions/livrable';
 import { listLoadedSkillInstructions } from '@/actions/skill';
 import { db } from '@/db/client';
-import { getGoogleConnectionStatus, resolveDriveMode } from '@/actions/google-connection';
-import { conversation, livrable, message, presentationProposal } from '@/db/schema';
+import { readGoogleConnectionStatus, resolveDriveMode } from '@/actions/google-drive';
+import { conversation, livrable, message } from '@/db/schema';
 import {
   presentationGuidance,
   selectAgentTools,
@@ -59,6 +63,8 @@ import {
 // AD-2 exclusivity above is unaffected: that file exists only so this file
 // and `actions/conversation.ts`'s fixture-seeding exception can share one
 // write path, never a third table owner.
+// Presentation proposals stored with a reply (Story 5.6) go through
+// `actions/presentation-proposal.ts`, PRESENTATION_PROPOSAL's owner (retro A10).
 
 // Story 2.5 — Sélection du modèle et envoi d'un message. The user message
 // is always persisted first, in its own `try/catch`: only a failure of
@@ -188,16 +194,7 @@ export async function sendMessage(
     // reply that showed it, not in MESSAGE — without this, the agent asked
     // to adjust it ("Ajuster") never sees the slides it proposed.
     const proposalsByMessage = new Map(
-      db
-        .select({
-          messageId: presentationProposal.messageId,
-          title: presentationProposal.title,
-          slides: presentationProposal.slides,
-          status: presentationProposal.status,
-        })
-        .from(presentationProposal)
-        .where(eq(presentationProposal.conversationId, conversationId))
-        .all()
+      listConversationProposals(conversationId)
         .map((row) => [row.messageId, row]),
     );
     // Only the latest proposal is replayed slide by slide; earlier ones by
@@ -361,7 +358,7 @@ export async function sendMessage(
       .from(livrable)
       .where(eq(livrable.conversationId, conversationId));
     // One read for both the mode and the template flag (retro A8).
-    const connectionStatus = await getGoogleConnectionStatus();
+    const connectionStatus = await readGoogleConnectionStatus();
     const agentToolContext: AgentToolContext = {
       livrableSource: conversationLivrable?.source ?? null,
       driveMode: connectionStatus.ok ? connectionStatus.data.mode : await resolveDriveMode(),
@@ -570,17 +567,12 @@ export async function sendMessage(
       });
       // Story 5.6 — the proposal is attached to the reply presenting it.
       if (proposal) {
-        tx.insert(presentationProposal)
-          .values({
-            id: crypto.randomUUID(),
-            conversationId,
-            messageId: assistantMessageId,
-            title: proposal.title,
-            slides: JSON.stringify(proposal.slides),
-            status: 'pending',
-            createdAt: new Date().toISOString(),
-          })
-          .run();
+        insertPresentationProposal(tx, {
+          conversationId,
+          messageId: assistantMessageId,
+          title: proposal.title,
+          slides: JSON.stringify(proposal.slides),
+        });
       }
     });
 

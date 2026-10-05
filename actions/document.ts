@@ -2,7 +2,7 @@
 
 import { and, eq } from 'drizzle-orm';
 
-import { getActiveDriveProvider } from '@/actions/google-connection';
+import { getActiveDriveProvider } from '@/actions/google-drive';
 import type { ActionResult } from '@/actions/types';
 import { db } from '@/db/client';
 import { document, project } from '@/db/schema';
@@ -43,7 +43,9 @@ export async function resolveDemoReferenceDocumentId(
   return demoReferenceDocumentId(projectId);
 }
 
-// AD-2 — this is the only file allowed to read or write DOCUMENT.
+// AD-2 — this is the only file allowed to write DOCUMENT (plus the
+// documented demo-reset exception in `actions/demo.ts`); the agent-context
+// reads live in its server-only companion `actions/document-context.ts`.
 // Components never touch `db/` or `integrations/` directly; they call
 // these Server Actions.
 

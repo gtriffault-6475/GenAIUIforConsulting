@@ -1,14 +1,20 @@
 'use server';
 
-import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 
 import type { ActionResult } from '@/actions/types';
 import { sendMessage } from '@/actions/message';
 import { seedIfEmpty } from '@/actions/seed-if-empty';
 import { db } from '@/db/client';
-import { conversation, livrable, presentationProposal, project, suggestion } from '@/db/schema';
+import { conversation, livrable, suggestion } from '@/db/schema';
 import { findDrivePresentation } from '@/actions/document-context';
-import { getActiveDriveProvider, type DriveMode } from '@/actions/google-connection';
+import {
+  forgetProposalDeck,
+  markProposalCreated,
+  readProposalForCreation,
+  recordProposalDeck,
+} from '@/actions/presentation-proposal';
+import { getActiveDriveProvider, type DriveMode } from '@/actions/google-drive';
 import {
   hasUnsavedDriveChanges,
   isBlockModified,
@@ -32,6 +38,10 @@ import type { ProposedLivrableContent } from '@/skills/propose_livrable_content'
 // than in `actions/suggestion.ts` — every other read/write of `SUGGESTION`
 // stays that file's exclusive concern (its own header comment).
 // Components never touch `db/` directly; they call this Server Action.
+// Story 5.3 adds a second documented exception (CONVERSATION, created with
+// a Drive livrable in one transaction, see `importDriveFile`); presentation
+// proposals are read and updated only through `actions/presentation-proposal.ts`
+// (retro A10).
 
 // The shape `LivrablesPanel` sees: a livrable row reduced to the field
 // its card actually renders. Never carries `content` — nothing in this
@@ -655,22 +665,7 @@ async function runPresentationCreation(
     error: 'La création de la présentation a échoué. Réessayez.',
   };
   try {
-    const row = db
-      .select({
-        id: presentationProposal.id,
-        title: presentationProposal.title,
-        slides: presentationProposal.slides,
-        status: presentationProposal.status,
-        livrableId: presentationProposal.livrableId,
-        driveFileId: presentationProposal.driveFileId,
-        projectId: conversation.projectId,
-        projectName: project.name,
-      })
-      .from(presentationProposal)
-      .innerJoin(conversation, eq(conversation.id, presentationProposal.conversationId))
-      .innerJoin(project, eq(project.id, conversation.projectId))
-      .where(eq(presentationProposal.id, proposalId))
-      .get();
+    const row = readProposalForCreation(proposalId);
     if (!row) return failure;
     if (row.status === 'created' && row.livrableId) {
       return { ok: true, data: { livrableId: row.livrableId } };
@@ -707,16 +702,7 @@ async function runPresentationCreation(
         return failure;
       }
       fileId = created.data.fileId;
-      db.update(presentationProposal)
-        .set({ driveFileId: fileId })
-        .where(
-          and(
-            eq(presentationProposal.id, proposalId),
-            isNull(presentationProposal.driveFileId),
-            eq(presentationProposal.status, 'pending'),
-          ),
-        )
-        .run();
+      recordProposalDeck(proposalId, fileId);
     }
 
     const imported = await importDriveFile(row.projectId, fileId, row.title, provider);
@@ -728,19 +714,13 @@ async function runPresentationCreation(
       // connected account): forget it so the next click creates a fresh
       // one. Other errors keep it and the next click retries the import.
       if (imported.error === 'not_found') {
-        db.update(presentationProposal)
-          .set({ driveFileId: null })
-          .where(eq(presentationProposal.id, proposalId))
-          .run();
+        forgetProposalDeck(proposalId);
       }
       return failure;
     }
     const livrableId = imported.livrableId;
 
-    db.update(presentationProposal)
-      .set({ status: 'created', livrableId })
-      .where(eq(presentationProposal.id, proposalId))
-      .run();
+    markProposalCreated(proposalId, livrableId);
     return { ok: true, data: { livrableId } };
   } catch (error) {
     console.error('createPresentationFromProposal failed', error);
