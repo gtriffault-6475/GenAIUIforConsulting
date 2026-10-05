@@ -3,7 +3,7 @@
 import { and, eq } from 'drizzle-orm';
 
 import type { ActionResult } from '@/actions/types';
-import { listAgentContextDocuments } from '@/actions/document-context';
+import { listAgentContextDocuments, readDemoModeActive } from '@/actions/document-context';
 import { insertMessage } from '@/actions/insert-message';
 import { seedIfEmpty } from '@/actions/seed-if-empty';
 import { listLoadedSkillInstructions } from '@/actions/skill';
@@ -510,6 +510,7 @@ export async function getStartingSuggestion(
       loadedSkills: loadedSkillsResult.data,
       // Story 5.2 (AD-11): the project's context documents.
       contextDocuments: await listAgentContextDocuments(projectId),
+      demoModeActive: await readDemoModeActive(),
     });
 
     if (!result.ok) {

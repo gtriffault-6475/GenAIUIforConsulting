@@ -105,7 +105,8 @@ function listingStateFor(error: DriveError): DriveListingState {
 // connected → Google): upserts every listed file keyed by
 // `(projectId, driveFileId)` (name, type, modified date — never
 // `usedAsContext`), deletes rows of this origin whose file left the
-// folder, purges drive rows of the other origin, and re-exports the text
+// folder, keeps (without showing or sending) drive rows of the other
+// origin so selections survive a demo round-trip, and re-exports the text
 // of selected readable files whose Drive modified date changed. Without a
 // provider (`unconfigured`/`disconnected`) nothing is written and no
 // drive row is shown. `token_revoked` forgets the Google connection.
@@ -176,10 +177,16 @@ async function syncDriveFolder(
 
   const listedIds = new Set(files.map((file) => file.fileId));
   db.transaction((tx) => {
+    // Only rows of the current origin can be "gone from the folder". Rows
+    // of the other origin (mock vs google) are kept as they are — with
+    // their text and selection — but never shown nor sent while the other
+    // mode is active (filtered by origin on every read), so the
+    // consultant's selections survive a round-trip through demo mode.
+    // Deliberate deviation from AD-1's "purge" rule, recorded in the
+    // architecture spine.
     for (const row of existing) {
-      const otherOrigin = row.origin !== origin;
-      const gone = !row.driveFileId || !listedIds.has(row.driveFileId);
-      if (otherOrigin || gone) {
+      if (row.origin !== origin) continue;
+      if (!row.driveFileId || !listedIds.has(row.driveFileId)) {
         tx.delete(document).where(eq(document.id, row.id)).run();
       }
     }

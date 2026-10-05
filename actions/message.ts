@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm';
 
 import type { ActionResult } from '@/actions/types';
 import { addAnchoredSuggestions } from '@/actions/anchored-suggestions';
-import { listAgentContextDocuments } from '@/actions/document-context';
+import { listAgentContextDocuments, readDemoModeActive } from '@/actions/document-context';
 import { getDemoModeActive } from '@/actions/demo';
 import { seedDemoReferenceDocument } from '@/actions/document';
 import { insertMessage } from '@/actions/insert-message';
@@ -421,7 +421,10 @@ export async function sendMessage(
       );
     }
 
+    // A failed read degrades to the real path, as before (AD-11: the
+    // assembly point no longer reads the database itself).
     const agentResult = await sendToAgent({
+      demoModeActive: await readDemoModeActive(),
       loadedSkills: effectiveLoadedSkills,
       // Story 5.2 (AD-11): manual documents + selected drive documents.
       contextDocuments: await listAgentContextDocuments(projectId, {
