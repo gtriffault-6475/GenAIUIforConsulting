@@ -509,6 +509,20 @@ export async function sendMessage(
       );
     }
 
+    // Story 5.6 follow-up (spec-5-6-presentation-tool-use.md, owner test
+    // 2026-10-05): with both tools offered
+    // the agent sometimes wrote the slides as text, so no card appeared.
+    if (toolNames.includes('propose_presentation')) {
+      effectiveLoadedSkills = [
+        ...effectiveLoadedSkills,
+        {
+          skillKey: '__presentation_tool_rule',
+          instructions:
+            "Quand le consultant demande une présentation, des slides, des diapositives, un deck ou un support de présentation (même s'il l'appelle « livrable »), appelez toujours l'outil propose_presentation et n'écrivez pas les diapositives dans votre réponse à la place de l'outil — sauf s'il demande explicitement un plan en texte dans la conversation. propose_livrable_content sert uniquement aux documents texte (note, réponse à un appel d'offres…). Cette règle prime sur les skills chargés pour la forme du livrable.",
+        },
+      ];
+    }
+
     // A failed read degrades to the real path, as before (AD-11: the
     // assembly point no longer reads the database itself).
     const agentResult = await sendToAgent({
