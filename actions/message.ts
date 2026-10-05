@@ -16,7 +16,12 @@ import { listLoadedSkillInstructions } from '@/actions/skill';
 import { db } from '@/db/client';
 import { resolveDriveMode } from '@/actions/google-connection';
 import { conversation, livrable, message, presentationProposal } from '@/db/schema';
-import { selectAgentTools, type AgentToolName } from '@/domain/agent-tools';
+import {
+  presentationGuidance,
+  selectAgentTools,
+  type AgentToolContext,
+  type AgentToolName,
+} from '@/domain/agent-tools';
 import { CONTEXT_DOCUMENT_CHAR_CAP } from '@/domain/document';
 import { parseLivrableBlocks } from '@/domain/livrable';
 import type Anthropic from '@anthropic-ai/sdk';
@@ -355,10 +360,11 @@ export async function sendMessage(
       })
       .from(livrable)
       .where(eq(livrable.conversationId, conversationId));
-    const toolNames = selectAgentTools({
+    const agentToolContext: AgentToolContext = {
       livrableSource: conversationLivrable?.source ?? null,
       driveMode: await resolveDriveMode(),
-    });
+    };
+    const toolNames = selectAgentTools(agentToolContext);
     const TOOLS: Record<AgentToolName, Anthropic.Tool> = {
       propose_livrable_content: PROPOSE_LIVRABLE_CONTENT_TOOL,
       propose_anchored_suggestions: PROPOSE_ANCHORED_SUGGESTIONS_TOOL,
@@ -509,17 +515,14 @@ export async function sendMessage(
       );
     }
 
-    // Story 5.6 follow-up (spec-5-6-presentation-tool-use.md, owner test
-    // 2026-10-05): with both tools offered
-    // the agent sometimes wrote the slides as text, so no card appeared.
-    if (toolNames.includes('propose_presentation')) {
+    // Story 5.6 follow-up (spec-5-6-presentation-tool-use.md): how the
+    // agent handles a presentation request in this conversation — the
+    // tool when offered, otherwise what the consultant must do first.
+    const presentationRule = presentationGuidance(agentToolContext);
+    if (presentationRule) {
       effectiveLoadedSkills = [
         ...effectiveLoadedSkills,
-        {
-          skillKey: '__presentation_tool_rule',
-          instructions:
-            "Quand le consultant demande une présentation, des slides, des diapositives, un deck ou un support de présentation (même s'il l'appelle « livrable »), appelez toujours l'outil propose_presentation et n'écrivez pas les diapositives dans votre réponse à la place de l'outil — sauf s'il demande explicitement un plan en texte dans la conversation. propose_livrable_content sert uniquement aux documents texte (note, réponse à un appel d'offres…). Cette règle prime sur les skills chargés pour la forme du livrable.",
-        },
+        { skillKey: '__presentation_tool_rule', instructions: presentationRule },
       ];
     }
 
