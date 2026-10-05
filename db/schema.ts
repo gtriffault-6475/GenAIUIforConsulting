@@ -74,8 +74,9 @@ export const appState = sqliteTable('app_state', {
 // Story 5.2 — a `drive` row now mirrors one file of the project's Drive
 // folder: `id` is a local UUID, `driveFileId` the provider's file id
 // (unique per project), `origin` which adapter produced it (`mock` in demo
-// mode, `google` when connected — rows of the other origin are purged at
-// resync, AD-1), `mimeType`/`modifiedTime` as listed by Drive. `content`
+// mode, `google` when connected — rows of the other origin are kept at
+// resync but neither shown nor sent, AD-1 as amended 2026-10-05),
+// `mimeType`/`modifiedTime` as listed by Drive. `content`
 // stays empty until the consultant selects the file (`usedAsContext`),
 // then holds its exported text. `usedAsContext` is the consultant's choice
 // for drive rows — never changed by a resync — and always true for manual

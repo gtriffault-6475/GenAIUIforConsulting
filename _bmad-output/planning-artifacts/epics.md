@@ -548,7 +548,8 @@ So that l'agent travaille avec les vrais documents, sans rien envoyer que je n'a
 **Given** Google non connecté hors démo, dossier racine non configuré, ou dossier absent/en double
 **Then** le panneau affiche le message correspondant d'`EXPERIENCE.md`, aucun contenu simulé, et l'app ne crée jamais de dossier
 
-**And** la resynchronisation au chargement du projet met à jour la liste, supprime les fichiers disparus, purge les lignes d'une autre origine que le mode courant, rafraîchit le texte des fichiers sélectionnés, et ne touche jamais au choix du consultant (AD-1)
+**And** la resynchronisation au chargement du projet met à jour la liste, supprime les fichiers disparus, conserve sans les afficher ni les envoyer les lignes d'une autre origine que le mode courant, rafraîchit le texte des fichiers sélectionnés, et ne touche jamais au choix du consultant (AD-1)
+_(Amendé le 2026-10-05, rétrospective Epic 5 : les lignes de l'autre origine sont conservées au lieu d'être purgées, pour que les sélections survivent à un passage par le mode démo — voir `architecture/architecture-GenAI4Consulting-2026-09-11/ARCHITECTURE-SPINE.md`, AD-1.)_
 **And** les documents de contexte sont transmis à `buildRequest` par l'action appelante, chacun sous un plafond de taille signalé (AD-11)
 
 ### Story 5.3: Import d'une présentation comme livrable
@@ -627,8 +628,9 @@ So that je parte d'un premier jet structuré.
 **Then** une carte "Créer dans Drive" / "Ajuster" s'affiche dans la conversation ; rien n'est créé sans clic
 
 **Given** "Créer dans Drive"
-**Then** l'app crée la présentation dans le dossier du projet (Drive `files.create` puis Slides `batchUpdate`), titrée comme proposé, puis l'importe comme en Story 5.3, avec sa conversation dédiée
+**Then** l'app crée la présentation dans le dossier du projet (copie Drive `files.copy` du modèle OCTO désigné par `GOOGLE_SLIDES_TEMPLATE_ID`, puis Slides `batchUpdate`), titrée comme proposé, puis l'importe comme en Story 5.3, avec sa conversation dédiée
+_(Amendé le 2026-10-05, rétrospective Epic 5 : OQ-7 tranchée par le porteur — modèle OCTO, mises en page choisies automatiquement ; sans modèle configuré, la création est indisponible. Voir `spec-5-6-creation-d-une-presentation-depuis-la-conversation.md`.)_
 
 **And** l'outil de proposition n'est offert à l'agent qu'en mode `connected` (AD-14)
-**And** prérequis avant la spec : OQ-7 (mise en page / modèle OCTO) tranchée ; la forme et la persistance de la proposition sont décidées dans la spec de cette story
+**And** prérequis avant la spec : OQ-7 (mise en page / modèle OCTO) tranchée — fait le 2026-10-05 (modèle OCTO) ; la forme et la persistance de la proposition sont décidées dans la spec de cette story
 

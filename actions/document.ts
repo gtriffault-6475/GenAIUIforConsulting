@@ -8,7 +8,12 @@ import { db } from '@/db/client';
 import { document, project } from '@/db/schema';
 import { isAgentReadable } from '@/domain/document';
 import type { DriveError } from '@/integrations/ports/drive-provider';
-import { originFor } from '@/actions/document-context';
+import {
+  demoReferenceDocumentId,
+  isDemoReferenceDocument,
+  originFor,
+  readDemoModeActive,
+} from '@/actions/document-context';
 
 // spec-demo-document-reference.md — id dérivé de `projectId` (jamais
 // `crypto.randomUUID()`, jamais un seul id fixe partagé entre projets) :
@@ -20,22 +25,17 @@ import { originFor } from '@/actions/document-context';
 // Un id par projet laisse chaque projet obtenir sa propre copie, tout en
 // restant idempotent (vérifié avant insertion, Boundaries: "un second
 // déclenchement ne doit jamais créer de doublon") pour ce même projet.
-// Non exportée (ce fichier porte `'use server'` -- toute fonction exportée
-// en devient une Server Action, et Next rejette une Server Action
-// synchrone). `resolveDemoReferenceDocumentId` ci-dessous est le seul point
-// d'accès pour un appelant externe (`actions/demo.ts`).
-function demoReferenceDocumentId(projectId: string): string {
-  return `doc-demo-references-${projectId}`;
-}
+// L'id lui-même est dérivé par `demoReferenceDocumentId`
+// (`actions/document-context.ts`, non `'use server'`, rétrospective Epic 5
+// A3), partagé avec le filtre qui masque ce document hors mode démo.
 
 // Revue (blind-hunter, Review Triage Log #3) : `resetAvantVenteWorkflow`
 // (`actions/demo.ts`) doit pouvoir supprimer ce même document lors d'un
 // reset avant-vente (sans quoi rejouer la démo sur un projet déjà utilisé
 // montre le document de référence dès le premier message, avant même que le
 // tool-call RFP ne se redéclenche). AD-2 reste respecté : `actions/demo.ts`
-// ne recalcule jamais l'id à la main, il appelle cette Server Action --
-// seule source pour le dériver, ici comme dans `seedDemoReferenceDocument`
-// ci-dessous. `async` uniquement pour la contrainte Server Action
+// ne recalcule jamais l'id à la main, il appelle cette Server Action,
+// qui délègue à `demoReferenceDocumentId`. `async` uniquement pour la contrainte Server Action
 // ci-dessus ; le corps lui-même n'a besoin d'aucun `await`.
 export async function resolveDemoReferenceDocumentId(
   projectId: string,
@@ -278,7 +278,12 @@ export async function getContextPanel(
           .sort((a, b) => a.name.localeCompare(b.name, 'fr'))
           .map(toSummary)
       : [];
-    const manual = rows.filter((row) => row.source === 'manual').map(toSummary);
+    // Epic 5 retrospective (A3): the demo's staged document only in demo.
+    const demoModeActive = await readDemoModeActive();
+    const manual = rows
+      .filter((row) => row.source === 'manual')
+      .filter((row) => demoModeActive || !isDemoReferenceDocument(row.id))
+      .map(toSummary);
 
     return { ok: true, data: { projectName, drive: { state, files }, manual } };
   } catch (error) {
