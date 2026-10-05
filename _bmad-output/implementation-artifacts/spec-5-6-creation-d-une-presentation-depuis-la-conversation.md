@@ -25,6 +25,7 @@ context:
 - Persistence: new table `PRESENTATION_PROPOSAL` {id, conversationId, messageId, title, slides (JSON), status `pending | created`, livrableId, createdAt}, written in the same transaction as the agent's reply message (no reply → no proposal). Several proposals may exist in a conversation; each card acts on its own proposal.
 - Card (under the reply that carries it): title, slide list (number, title, first lines of content), "Créer dans Drive" (neutral primary) and "Ajuster" (puts "Ajuste la proposition de présentation : " in the composer and focuses it). Once created: "Présentation créée" with a link to the livrable, no button. Outside `connected`: buttons disabled with "Connectez Google Drive pour créer la présentation." Never shown in demo mode (the tool is never offered there).
 - Creation (`createPresentation(projectName, title, slides)` on the drive port, AD-13): project folder resolved like Story 5.2 (never created); copy of the OCTO template into it, named with the proposal title; one `batchUpdate` that adds one slide per proposed slide from the template's layouts and fills title and body placeholders; the template's own example slides are removed; then the Story 5.3 import of the new file, and `status := created`, `livrableId` set. A proposal already `created` returns its livrable (no second deck). Any failure: "La création de la présentation a échoué. Réessayez.", proposal stays `pending` (a deck copied but not imported is reported in the log with its id).
+- **Decisions (owner, 2026-10-05):** (1) The OCTO template is a Google Slides file whose ID is set in a new variable `GOOGLE_SLIDES_TEMPLATE_ID` (shared with the consultants); without it, "Créer dans Drive" is unavailable with "Le modèle de présentation OCTO n'est pas configuré pour cette installation." — never a blank fallback. (2) Layouts chosen automatically: first proposed slide → the template layout holding a centered-title placeholder (cover), the others → the first layout holding a title and a body placeholder; if the template has no such layout, the Google predefined `TITLE` / `TITLE_AND_BODY` layouts are used.
 - Errors converted to `DriveError`, raw detail logged; `token_revoked` handled by the existing provider wrapper.
 
 **Never:**
@@ -43,11 +44,6 @@ context:
 | Conversation with a livrable | local or Drive livrable | tool not offered (Story 5.4 rules) | N/A |
 
 </frozen-after-approval>
-
-## Open Questions
-
-1. **Where does the OCTO template come from?** The app needs a Google Slides file it can copy. Options: **A. A Google Slides template file in Drive, its ID set in a new variable `GOOGLE_SLIDES_TEMPLATE_ID`** (you or OCTO's admin import the official template into Google Slides once and share it with consultants); if the variable is missing, "Créer dans Drive" is unavailable with a message / **B. Same, but if the variable is missing, fall back to a blank Google presentation** (creation always works, without the OCTO look) / **C. Another source** (tell me which: e.g. a template already in the shared Drive at a known path).
-2. **Which slides of the template are used?** Options: **A. Automatic** — the first slide of each proposal uses the template layout with a centered title (cover), the others the first layout with a title and a body placeholder; nothing to configure / **B. Named layouts** — you give me the exact layout names of the OCTO template (e.g. "Couverture", "Titre et contenu") / **C. Keep the template's own slides** as a base and only append ours after them.
 
 ## Code Map
 
