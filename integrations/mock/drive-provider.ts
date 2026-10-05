@@ -1,61 +1,85 @@
-import type { DriveProvider, OctopodDocument } from '../ports/drive-provider';
+import { GOOGLE_DOC_MIME, GOOGLE_SHEET_MIME } from '@/domain/document';
+
+import type { DriveFile, DriveProvider } from '../ports/drive-provider';
 import { withLatency } from './with-latency';
 
-// Round-1 seed data: a handful of documents per seed project (ids match
-// `integrations/mock/project-provider.ts`), credible enough to read as a
-// real drive listing rather than a placeholder — no "mock"/"test"
-// wording, no obviously-fake names.
-const SEED_DOCUMENTS: Record<string, OctopodDocument[]> = {
-  'proj-acme-rfp': [
+// Demo-mode drive (AD-1: only ever wired for `demo`). Story 5.2 aligned it
+// on the real Drive panel (owner decision, spec-5-2): a flat list of the
+// files directly in the project folder, keyed by project name
+// (`integrations/mock/project-provider.ts`). Google Docs / Sheets carry
+// no file extension and are readable by the agent; PDFs are not. Credible
+// names only — no "mock"/"test" wording.
+type SeedFile = DriveFile & { content: string };
+
+const MODIFIED = '2026-09-12T09:30:00.000Z';
+
+const SEED_FILES: Record<string, SeedFile[]> = {
+  'Réponse RFP — Acme Corp': [
     {
-      id: 'doc-acme-rfp',
+      fileId: 'mock-acme-rfp',
       name: 'RFP — Acme Corp.pdf',
-      folderPath: null,
+      mimeType: 'application/pdf',
+      modifiedTime: MODIFIED,
       content:
         "Cahier des charges de l'appel d'offres pour la refonte de la plateforme de gestion des achats d'Acme Corp : périmètre fonctionnel, contraintes techniques et calendrier de réponse attendu.",
     },
     {
-      id: 'doc-acme-cr-achats',
-      name: 'CR call achats.docx',
-      folderPath: 'Comptes-rendus',
+      fileId: 'mock-acme-cr-achats',
+      name: 'CR call achats',
+      mimeType: GOOGLE_DOC_MIME,
+      modifiedTime: MODIFIED,
       content:
         "Compte-rendu de l'appel avec la direction achats d'Acme Corp : priorités budgétaires, jalons de décision et interlocuteurs côté client.",
     },
     {
-      id: 'doc-acme-synthese',
-      name: 'Note de synthèse client.pdf',
-      folderPath: 'Synthèses',
+      fileId: 'mock-acme-synthese',
+      name: 'Note de synthèse client',
+      mimeType: GOOGLE_DOC_MIME,
+      modifiedTime: MODIFIED,
       content:
         "Synthèse des échanges préliminaires avec Acme Corp avant le lancement officiel de l'appel d'offres.",
     },
   ],
-  'proj-audit-mission': [
+  'Audit interne — Mission Client': [
     {
-      id: 'doc-audit-rapport',
-      name: "Rapport d'audit interne — v0.docx",
-      folderPath: null,
+      fileId: 'mock-audit-rapport',
+      name: "Rapport d'audit interne — v0",
+      mimeType: GOOGLE_DOC_MIME,
+      modifiedTime: MODIFIED,
       content:
         "Version de travail du rapport d'audit interne : constats préliminaires sur les processus de contrôle et premières recommandations.",
     },
     {
-      id: 'doc-audit-cr-direction',
-      name: 'CR entretien direction financière.docx',
-      folderPath: 'Comptes-rendus',
+      fileId: 'mock-audit-cr-direction',
+      name: 'CR entretien direction financière.pdf',
+      mimeType: 'application/pdf',
+      modifiedTime: MODIFIED,
       content:
         "Compte-rendu de l'entretien avec la direction financière : points de vigilance identifiés et périmètre des tests à mener.",
     },
     {
-      id: 'doc-audit-referentiel',
-      name: 'Référentiel de contrôle interne.xlsx',
-      folderPath: 'Référentiels',
+      fileId: 'mock-audit-referentiel',
+      name: 'Référentiel de contrôle interne',
+      mimeType: GOOGLE_SHEET_MIME,
+      modifiedTime: MODIFIED,
       content:
-        "Référentiel des contrôles internes en vigueur, utilisé comme base de comparaison pour la mission d'audit.",
+        "Contrôle;Processus;Fréquence\nSéparation des tâches;Achats;Continue\nRapprochement bancaire;Trésorerie;Mensuelle\nRevue des accès;SI;Trimestrielle",
     },
   ],
 };
 
 export const mockDriveProvider: DriveProvider = {
-  async listDocuments(projectId) {
-    return withLatency(SEED_DOCUMENTS[projectId] ?? []);
+  async listFiles(projectName) {
+    const files = (SEED_FILES[projectName] ?? []).map(
+      ({ fileId, name, mimeType, modifiedTime }) => ({ fileId, name, mimeType, modifiedTime }),
+    );
+    return withLatency({ ok: true as const, data: files });
+  },
+  async exportText(fileId) {
+    for (const files of Object.values(SEED_FILES)) {
+      const file = files.find((candidate) => candidate.fileId === fileId);
+      if (file) return withLatency({ ok: true as const, data: file.content });
+    }
+    return { ok: false, error: 'not_found' };
   },
 };

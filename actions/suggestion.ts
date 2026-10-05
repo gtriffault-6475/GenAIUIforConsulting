@@ -3,6 +3,7 @@
 import { and, eq } from 'drizzle-orm';
 
 import type { ActionResult } from '@/actions/types';
+import { listAgentContextDocuments } from '@/actions/document-context';
 import { listLoadedSkillInstructions } from '@/actions/skill';
 import { db } from '@/db/client';
 import { livrable, suggestion } from '@/db/schema';
@@ -449,6 +450,8 @@ export async function reworkSuggestion(
       suggestionText: previousText,
       instructions: trimmedInstructions,
       loadedSkills: loadedSkillsResult.data,
+      // Story 5.2 (AD-11): the project's context documents.
+      contextDocuments: await listAgentContextDocuments(livrableRow.projectId),
     });
 
     if (!reworkResult.ok) {

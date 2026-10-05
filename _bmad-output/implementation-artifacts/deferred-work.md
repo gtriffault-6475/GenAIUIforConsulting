@@ -235,3 +235,11 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-1-connexion-du-compte-google.md`
   summary: No automated check covers Story 5.1's security- and mode-sensitive behaviors (resolveDriveMode priority, OAuth state rejection, demo mode never calling Google, refresh token absent from the RSC payload, listDocuments hiding drive rows outside demo, db/client.ts migration lock on a fresh database with parallel build workers).
   evidence: Verification-gap review (pass 1) — each can regress while tsc and npm run build still pass; verified only by a one-off Playwright script. No test suite by standing decision; revisit if targeted tests are allowed (OAuth state check first), or add "fresh db/local.db + npm run build" to future verification steps.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-2-dossier-drive-du-projet-et-panneau-contexte-reel.md`
+  summary: No total size budget across context documents — each is capped at 30 000 characters, but many selected documents can still push every agent call past the model's context window.
+  evidence: Blind-hunter and edge-case review (pass 1). Failure would be visible (failed reply) and needs several large documents selected at once. The spec only sets a per-document cap; deciding a total budget and what the consultant sees when it is reached is a product choice.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-2-dossier-drive-du-projet-et-panneau-contexte-reel.md`
+  summary: No committed automated check for Story 5.2 — Google error mapping (invalid_client vs invalid_grant vs quota), resync rules (purges, kept selections, re-export on modified date, retry after a failed export), the agent-context filter (origin, selection, readability), and the migration backfill on a database with pre-existing manual documents.
+  evidence: Verification-gap review (pass 1). All verified once by scratch scripts and Playwright (Implementation Notes) but none re-runs; the invalid_client regression was actually caught that way. `createGoogleDriveProvider` already accepts an `apiOverride` for a stub-based check. No test suite by standing decision.
