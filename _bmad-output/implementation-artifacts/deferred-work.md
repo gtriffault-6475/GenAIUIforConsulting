@@ -237,7 +237,8 @@
   evidence: Verification-gap review (pass 1) — each can regress while tsc and npm run build still pass; verified only by a one-off Playwright script. No test suite by standing decision; revisit if targeted tests are allowed (OAuth state check first), or add "fresh db/local.db + npm run build" to future verification steps.
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-2-dossier-drive-du-projet-et-panneau-contexte-reel.md`
-  summary: No total size budget across context documents — each is capped at 30 000 characters, but many selected documents can still push every agent call past the model's context window.
+  summary: **Resolved (spec-report-serie-concurrente-epic-5, commit dd763f9, 2026-10-05).** `budgetContextDocuments` (`domain/document.ts`) now caps context documents at 60 000 characters in total (`CONTEXT_TOTAL_CHAR_CAP`) on top of the 30 000 per document. Manual documents go first, each cut is labelled with its reason (`truncatedBy: 'document' | 'total'`), and `skills/buildRequest.ts` lists the documents left out. Recorded in ARCHITECTURE-SPINE.md AD-11. Closing this entry; original text kept below.
+  original_summary: No total size budget across context documents — each is capped at 30 000 characters, but many selected documents can still push every agent call past the model's context window.
   evidence: Blind-hunter and edge-case review (pass 1). Failure would be visible (failed reply) and needs several large documents selected at once. The spec only sets a per-document cap; deciding a total budget and what the consultant sees when it is reached is a product choice.
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-2-dossier-drive-du-projet-et-panneau-contexte-reel.md`
