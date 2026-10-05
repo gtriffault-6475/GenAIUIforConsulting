@@ -45,6 +45,10 @@ export type DriveTextBox = { objectId: string; text: string };
 
 export type DrivePresentation = {
   title: string;
+  // Story 5.5 — the revision just read: a write is only accepted by Google
+  // while the deck is still at this revision (AD-13). Guaranteed for a
+  // short time only, so it is never stored, always read fresh.
+  revisionId: string;
   slides: { slideId: string; slideNumber: number; textBoxes: DriveTextBox[] }[];
 };
 
@@ -52,6 +56,14 @@ export interface DriveProvider {
   listFiles(projectName: string): Promise<DriveResult<DriveFile[]>>;
   exportText(fileId: string, mimeType: string): Promise<DriveResult<string>>;
   readPresentation(fileId: string): Promise<DriveResult<DrivePresentation>>;
+  // Story 5.5 — rewrites the whole text of the given text boxes, nothing
+  // else, if the deck is still at `requiredRevisionId`; otherwise
+  // `revision_conflict` and nothing is written.
+  writePresentationText(
+    fileId: string,
+    edits: DriveTextBox[],
+    requiredRevisionId: string,
+  ): Promise<DriveResult<void>>;
 }
 
 // Story 5.1 (AD-1) — computed only by `resolveDriveMode`

@@ -1391,15 +1391,23 @@ body.demo-mode-active {
   padding-top: 0;
 }
 
-.reimport {
+.drive-actions {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: var(--space-1);
-  max-width: 320px;
+  max-width: 360px;
 }
 
-.reimport-confirm {
+.drive-actions-buttons,
+.drive-actions-confirm-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.drive-actions-confirm,
+.drive-actions-conflict {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -1407,11 +1415,6 @@ body.demo-mode-active {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-surface);
-}
-
-.reimport-confirm-actions {
-  display: flex;
-  gap: var(--space-2);
 }
 
 /* A Slides text box can hold several lines: keep its line breaks. */

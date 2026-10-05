@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { getLivrable } from '@/actions/livrable';
 import { listSuggestions } from '@/actions/suggestion';
 import { GlobalRevisionField } from '@/components/GlobalRevisionField';
-import { ReimportButton } from '@/components/ReimportButton';
+import { DriveLivrableActions } from '@/components/DriveLivrableActions';
 import { SuggestionsPanel } from '@/components/SuggestionsPanel';
 import {
   groupBlocksBySlide,
@@ -142,11 +142,11 @@ export default async function LivrablePage({
             >
               <div className="livrable-header">
                 <h1 className="text-heading">{result.data.title}</h1>
-                {/* Story 5.3 — Drive livrables only. */}
+                {/* Story 5.3 / 5.5 — Drive livrables only: Réimporter, Enregistrer dans Drive. */}
                 {result.data.source === 'drive' && result.data.driveMode !== 'demo' && (
-                  <ReimportButton
+                  <DriveLivrableActions
                     livrableId={result.data.id}
-                    canReimport={result.data.canReimport}
+                    connected={result.data.driveConnected}
                     showConnectHint={result.data.driveMode === 'disconnected'}
                     hasUnsavedChanges={hasUnsavedDriveChanges(result.data.blocks)}
                   />

@@ -2,7 +2,8 @@
 title: 'Story 5.5 — Enregistrement dans Drive'
 type: 'feature'
 created: '2026-10-05'
-status: 'draft'
+status: 'done'
+baseline_commit: 'a6daa613ea069444f7d4866d100de67660003712'
 route: 'dispatch'
 review_loop_iteration: 0
 context:
@@ -61,9 +62,9 @@ context:
 
 **Execution:**
 - [ ] port, Google adapter, mock, wrapper -- `revisionId`, `writePresentationText`.
-- [ ] `domain/livrable.ts` -- `findSaveConflicts`.
-- [ ] `actions/livrable.ts` -- `saveLivrableToDrive`.
-- [ ] `components/DriveLivrableActions.tsx`, `app/livrables/[id]/page.tsx`, `app/globals.css` -- UI.
+- [x] `domain/livrable.ts` -- `findSaveConflicts`.
+- [x] `actions/livrable.ts` -- `saveLivrableToDrive`.
+- [x] `components/DriveLivrableActions.tsx`, `app/livrables/[id]/page.tsx`, `app/globals.css` -- UI.
 
 **Acceptance Criteria:**
 - Given a successful save, when the presentation is reimported, then no block is reported modified and kept suggestions follow Story 5.3's rule.
@@ -72,9 +73,35 @@ context:
 
 ## Implementation Notes
 
+- Implemented directly from this spec (no subagent dispatch).
+- Port: `DrivePresentation.revisionId` (read fresh, never stored) and `writePresentationText`; Google adapter adds `revisionId` to the field mask and writes one `batchUpdate` (`deleteText ALL` + `insertText` per zone, no insert for empty text) with `writeControl.requiredRevisionId`; `isRevisionMismatch` maps a 400 mentioning the revision to `revision_conflict` (other 400s → `unknown`). Mock returns `unknown`; token-revoked wrapper covers the new method.
+- `findSaveConflicts` (pure) + `saveLivrableToDrive` in `actions/livrable.ts`: up to two read→compare→write cycles; after success `driveText` is set to the text actually written, inside a transaction on the freshly read content.
+- `components/ReimportButton.tsx` replaced by `components/DriveLivrableActions.tsx` (Réimporter + Enregistrer dans Drive, both confirmations, status messages in a `role="status"` region, conflict message with its own Réimporter). The save uses the existing `.button-primary` (navy accent, never purple) — no new button class.
+- Review fixes (pass 1): `planDriveSave` (already-saved zones, conflicts, zones to write) replaces `findSaveConflicts`; blank text boxes kept by the adapter, dropped only at import; local blocks re-read per attempt; guarded `driveText` update; empty `revisionId` refused; `FAILED_PRECONDITION` also treated as a revision mismatch; status/feedback/focus/naming fixes. Extra scratch cases verified: already in Drive, blank zone then re-edit, missing revisionId, reimport during the write, retry with newer local text.
+- Verification: `tsc` clean; fresh-db `npm run build` green. Adapter against stubbed Slides: `revisionId` read; request body = delete/insert per zone in order, no insert for empty text, `requiredRevisionId`, 10 s timeout; revision 400 → `revision_conflict`, other 400 → `unknown`. Action on a real SQLite DB with a scripted provider: nothing modified → `nothing`, no write; save → one write with only modified zones and the read revision, `driveText` updated, an unmodified zone changed in Slides untouched; remote change / deleted zone → `conflict`, no write, blocks unchanged; revision refusal once → retried with the new revision, saved; twice → `conflict`, still modified; quota → error, still modified; text accepted during the write → `driveText` = written text, zone stays modified; non-Drive livrable refused. Browser (fake Google credentials): disabled + hint when disconnected; disabled when nothing modified; enabled once modified; reminder shown, cancel closes it; save with fake credentials → "L'enregistrement dans Drive a échoué. Réessayez.", nothing marked saved; demo mode: no Drive action, no Google wording. Conflict UI wording checked in code (state reachable only with a real deck). Real write needs real Google Cloud credentials.
+
 ## Spec Change Log
 
 ## Review Triage Log
+
+Pass 1 (blind-hunter BH, edge-case-hunter EC, verification-gap VG) — no intent_gap / bad_spec; patches applied directly; tsc, fresh-db build, scratch matrix (extended) and browser scenario re-run green.
+
+| # | Finding | Verdict | Evidence / route |
+|---|---------|---------|------------------|
+| 1 | BH+EC: a write applied by Google but not recorded locally (client timeout, DB failure, two tabs) makes every later save a false conflict | medium | Real. Patch: `planDriveSave` (replaces `findSaveConflicts`) treats a zone whose Slides text already equals the block text as `alreadySaved` — no write, `driveText` caught up (verified: "already in Drive" → saved, 0 writes). |
+| 2 | BH+EC+VG: a zone saved empty is dropped by the next read → permanent false conflict | medium | Real. Patch: the adapter keeps blank text boxes; only the import (`slidesToBlocks`) leaves them out (verified: blank save, then a new edit on that zone saves). |
+| 3 | BH+EC: retry reuses stale local blocks; final update can overwrite a concurrent reimport's `driveText` | medium | Real. Patch: local modified blocks re-read on each attempt (verified: retry writes the newer text with the new revision); `driveText` only updated where it is still the one this save compared against (verified with a reimport during the write). |
+| 4 | BH+EC: missing `revisionId` sent as '' | low | Patch: fail early, nothing written. |
+| 5 | BH+EC: revision-mismatch detection relies on wording | maybe-false | Real Google payload not observable here. Patch hardening: also matches `status: FAILED_PRECONDITION`. Remaining risk deferred with the real-credential test. |
+| 6 | BH: "Enregistré dans Drive." stays after new accepted changes | low | Patch: cleared when unsaved changes reappear. |
+| 7 | EC: `nothing` status gives no feedback | low | Patch: "Aucun changement à enregistrer." |
+| 8 | BH: confirmations don't take focus | low | Patch: `autoFocus` on the confirming button (Escape handling rejected: inline panel, Annuler is next to it). |
+| 9 | BH: `canReimport` now also gates saving; stale JSX comment | low | Patch: renamed `driveConnected`; comment updated. |
+| 10 | BH+EC: stale `ReimportButton` reference, CSS blank lines | low | Patch. |
+| 11 | BH: 403 / 404 / quota all show the same retry message | low | The message is fixed by the frozen spec (EXPERIENCE.md). Rejected. |
+| 12 | EC: duplicate block ids would double-edit a shape | false | Block ids are Slides objectIds, unique within a deck. |
+| 13 | EC: claim "conflict → no batchUpdate" vs revision race | false | The criterion is about content conflicts (verified: 0 writes); in a revision race Google itself rejects the write and nothing is applied. |
+| 14 | BH+VG: no committed tests for conflict detection, revision mapping/retry, `driveText` update | medium (no test evidence) | No test suite by standing decision; all verified by scratch scripts (Implementation Notes). Deferred. |
 
 ## Verification
 

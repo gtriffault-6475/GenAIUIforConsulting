@@ -11,6 +11,9 @@ import { findDrivePresentation } from '@/actions/document-context';
 import { getActiveDriveProvider, type DriveMode } from '@/actions/google-connection';
 import {
   hasUnsavedDriveChanges,
+  isBlockModified,
+  parseLivrableBlocks,
+  planDriveSave,
   reimportKeepsSuggestion,
   slidesToBlocks,
   type LivrableBlock,
@@ -130,7 +133,8 @@ export type LivrableDetail = {
   // reimported, the latter only while Google is connected. `driveMode`
   // lets the editor say why it cannot (and say nothing in demo mode).
   source: 'local' | 'drive';
-  canReimport: boolean;
+  // Story 5.5: also gates "Enregistrer dans Drive".
+  driveConnected: boolean;
   driveMode: DriveMode | null;
 };
 
@@ -177,7 +181,7 @@ export async function getLivrable(
         console.error('getLivrable: could not resolve the drive mode', error);
       }
     }
-    const canReimport = driveMode === 'connected';
+    const driveConnected = driveMode === 'connected';
 
     return {
       ok: true,
@@ -186,7 +190,7 @@ export async function getLivrable(
         title: row.title,
         blocks: content.blocks as LivrableBlock[],
         source: row.source,
-        canReimport,
+        driveConnected,
         driveMode,
       },
     };
@@ -594,7 +598,7 @@ export async function importDrivePresentation(
 // still exists and Drive's text for it did not change, otherwise it is
 // deleted; resolved (accepted/rejected) suggestions stay as history. The
 // confirmation about unsaved accepted changes happens in the page
-// (`components/ReimportButton.tsx`) before this is called. SUGGESTION is
+// (`components/DriveLivrableActions.tsx`) before this is called. SUGGESTION is
 // written here for the same reason as `createLivrableWithSuggestions`:
 // blocks and suggestions must change in one transaction.
 //
@@ -658,6 +662,107 @@ export async function reimportDriveLivrable(
     return { ok: true, data: { needsConfirmation } };
   } catch (error) {
     console.error('reimportDriveLivrable failed', error);
+    return failure;
+  }
+}
+
+// Story 5.5 — Enregistrement dans Drive (AD-13). Read → compare → write:
+// re-reads the deck (fresh `revisionId`); if any modified zone is gone or
+// changed in Slides since its `driveText`, nothing is written
+// (`conflict`). Otherwise one guarded `batchUpdate` rewrites the text of
+// the modified zones only; a revision refusal between the read and the
+// write restarts the cycle once (a second one is a conflict). After
+// success, `driveText` becomes the text that was written — not whatever
+// the block holds by then, so a change accepted during the save stays
+// "modified".
+export type SaveToDriveStatus = 'saved' | 'conflict' | 'nothing';
+
+export async function saveLivrableToDrive(
+  livrableId: string,
+): Promise<ActionResult<{ status: SaveToDriveStatus }>> {
+  const failure = {
+    ok: false as const,
+    error: "L'enregistrement dans Drive a échoué. Réessayez.",
+  };
+  try {
+    const readRow = () => db.select().from(livrable).where(eq(livrable.id, livrableId)).get();
+    const row = readRow();
+    if (!row || row.source !== 'drive' || !row.driveFileId) return failure;
+    if (parseLivrableBlocks(row.content).filter(isBlockModified).length === 0) {
+      return { ok: true, data: { status: 'nothing' } };
+    }
+
+    const { mode, provider } = await getActiveDriveProvider();
+    if (mode !== 'connected' || !provider) return failure;
+
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      // Re-read local blocks on each attempt: they may have changed while
+      // the previous attempt waited on Google.
+      const modified = parseLivrableBlocks(readRow()?.content ?? '').filter(isBlockModified);
+      if (modified.length === 0) return { ok: true, data: { status: 'nothing' } };
+
+      const presentation = await provider.readPresentation(row.driveFileId);
+      if (!presentation.ok) {
+        console.error('saveLivrableToDrive: readPresentation failed', presentation.error);
+        return failure;
+      }
+      if (!presentation.data.revisionId) {
+        console.error('saveLivrableToDrive: no revisionId in the presentation read');
+        return failure;
+      }
+      const remoteTexts = new Map(
+        presentation.data.slides.flatMap((slide) =>
+          slide.textBoxes.map((box) => [box.objectId, box.text] as const),
+        ),
+      );
+      const plan = planDriveSave(modified, remoteTexts);
+      if (plan.conflicts.length > 0) return { ok: true, data: { status: 'conflict' } };
+
+      const edits = plan.toWrite.map((block) => ({ objectId: block.id, text: block.text }));
+      if (edits.length > 0) {
+        const written = await provider.writePresentationText(
+          row.driveFileId,
+          edits,
+          presentation.data.revisionId,
+        );
+        if (!written.ok) {
+          if (written.error === 'revision_conflict') {
+            if (attempt === 2) return { ok: true, data: { status: 'conflict' } };
+            continue;
+          }
+          console.error('saveLivrableToDrive: writePresentationText failed', written.error);
+          return failure;
+        }
+      }
+
+      // `driveText` := the text now in Drive, only for blocks still based
+      // on the `driveText` this save compared against (a reimport running
+      // meanwhile keeps its fresh values).
+      const savedText = new Map(
+        [...plan.toWrite, ...plan.alreadySaved].map((block) => [
+          block.id,
+          { written: block.text, basedOn: block.driveText },
+        ]),
+      );
+      db.transaction((tx) => {
+        const current = tx.select({ content: livrable.content }).from(livrable).where(eq(livrable.id, livrableId)).get();
+        if (!current) return;
+        const blocks = parseLivrableBlocks(current.content).map((block) => {
+          const saved = savedText.get(block.id);
+          return saved && block.driveText === saved.basedOn
+            ? { ...block, driveText: saved.written }
+            : block;
+        });
+        tx.update(livrable)
+          .set({ content: JSON.stringify({ blocks }) })
+          .where(eq(livrable.id, livrableId))
+          .run();
+      });
+      return { ok: true, data: { status: 'saved' } };
+    }
+    return { ok: true, data: { status: 'conflict' } };
+  } catch (error) {
+    console.error('saveLivrableToDrive failed', error);
     return failure;
   }
 }
