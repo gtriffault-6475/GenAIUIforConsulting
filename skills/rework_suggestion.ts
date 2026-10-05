@@ -28,12 +28,14 @@ export async function reworkSuggestionContent({
   instructions,
   loadedSkills,
   contextDocuments,
+  demoModeActive,
 }: {
   blockText: string;
   suggestionText: string;
   instructions: string;
   loadedSkills: LoadedSkillInstructions[];
   contextDocuments: ContextDocument[];
+  demoModeActive: boolean;
 }): Promise<SendToAgentResult> {
   // One synthetic user turn, same shape as `proposeStartingPoint`'s prompt:
   // `sendToAgent` has no separate "instruction" channel beyond the loaded
@@ -51,6 +53,7 @@ export async function reworkSuggestionContent({
   return sendToAgent({
     loadedSkills,
     contextDocuments,
+    demoModeActive,
     history: [{ role: 'user', content: prompt }],
     model: MODELS[0].id,
   });

@@ -259,3 +259,7 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-5-enregistrement-dans-drive.md`
   summary: No committed automated check for Story 5.5 — `planDriveSave` (already saved / conflict / to write), `isRevisionMismatch` against real Google error payloads, the retry-once cycle and the guarded `driveText` update in `saveLivrableToDrive`, and the `batchUpdate` request body.
   evidence: Verification-gap review (pass 1): dropping the "zone gone" conflict or the retry would overwrite a colleague's Slides edits or show a generic error, with tsc and build still green. Verified only by scratch scripts against stubbed APIs. The exact Google payload for a refused `requiredRevisionId` is unverified until a real-credential test; record it then. No test suite by standing decision.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-report-serie-concurrente-epic-5.md`
+  summary: DOCUMENT drive rows of the other origin are now kept indefinitely (with their exported text) — e.g. Google rows stay in the local database after disconnecting or changing account / root folder.
+  evidence: Review of the port of the parallel series' "hide instead of purge" rule. Needed so selections survive a demo round-trip, but nothing ever cleans them up; a cleanup on disconnect or on account/root-folder change would need a product decision (it would lose the selections the rule is meant to keep).
