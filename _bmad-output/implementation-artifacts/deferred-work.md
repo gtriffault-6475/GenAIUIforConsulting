@@ -280,5 +280,5 @@
   evidence: Standing project decision (no automated tests); scratch checks recorded in the spec's Verification section. `formatContextDocuments` and `parseProposeAnchoredSuggestionsInput` are pure and would be the cheapest first tests.
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-6-presentation-tool-use.md`
-  summary: When Google Drive is not connected (or the conversation already has a livrable), nothing tells the agent that a presentation needs a connected Drive; it may still write slides as text or as a text livrable.
+  summary: **Resolved (same day, owner follow-up, `presentationGuidance` in `domain/agent-tools.ts`).** Original: When Google Drive is not connected (or the conversation already has a livrable), nothing tells the agent that a presentation needs a connected Drive; it may still write slides as text or as a text livrable.
   evidence: `selectAgentTools` offers `propose_presentation` only in `connected` mode without livrable, and the presentation rule is injected only then; owner chose only the "force the tool" fix on 2026-10-05.
