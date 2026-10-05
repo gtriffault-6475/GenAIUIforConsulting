@@ -1,11 +1,12 @@
 'use server';
 
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
 import type { ActionResult } from '@/actions/types';
 import { db } from '@/db/client';
 import { document } from '@/db/schema';
-import { driveProvider } from '@/integrations';
+import { resolveDriveMode } from '@/actions/google-connection';
+import { getDriveProvider } from '@/integrations';
 
 // spec-demo-document-reference.md — id dérivé de `projectId` (jamais
 // `crypto.randomUUID()`, jamais un seul id fixe partagé entre projets) :
@@ -57,7 +58,14 @@ export async function listDocuments(
   projectId: string,
 ): Promise<ActionResult<DocumentSummary[]>> {
   try {
-    const driveDocuments = await driveProvider.listDocuments(projectId);
+    // Story 5.1 — the adapter depends on the drive mode (AD-1). Outside
+    // demo mode there is no drive adapter yet (`null`, Story 5.2 adds the
+    // Google one): no sync, and drive rows already in the table (mock
+    // rows from an earlier demo session) are filtered out of the result
+    // below — never deleted, so turning the demo mode back on shows them
+    // again unchanged.
+    const provider = getDriveProvider(await resolveDriveMode());
+    const driveDocuments = provider ? await provider.listDocuments(projectId) : [];
 
     // Mirrors `selectProject` in `actions/project.ts`: sync the (mocked)
     // drive listing into DOCUMENT before reading it back, so this table
@@ -95,7 +103,11 @@ export async function listDocuments(
         folderPath: document.folderPath,
       })
       .from(document)
-      .where(eq(document.projectId, projectId));
+      .where(
+        provider
+          ? eq(document.projectId, projectId)
+          : and(eq(document.projectId, projectId), eq(document.source, 'manual')),
+      );
 
     return { ok: true, data: rows };
   } catch (error) {

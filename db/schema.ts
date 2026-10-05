@@ -311,3 +311,19 @@ export const suggestion = sqliteTable(
       .where(sql`${table.status} = 'pending' and ${table.type} = 'anchored'`),
   ],
 );
+
+// Story 5.1 — Connexion du compte Google (AD-12). Singleton row, same
+// fixed-id pattern as APP_STATE: one Google account per workstation. The
+// refresh token lives only here, server-side — no Server Action or prop
+// ever returns it to the client. `actions/google-connection.ts` is the
+// sole writer (the OAuth callback route goes through it); disconnecting
+// deletes the row.
+export const GOOGLE_CONNECTION_ID = 'singleton';
+
+export const googleConnection = sqliteTable('google_connection', {
+  id: text('id').primaryKey(),
+  refreshToken: text('refresh_token').notNull(),
+  accountEmail: text('account_email').notNull(),
+  // ISO-8601 string, same convention as `message.createdAt`.
+  connectedAt: text('connected_at').notNull(),
+});

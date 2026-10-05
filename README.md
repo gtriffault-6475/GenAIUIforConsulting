@@ -14,11 +14,27 @@ Open [http://localhost:3000](http://localhost:3000). No separate services to sta
 
 Copy `.env.local.example` to `.env.local` and set `ANTHROPIC_API_KEY` before sending a message from the workspace composer (Story 2.5) — without it, the composer still works but every reply fails with a clear error.
 
+## Google Drive (Epic 5)
+
+Outside demo mode the project drive is the consultant's real Google Drive. Until it is set up, the workspace shows no drive files (manually added documents still work) and the top bar offers no Google button. One-time setup, by someone with Google Workspace admin access at OCTO:
+
+1. Create a Google Cloud project inside the OCTO Google Workspace organization.
+2. Enable the **Google Drive API** and the **Google Slides API**.
+3. Configure the OAuth consent screen with user type **Internal** (this exempts the app from Google's verification for the restricted `drive` scope; a Workspace admin may need to approve it).
+4. Create an OAuth client ID of type **Web application** with the authorized redirect URI `http://localhost:3000/api/google/oauth/callback`.
+5. In Google Drive, create a root folder for the app and, inside it, one sub-folder per project named exactly like the project. The app never creates folders. The root folder ID is the last part of its URL.
+6. Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `GOOGLE_DRIVE_ROOT_FOLDER_ID` in `.env.local`, then restart the app.
+
+Then open the app at exactly `http://localhost:3000` (the redirect URI is built from the address in the browser, so `127.0.0.1` or another port is rejected by Google with `redirect_uri_mismatch`), click **Connecter Google Drive** in the top bar and accept Google's consent screen. The connection is stored in the local database (`db/local.db`) and survives restarts; **Se déconnecter** (menu on the account email) removes it and revokes the token at Google. The demo mode never uses Google.
+
+The stored refresh token grants access to the consultant's whole Google Drive and is kept unencrypted in `db/local.db`: never copy or share that file.
+
 ## Stack
 
 - **Next.js 16** (App Router, Turbopack), **React 19**, **TypeScript** (strict)
 - **Drizzle ORM** + `node:sqlite` — local file database, no separate DB service
 - **@anthropic-ai/sdk** (Messages API + tool use) — wired in from Epic 2 onward
+- **google-auth-library** + **@googleapis/drive** — Google OAuth and Drive access (Epic 5)
 
 ## Structure
 

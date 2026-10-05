@@ -14,3 +14,10 @@ export type OctopodDocument = {
 export interface DriveProvider {
   listDocuments(projectId: string): Promise<OctopodDocument[]>;
 }
+
+// Story 5.1 (AD-1) — computed only by `resolveDriveMode`
+// (`actions/google-connection.ts`), strict priority
+// demo > unconfigured > disconnected > connected, then passed to the
+// factory in `integrations/index.ts`. Declared here, next to the port it
+// selects an adapter for, so `integrations/` never imports `actions/`.
+export type DriveMode = 'demo' | 'unconfigured' | 'disconnected' | 'connected';

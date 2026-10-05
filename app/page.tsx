@@ -1,6 +1,7 @@
 import { getActiveConversation, listConversations } from '@/actions/conversation';
 import { getDemoModeActive } from '@/actions/demo';
 import { listDocuments } from '@/actions/document';
+import { getGoogleConnectionStatus, getGoogleOAuthOutcome } from '@/actions/google-connection';
 import { listLivrables } from '@/actions/livrable';
 import { getLastMattermostMessage } from '@/actions/mattermost';
 import { getActiveProject, listProjects } from '@/actions/project';
@@ -11,6 +12,7 @@ import { ConversationHistory } from '@/components/ConversationHistory';
 import { ConversationList } from '@/components/ConversationList';
 import { DemoModeToggle } from '@/components/DemoModeToggle';
 import { DemoResetAvantVente } from '@/components/DemoResetAvantVente';
+import { GoogleConnection } from '@/components/GoogleConnection';
 import { LivrablesPanel } from '@/components/LivrablesPanel';
 import { MattermostPanel } from '@/components/MattermostPanel';
 import { ProactiveSuggestion } from '@/components/ProactiveSuggestion';
@@ -95,6 +97,8 @@ export default async function Home() {
     livrablesResult,
     projectsResult,
     demoModeResult,
+    googleConnectionResult,
+    googleOAuthOutcome,
   ] = await Promise.all([
     listConversations(activeProject.id),
     getActiveConversation(activeProject.id),
@@ -118,6 +122,11 @@ export default async function Home() {
     // `DemoModeToggle`'s initial `active` prop below; there is no shared
     // request-scoped cache to reuse between the two Server Components.
     getDemoModeActive(),
+    // Story 5.1 — drive mode + account email for the top bar's Google
+    // control (never the refresh token), and the one-shot outcome of the
+    // last OAuth round-trip, if any.
+    getGoogleConnectionStatus(),
+    getGoogleOAuthOutcome(),
   ]);
   const conversations = conversationsResult.ok ? conversationsResult.data : null;
   const activeConversationId =
@@ -184,6 +193,10 @@ export default async function Home() {
     <div>
       <header className="top-bar">
         <ProjectSelector projects={projects} activeProject={activeProject} />
+        <GoogleConnection
+          status={googleConnectionResult.ok ? googleConnectionResult.data : null}
+          outcome={googleOAuthOutcome}
+        />
         <DemoModeToggle active={demoModeActive} />
       </header>
       {/* Story 3.2 — Workflow du cas "livrable de mission" (FR-15). A
