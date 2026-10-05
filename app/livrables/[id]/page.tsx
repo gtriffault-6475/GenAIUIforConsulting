@@ -186,12 +186,12 @@ export default async function LivrablePage({
             {/* Story 4.4 (FR-23, UX-DR15) — révision globale, distincte des
                 suggestions ancrées ci-dessus, toujours en bas de la
                 colonne. */}
-            {/* Not on a presentation imported from Drive: the agent may
-                not regenerate it (Story 5.3); Story 5.4 brings anchored
-                suggestions for those instead. */}
-            {result.data.source !== 'drive' && (
-              <GlobalRevisionField livrableId={result.data.id} />
-            )}
+            {/* Story 5.4 — on a presentation imported from Drive, the
+                agent answers with anchored suggestions only (AD-14). */}
+            <GlobalRevisionField
+              livrableId={result.data.id}
+              zoneByZone={result.data.source === 'drive'}
+            />
           </div>
         )}
       </main>

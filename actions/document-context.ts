@@ -28,6 +28,9 @@ export function originFor(mode: DriveMode): 'mock' | 'google' | null {
 // exported at selection and refreshed at resync.
 export async function listAgentContextDocuments(
   projectId: string,
+  // Story 5.4 (AD-11): the Drive file of the conversation's own livrable
+  // is never also sent as a context document.
+  { excludeDriveFileId = null }: { excludeDriveFileId?: string | null } = {},
 ): Promise<ContextDocument[]> {
   try {
     const origin = originFor(await resolveDriveMode());
@@ -39,6 +42,7 @@ export async function listAgentContextDocuments(
       .filter(
         (row) =>
           row.content !== '' &&
+          (excludeDriveFileId === null || row.driveFileId !== excludeDriveFileId) &&
           (row.source === 'manual' ||
             (origin !== null && row.origin === origin && isAgentReadable(row.mimeType))),
       )

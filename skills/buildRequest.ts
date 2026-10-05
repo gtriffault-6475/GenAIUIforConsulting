@@ -233,7 +233,7 @@ export async function sendToAgent({
   loadedSkills,
   history,
   model,
-  tool,
+  tools = [],
   executeTool,
   contextDocuments = [],
 }: {
@@ -241,9 +241,13 @@ export async function sendToAgent({
   contextDocuments?: ContextDocument[];
   history: BuildRequestMessage[];
   model: string;
-  tool?: Anthropic.Tool;
-  executeTool?: (input: unknown) => Promise<ExecuteToolResult>;
+  // Story 5.4 (AD-14) — the tools chosen for this conversation by
+  // `domain/agent-tools.ts`; `executeTool` receives the called tool's name.
+  // Still one `tool_use` handled per response.
+  tools?: Anthropic.Tool[];
+  executeTool?: (name: string, input: unknown) => Promise<ExecuteToolResult>;
 }): Promise<SendToAgentResult> {
+  const offersTool = (name: string) => tools.some((tool) => tool.name === name);
   // Mode démo scripté (spec-mode-demo-scripte.md, activation désormais
   // pilotée depuis l'UI par spec-toggle-mode-demo-ui.md) — interception
   // tout en haut du corps de la fonction, avant toute construction de
@@ -262,7 +266,7 @@ export async function sendToAgent({
       // sont toujours fournis ensemble par cet appelant, jamais l'un sans
       // l'autre. `matchDemoChatEntry` cherche sur le dernier tour `user`
       // de `history` (jamais `turns`, qui n'existe pas dans cette branche).
-      if (tool && executeTool) {
+      if (tools.length > 0 && executeTool) {
         const latestUserTurn = [...history]
           .reverse()
           .find((entry) => entry.role === 'user');
@@ -274,7 +278,10 @@ export async function sendToAgent({
           return resolveDemoReply(DEMO_FALLBACK_REPLY);
         }
 
-        if (entry.toolCall) {
+        // Story 5.4 : l'appel d'outil scripté ne s'exécute que là où cet
+        // outil est proposé (jamais dans la conversation d'un livrable
+        // Drive) ; la réponse scriptée est renvoyée dans tous les cas.
+        if (entry.toolCall && offersTool('propose_livrable_content')) {
           // Même closure que le chemin réel (Design Notes) — vraie
           // transaction DB, AD-2 inchangé : le livrable/les suggestions
           // créés sont de vraies lignes, seul l'appel API est simulé. Le
@@ -285,7 +292,7 @@ export async function sendToAgent({
           // hunter) exactement comme le chemin réel ci-dessous le fait déjà
           // pour son propre échec d'outil, plutôt que d'afficher une
           // réponse canned qui prétendrait à tort qu'un livrable a été créé.
-          const toolResult = await executeTool(entry.toolCall);
+          const toolResult = await executeTool('propose_livrable_content', entry.toolCall);
           if (!toolResult.ok) {
             console.error(
               'sendToAgent (mode démo) : executeTool a échoué sur une entrée scriptée',
@@ -364,7 +371,12 @@ export async function sendToAgent({
       model,
       max_tokens: MAX_TOKENS,
       ...(systemPrompt ? { system: systemPrompt } : {}),
-      ...(tool ? { tools: [tool] } : {}),
+      // One tool call per response, the only case handled below: without
+      // this the model may emit parallel tool_use blocks, and the second
+      // call would then miss a tool_result and be rejected.
+      ...(tools.length > 0
+        ? { tools, tool_choice: { type: 'auto' as const, disable_parallel_tool_use: true } }
+        : {}),
       messages: apiMessages,
     });
 
@@ -376,7 +388,7 @@ export async function sendToAgent({
     // strictly unchanged), or the model simply chose not to use the tool
     // it was offered — both fall back to the original text-extraction
     // path, exactly as before this story.
-    if (response.stop_reason !== 'tool_use' || !tool || !executeTool) {
+    if (response.stop_reason !== 'tool_use' || tools.length === 0 || !executeTool) {
       return extractText(response);
     }
 
@@ -396,7 +408,10 @@ export async function sendToAgent({
     }
 
     // Step 2: run the caller's tool — never touches `db` from here (AD-2).
-    const toolResult = await executeTool(toolUseBlock.input);
+    // A call to a tool that was not offered changes nothing (AD-14).
+    const toolResult: ExecuteToolResult = offersTool(toolUseBlock.name)
+      ? await executeTool(toolUseBlock.name, toolUseBlock.input)
+      : { ok: false, error: `L'outil "${toolUseBlock.name}" n'est pas disponible dans cette conversation.` };
 
     // Step 3: the first call's own `response.content` becomes the next
     // `assistant` turn verbatim, followed by a `user` turn carrying the
@@ -425,7 +440,7 @@ export async function sendToAgent({
       model,
       max_tokens: MAX_TOKENS,
       ...(systemPrompt ? { system: systemPrompt } : {}),
-      tools: [tool],
+      tools,
       tool_choice: { type: 'none' },
       messages: [
         ...apiMessages,

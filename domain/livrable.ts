@@ -73,3 +73,22 @@ export function groupBlocksBySlide<T extends LivrableBlock>(
   }
   return groups;
 }
+
+// Story 5.4 — reads `LIVRABLE.content` without ever throwing: malformed
+// JSON, a missing `blocks` array or entries without a string id/text all
+// yield the valid blocks only (possibly none).
+export function parseLivrableBlocks(content: string): LivrableBlock[] {
+  try {
+    const parsed = JSON.parse(content) as { blocks?: unknown };
+    if (!Array.isArray(parsed?.blocks)) return [];
+    return (parsed.blocks as unknown[]).filter(
+      (block): block is LivrableBlock =>
+        typeof block === 'object' &&
+        block !== null &&
+        typeof (block as LivrableBlock).id === 'string' &&
+        typeof (block as LivrableBlock).text === 'string',
+    );
+  } catch {
+    return [];
+  }
+}

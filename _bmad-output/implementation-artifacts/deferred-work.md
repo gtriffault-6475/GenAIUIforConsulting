@@ -247,3 +247,11 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-3-import-d-une-presentation-comme-livrable.md`
   summary: No committed automated check for Story 5.3 — Slides parsing (`toDrivePresentation`: groups, skipped tables/images/empty boxes, slide numbering, trailing newline), the reimport suggestion rule, unsaved-change detection, `applyAcceptedSuggestion` keeping slide fields, and the duplicate-conversation migration backfill on an existing database.
   evidence: Verification-gap review (pass 1). All verified once by scratch scripts (stubbed Slides API, SQLite integration with a stubbed provider, in-memory migration) — none re-runs. `toDrivePresentation` is already exported for a fixture-based check. No test suite by standing decision.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-4-suggestions-ia-sur-une-presentation-importee.md`
+  summary: In demo mode, a scripted entry carrying a `propose_livrable_content` call sent in a Drive livrable's conversation returns its canned reply ("J'ai préparé… / J'ai mis à jour le document…") although nothing was created or changed.
+  evidence: Review pass 1 (three lenses). The approved spec explicitly chose "return the scripted reply without running the tool"; a neutral fallback reply (e.g. DEMO_FALLBACK_REPLY) would need the owner's agreement. Only reachable with a Drive livrable imported (real Google) before switching to demo mode.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-4-suggestions-ia-sur-une-presentation-importee.md`
+  summary: No committed automated check for Story 5.4 — `selectAgentTools`, `parseProposeAnchoredSuggestionsInput`, `addAnchoredSuggestions` skip rules, `excludeDriveFileId`, the unoffered-tool guard and the demo gating in `sendToAgent`.
+  evidence: Verification-gap review (pass 1): inverting the tool selection or dropping the unoffered-tool guard would let `propose_livrable_content` overwrite a Drive livrable with tsc and build still green. Verified by scratch scripts and browser runs only. No test suite by standing decision; these pure functions are the cheapest first targets.
