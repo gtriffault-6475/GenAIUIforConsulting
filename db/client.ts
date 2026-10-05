@@ -7,7 +7,14 @@ import { drizzle } from 'drizzle-orm/node-sqlite';
 // step (unlike `better-sqlite3`), which is why the architecture spine
 // pins it for round 1. The file lives outside version control (see
 // .gitignore) so each machine gets its own local database.
-const sqlite = new DatabaseSync('./db/local.db');
+//
+// `timeout` (SQLite busy timeout, ms): `next build` evaluates route
+// handler modules (Story 5.1's `app/api/google/oauth/*`) in several
+// worker processes at once to collect their configuration. On a fresh
+// `db/local.db` they all run the migrations below concurrently, and
+// without a busy timeout the losers fail immediately with "database is
+// locked" instead of waiting their turn for the migration lock below.
+const sqlite = new DatabaseSync('./db/local.db', { timeout: 30000 });
 
 // `node:sqlite` disables foreign-key enforcement per connection by
 // default (SQLite's own default). APP_STATE.activeProjectId is declared
@@ -33,17 +40,17 @@ export const db = drizzle({ client: sqlite });
 // so this stays idempotent across restarts.
 const MIGRATIONS_DIR = './db/migrations';
 
-sqlite.exec(
-  'CREATE TABLE IF NOT EXISTS __schema_migrations (name TEXT PRIMARY KEY)',
-);
-
-const alreadyApplied = new Set(
-  (sqlite.prepare('SELECT name FROM __schema_migrations').all() as {
-    name: string;
-  }[]).map((row) => row.name),
-);
-
-const pendingMigrations = existsSync(MIGRATIONS_DIR)
+// Story 5.1: `next build` evaluates the OAuth route handler modules in
+// several worker processes at once, and on a fresh `db/local.db` every
+// one of them used to compute its own pending list and race the others
+// (losers failed with "database is locked", or "table already exists"
+// on a migration whose created objects no longer all exist afterwards,
+// e.g. drizzle's `__new_*` table-rebuild pattern). The whole run now
+// happens under one write lock taken *before* reading which migrations
+// are applied (`BEGIN IMMEDIATE`, with the busy timeout above): a process
+// that waited for the lock sees the winner's bookkeeping and has nothing
+// left to apply.
+const migrationNames = existsSync(MIGRATIONS_DIR)
   ? readdirSync(MIGRATIONS_DIR, { withFileTypes: true })
       .filter(
         (entry) =>
@@ -52,55 +59,35 @@ const pendingMigrations = existsSync(MIGRATIONS_DIR)
       )
       .map((entry) => entry.name)
       .sort()
-      .filter((name) => !alreadyApplied.has(name))
   : [];
 
-for (const name of pendingMigrations) {
-  const sql = readFileSync(
-    join(MIGRATIONS_DIR, name, 'migration.sql'),
-    'utf8',
+sqlite.exec('BEGIN IMMEDIATE');
+try {
+  sqlite.exec(
+    'CREATE TABLE IF NOT EXISTS __schema_migrations (name TEXT PRIMARY KEY)',
   );
-  sqlite.exec('BEGIN');
-  try {
+  const alreadyApplied = new Set(
+    (sqlite.prepare('SELECT name FROM __schema_migrations').all() as {
+      name: string;
+    }[]).map((row) => row.name),
+  );
+
+  for (const name of migrationNames) {
+    if (alreadyApplied.has(name)) continue;
+    const sql = readFileSync(
+      join(MIGRATIONS_DIR, name, 'migration.sql'),
+      'utf8',
+    );
     for (const statement of sql.split('--> statement-breakpoint')) {
       const trimmed = statement.trim();
       if (trimmed) sqlite.exec(trimmed);
     }
     sqlite.prepare('INSERT INTO __schema_migrations (name) VALUES (?)').run(name);
-    sqlite.exec('COMMIT');
-  } catch (error) {
-    sqlite.exec('ROLLBACK');
-    // `pendingMigrations` is computed once, before this loop opens any
-    // transaction — if another OS process (e.g. a bundler's worker pool)
-    // raced this one and already applied the same migration against the
-    // same fresh `db/local.db`, SQLite reports "already exists" rather
-    // than letting both succeed. That is only a non-failure if the whole
-    // migration truly landed elsewhere: `ROLLBACK` just undid every
-    // statement *this* transaction ran, so if a *later* statement is the
-    // one that collided, the earlier statements never re-ran and must be
-    // verified, not assumed, before this migration is marked applied.
-    const message = error instanceof Error ? error.message : String(error);
-    if (/already exists/i.test(message)) {
-      const targets = [
-        ...sql.matchAll(/CREATE\s+(?:TABLE|INDEX|UNIQUE INDEX)\s+`(\w+)`/gi),
-      ].map((match) => match[1]);
-      const allObjectsExist = targets.every(
-        (target) =>
-          sqlite
-            .prepare(
-              "SELECT 1 FROM sqlite_master WHERE name = ? AND type IN ('table', 'index')",
-            )
-            .get(target) !== undefined,
-      );
-      if (allObjectsExist) {
-        sqlite
-          .prepare(
-            'INSERT OR IGNORE INTO __schema_migrations (name) VALUES (?)',
-          )
-          .run(name);
-        continue;
-      }
-    }
-    throw error;
   }
+  sqlite.exec('COMMIT');
+} catch (error) {
+  // SQLite may already have rolled back on its own (e.g. disk full); a
+  // ROLLBACK then would throw and hide the original migration error.
+  if (sqlite.isTransaction) sqlite.exec('ROLLBACK');
+  throw error;
 }

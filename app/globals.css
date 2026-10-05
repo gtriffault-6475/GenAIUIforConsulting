@@ -1192,3 +1192,91 @@ textarea {
 body.demo-mode-active {
   border: 4px solid var(--color-demo-accent);
 }
+
+/* Story 5.1 — `GoogleConnection.tsx` (top bar, right of the project
+   selector). EXPERIENCE.md: a neutral button — bordered like
+   `.button-toggle` but hovering to the navigation accent, never the demo
+   amber nor the AI purple. Connected: the account email as a quiet
+   trigger (same treatment as `.project-selector-trigger`) opening a
+   one-item menu. */
+.google-connection {
+  position: relative;
+}
+
+.google-connection-connect {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-body);
+  font-size: var(--text-body-strong-size);
+  font-weight: var(--text-body-strong-weight);
+  color: var(--color-text-secondary);
+  text-decoration: none;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  padding: var(--space-1) var(--space-4);
+}
+
+.google-connection-connect:hover,
+.google-connection-connect:focus-visible {
+  border-color: var(--color-accent);
+  color: var(--color-text-primary);
+}
+
+.google-connection-trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+  cursor: pointer;
+}
+
+.google-connection-trigger:hover,
+.google-connection-trigger:focus-visible {
+  background: var(--color-selected-tint);
+  color: var(--color-text-primary);
+}
+
+.google-connection-menu {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  left: 0;
+  z-index: 10;
+  min-width: 200px;
+  padding: var(--space-2);
+  box-shadow: var(--elevation-dropdown);
+}
+
+.google-connection-message {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  left: 0;
+  z-index: 10;
+  width: max-content;
+  max-width: 320px;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--elevation-dropdown);
+}
+
+.google-connection-menu .google-connection-message {
+  position: static;
+  box-shadow: none;
+  border: none;
+  padding: var(--space-2) 0 0;
+}
+
+.google-connection-dismiss {
+  color: inherit;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0 var(--space-1);
+}

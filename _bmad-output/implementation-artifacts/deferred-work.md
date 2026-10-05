@@ -231,3 +231,7 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-rendu-markdown-conversation.md`
   summary: No automated render test pins the markdown security invariants (raw HTML shown as text, no `<img>`, unsafe URL schemes neutralised, links `rel="noopener noreferrer"`) or the user-plain / assistant-markdown split in `ConversationHistory`.
   evidence: Flagged by the blind-hunter and verification-gap review lenses. The repo has no test runner; adding `rehype-raw`, a permissive `urlTransform` or dropping the `img`/`a` overrides later would pass `tsc` and `next build` silently. A `renderToStaticMarkup(<MessageContent … />)` test is the natural first case once a runner exists.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-1-connexion-du-compte-google.md`
+  summary: No automated check covers Story 5.1's security- and mode-sensitive behaviors (resolveDriveMode priority, OAuth state rejection, demo mode never calling Google, refresh token absent from the RSC payload, listDocuments hiding drive rows outside demo, db/client.ts migration lock on a fresh database with parallel build workers).
+  evidence: Verification-gap review (pass 1) — each can regress while tsc and npm run build still pass; verified only by a one-off Playwright script. No test suite by standing decision; revisit if targeted tests are allowed (OAuth state check first), or add "fresh db/local.db + npm run build" to future verification steps.
