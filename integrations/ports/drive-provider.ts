@@ -1,18 +1,45 @@
 // AD-1 (Ports & Adapters) — `actions/` and `domain/` reach a project's
-// drive documents only through this interface, never through a concrete
-// adapter. Round 1 wires `integrations/mock/drive-provider.ts` behind it
-// at the single injection point, `integrations/index.ts`. Mirrors
-// `integrations/ports/project-provider.ts` exactly.
+// drive only through this interface, never through a concrete adapter.
+// Two adapters implement it: `integrations/mock/drive-provider.ts` (demo
+// mode only) and `integrations/google/drive-provider.ts` (connected mode),
+// chosen by the factory in `integrations/index.ts`, the single wiring
+// point.
+//
+// Story 5.2 replaced Round 1's `listDocuments(projectId)` with
+// `listFiles(projectName)` + `exportText`: the real Drive is organised by
+// folder name (one sub-folder of the root folder per project, named
+// exactly like the project), and a file's text is only read when the
+// consultant selects it as context (AD-11). Story 5.3+ add
+// `readPresentation`, `writePresentationText` and `createPresentation`.
 
-export type OctopodDocument = {
-  id: string;
+export type DriveError =
+  | 'unconfigured'
+  | 'disconnected'
+  | 'folder_missing'
+  | 'folder_duplicate'
+  | 'token_revoked'
+  | 'not_found'
+  | 'revision_conflict'
+  | 'quota'
+  | 'unknown';
+
+// Typed results, never thrown: an adapter converts every Google error into
+// a `DriveError` and only logs the raw detail.
+export type DriveResult<T> = { ok: true; data: T } | { ok: false; error: DriveError };
+
+// A file directly inside the project folder (sub-folders are not listed).
+// `modifiedTime` is an RFC 3339 string, used to re-export a selected
+// file's text only when it changed in Drive.
+export type DriveFile = {
+  fileId: string;
   name: string;
-  folderPath: string | null;
-  content: string;
+  mimeType: string;
+  modifiedTime: string;
 };
 
 export interface DriveProvider {
-  listDocuments(projectId: string): Promise<OctopodDocument[]>;
+  listFiles(projectName: string): Promise<DriveResult<DriveFile[]>>;
+  exportText(fileId: string, mimeType: string): Promise<DriveResult<string>>;
 }
 
 // Story 5.1 (AD-1) — computed only by `resolveDriveMode`

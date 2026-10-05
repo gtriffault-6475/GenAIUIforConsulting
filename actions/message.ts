@@ -3,6 +3,7 @@
 import { eq } from 'drizzle-orm';
 
 import type { ActionResult } from '@/actions/types';
+import { listAgentContextDocuments } from '@/actions/document-context';
 import { getDemoModeActive } from '@/actions/demo';
 import { seedDemoReferenceDocument } from '@/actions/document';
 import { insertMessage } from '@/actions/insert-message';
@@ -319,6 +320,8 @@ export async function sendMessage(
 
     const agentResult = await sendToAgent({
       loadedSkills: effectiveLoadedSkills,
+      // Story 5.2 (AD-11): manual documents + selected drive documents.
+      contextDocuments: await listAgentContextDocuments(projectId),
       history: historyRows,
       model,
       tool: PROPOSE_LIVRABLE_CONTENT_TOOL,

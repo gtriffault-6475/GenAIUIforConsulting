@@ -1,4 +1,8 @@
-import type { LoadedSkillInstructions, SendToAgentResult } from '@/skills/buildRequest';
+import type {
+  ContextDocument,
+  LoadedSkillInstructions,
+  SendToAgentResult,
+} from '@/skills/buildRequest';
 import { sendToAgent } from '@/skills/buildRequest';
 import { MODELS } from '@/skills/models';
 
@@ -18,9 +22,11 @@ import { MODELS } from '@/skills/models';
 export async function proposeStartingPoint({
   stepLabel,
   loadedSkills,
+  contextDocuments,
 }: {
   stepLabel: string;
   loadedSkills: LoadedSkillInstructions[];
+  contextDocuments: ContextDocument[];
 }): Promise<SendToAgentResult> {
   // One synthetic user turn — `sendToAgent` has no separate "instruction"
   // channel beyond the loaded skills' own system prompt, so the tone and
@@ -35,6 +41,7 @@ export async function proposeStartingPoint({
 
   return sendToAgent({
     loadedSkills,
+    contextDocuments,
     history: [{ role: 'user', content: prompt }],
     model: MODELS[0].id,
   });

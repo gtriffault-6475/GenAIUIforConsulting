@@ -9,7 +9,8 @@ import { getDemoModeActive } from '@/actions/demo';
 import type { ActionResult } from '@/actions/types';
 import { db } from '@/db/client';
 import { GOOGLE_CONNECTION_ID, googleConnection } from '@/db/schema';
-import type { DriveMode } from '@/integrations/ports/drive-provider';
+import { getDriveProvider } from '@/integrations';
+import type { DriveMode, DriveProvider } from '@/integrations/ports/drive-provider';
 import {
   buildAuthUrl,
   exchangeCode,
@@ -73,6 +74,54 @@ export async function resolveDriveMode(): Promise<DriveMode> {
   if (demoModeResult.ok && demoModeResult.data) return 'demo';
   if (!readGoogleConfig()) return 'unconfigured';
   return readConnectionRow() ? 'connected' : 'disconnected';
+}
+
+// Story 5.2 — the drive adapter for the current mode, with the Google
+// credentials wired in server-side so they never leave this file (AD-12).
+// Only meant for server-side callers (`actions/document.ts`): returning a
+// provider object to a browser fails serialization, so nothing leaks even
+// if a client invoked it.
+export async function getActiveDriveProvider(): Promise<{
+  mode: DriveMode;
+  provider: DriveProvider | null;
+}> {
+  const mode = await resolveDriveMode();
+  if (mode !== 'connected') return { mode, provider: getDriveProvider(mode) };
+
+  const config = readGoogleConfig();
+  const row = readConnectionRow();
+  if (!config || !row) return { mode: 'disconnected', provider: null };
+  const provider = getDriveProvider(mode, {
+    clientId: config.clientId,
+    clientSecret: config.clientSecret,
+    rootFolderId: config.rootFolderId,
+    refreshToken: row.refreshToken,
+  });
+  return { mode, provider: provider && forgetConnectionOnRevokedToken(provider) };
+}
+
+// Story 5.2 (AD-1) — when Google refuses the stored refresh token
+// (`token_revoked`), forget the connection so the app falls back to
+// `disconnected` and offers to reconnect (no revoke call: the token is
+// already invalid). Done here, by wrapping the provider, so this file stays
+// the only writer of GOOGLE_CONNECTION and no client-callable action can
+// delete the connection on its own.
+function forgetConnectionOnRevokedToken(provider: DriveProvider): DriveProvider {
+  const forgetIfRevoked = <T extends { ok: boolean; error?: string }>(result: T): T => {
+    if (!result.ok && result.error === 'token_revoked') {
+      try {
+        db.delete(googleConnection).where(eq(googleConnection.id, GOOGLE_CONNECTION_ID)).run();
+      } catch (error) {
+        console.error('forgetConnectionOnRevokedToken failed', error);
+      }
+    }
+    return result;
+  };
+  return {
+    listFiles: async (projectName) => forgetIfRevoked(await provider.listFiles(projectName)),
+    exportText: async (fileId, mimeType) =>
+      forgetIfRevoked(await provider.exportText(fileId, mimeType)),
+  };
 }
 
 export async function getGoogleConnectionStatus(): Promise<

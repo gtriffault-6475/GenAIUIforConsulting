@@ -1,6 +1,6 @@
 import { getActiveConversation, listConversations } from '@/actions/conversation';
 import { getDemoModeActive } from '@/actions/demo';
-import { listDocuments } from '@/actions/document';
+import { getContextPanel } from '@/actions/document';
 import { getGoogleConnectionStatus, getGoogleOAuthOutcome } from '@/actions/google-connection';
 import { listLivrables } from '@/actions/livrable';
 import { getLastMattermostMessage } from '@/actions/mattermost';
@@ -102,7 +102,7 @@ export default async function Home() {
   ] = await Promise.all([
     listConversations(activeProject.id),
     getActiveConversation(activeProject.id),
-    listDocuments(activeProject.id),
+    getContextPanel(activeProject.id),
     // Read straight from the provider on every render (via the action),
     // never synced into a table first — unlike documents, this preview
     // is never reused elsewhere as context, so there's no other reader
@@ -133,7 +133,7 @@ export default async function Home() {
     activeConversationResult.ok && activeConversationResult.data
       ? activeConversationResult.data.conversation.id
       : null;
-  const documents = documentsResult.ok ? documentsResult.data : null;
+  const contextPanel = documentsResult.ok ? documentsResult.data : null;
   const skills = skillsResult.ok ? skillsResult.data : null;
   const livrables = livrablesResult.ok ? livrablesResult.data : null;
   const projects = projectsResult.ok ? projectsResult.data : null;
@@ -260,7 +260,7 @@ export default async function Home() {
             passed `activeConversationResult` (or `.data.messages`); any
             future panel added to this right sidebar must do the same. */}
         <aside className="workspace-sidebar-right">
-          <ContextPanel projectId={activeProject.id} documents={documents} />
+          <ContextPanel projectId={activeProject.id} data={contextPanel} />
           <LivrablesPanel livrables={livrables} />
           <MattermostPanel result={mattermostResult} />
         </aside>

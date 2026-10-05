@@ -67,18 +67,44 @@ export const appState = sqliteTable('app_state', {
 // (mocked) drive — `source: 'drive'`, this story's only concern — or
 // added manually outside the drive (`source: 'manual'`, Story 1.4).
 // `folderPath` is nullable and denormalized (per the architecture spine's
-// structural seed): the mock has no real folder tree, just a flat
-// string used to group documents in the Contexte panel.
-export const document = sqliteTable('document', {
-  id: text('id').primaryKey(),
-  projectId: text('project_id')
-    .notNull()
-    .references(() => project.id),
-  name: text('name').notNull(),
-  source: text('source', { enum: ['drive', 'manual'] }).notNull(),
-  folderPath: text('folder_path'),
-  content: text('content').notNull(),
-});
+// structural seed): a free label used to group manual documents in the
+// Contexte panel; always `null` for drive rows since Story 5.2 (only files
+// directly in the project folder are listed).
+//
+// Story 5.2 — a `drive` row now mirrors one file of the project's Drive
+// folder: `id` is a local UUID, `driveFileId` the provider's file id
+// (unique per project), `origin` which adapter produced it (`mock` in demo
+// mode, `google` when connected — rows of the other origin are purged at
+// resync, AD-1), `mimeType`/`modifiedTime` as listed by Drive. `content`
+// stays empty until the consultant selects the file (`usedAsContext`),
+// then holds its exported text. `usedAsContext` is the consultant's choice
+// for drive rows — never changed by a resync — and always true for manual
+// rows (FR-4: a manually added document is always sent to the agent).
+export const document = sqliteTable(
+  'document',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => project.id),
+    name: text('name').notNull(),
+    source: text('source', { enum: ['drive', 'manual'] }).notNull(),
+    folderPath: text('folder_path'),
+    content: text('content').notNull(),
+    driveFileId: text('drive_file_id'),
+    mimeType: text('mime_type'),
+    origin: text('origin', { enum: ['mock', 'google'] }),
+    modifiedTime: text('modified_time'),
+    usedAsContext: integer('used_as_context', { mode: 'boolean' })
+      .notNull()
+      .default(false),
+  },
+  (table) => [
+    uniqueIndex('document_project_id_drive_file_id_unique')
+      .on(table.projectId, table.driveFileId)
+      .where(sql`${table.driveFileId} is not null`),
+  ],
+);
 
 // A conversation thread on a project (Story 2.1 — Conversations multiples
 // et sélection active). No OCTO-side provider produces these (AD-1

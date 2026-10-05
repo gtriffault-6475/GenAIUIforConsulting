@@ -1,4 +1,8 @@
-import type { LoadedSkillInstructions, SendToAgentResult } from '@/skills/buildRequest';
+import type {
+  ContextDocument,
+  LoadedSkillInstructions,
+  SendToAgentResult,
+} from '@/skills/buildRequest';
 import { sendToAgent } from '@/skills/buildRequest';
 import { MODELS } from '@/skills/models';
 
@@ -23,11 +27,13 @@ export async function reworkSuggestionContent({
   suggestionText,
   instructions,
   loadedSkills,
+  contextDocuments,
 }: {
   blockText: string;
   suggestionText: string;
   instructions: string;
   loadedSkills: LoadedSkillInstructions[];
+  contextDocuments: ContextDocument[];
 }): Promise<SendToAgentResult> {
   // One synthetic user turn, same shape as `proposeStartingPoint`'s prompt:
   // `sendToAgent` has no separate "instruction" channel beyond the loaded
@@ -44,6 +50,7 @@ export async function reworkSuggestionContent({
 
   return sendToAgent({
     loadedSkills,
+    contextDocuments,
     history: [{ role: 'user', content: prompt }],
     model: MODELS[0].id,
   });

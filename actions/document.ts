@@ -2,11 +2,13 @@
 
 import { and, eq } from 'drizzle-orm';
 
+import { getActiveDriveProvider } from '@/actions/google-connection';
 import type { ActionResult } from '@/actions/types';
 import { db } from '@/db/client';
-import { document } from '@/db/schema';
-import { resolveDriveMode } from '@/actions/google-connection';
-import { getDriveProvider } from '@/integrations';
+import { document, project } from '@/db/schema';
+import { isAgentReadable } from '@/domain/document';
+import type { DriveError } from '@/integrations/ports/drive-provider';
+import { originFor } from '@/actions/document-context';
 
 // spec-demo-document-reference.md — id dérivé de `projectId` (jamais
 // `crypto.randomUUID()`, jamais un seul id fixe partagé entre projets) :
@@ -43,86 +45,285 @@ export async function resolveDemoReferenceDocumentId(
 
 // AD-2 — this is the only file allowed to read or write DOCUMENT.
 // Components never touch `db/` or `integrations/` directly; they call
-// this Server Action. Story 1.3 only ever inserts/reads rows with
-// `source: 'drive'` — Story 1.4 adds `source: 'manual'` rows through this
-// same file, alongside these.
+// these Server Actions.
 
+// What the Contexte panel needs about a document — never its `content`
+// (Story 5.2: no document text in any client payload).
 export type DocumentSummary = {
   id: string;
   name: string;
   source: 'drive' | 'manual';
   folderPath: string | null;
+  mimeType: string | null;
+  readable: boolean;
+  usedAsContext: boolean;
 };
 
-export async function listDocuments(
-  projectId: string,
-): Promise<ActionResult<DocumentSummary[]>> {
-  try {
-    // Story 5.1 — the adapter depends on the drive mode (AD-1). Outside
-    // demo mode there is no drive adapter yet (`null`, Story 5.2 adds the
-    // Google one): no sync, and drive rows already in the table (mock
-    // rows from an earlier demo session) are filtered out of the result
-    // below — never deleted, so turning the demo mode back on shows them
-    // again unchanged.
-    const provider = getDriveProvider(await resolveDriveMode());
-    const driveDocuments = provider ? await provider.listDocuments(projectId) : [];
+// Why no drive files are listed, when that is the case. Mirrors the
+// EXPERIENCE.md states; `error` covers quota/network/unknown Google errors.
+export type DriveListingState =
+  | 'ok'
+  | 'unconfigured'
+  | 'disconnected'
+  | 'folder_missing'
+  | 'folder_duplicate'
+  | 'error';
 
-    // Mirrors `selectProject` in `actions/project.ts`: sync the (mocked)
-    // drive listing into DOCUMENT before reading it back, so this table
-    // — not the provider — is the single read path the Contexte panel
-    // depends on, exactly as it will be once Story 1.4 starts inserting
-    // `source: 'manual'` rows into the same table.
-    db.transaction((tx) => {
-      for (const doc of driveDocuments) {
+export type ContextPanelData = {
+  projectName: string;
+  drive: { state: DriveListingState; files: DocumentSummary[] };
+  manual: DocumentSummary[];
+};
+
+type DocumentRow = typeof document.$inferSelect;
+
+function toSummary(row: DocumentRow): DocumentSummary {
+  return {
+    id: row.id,
+    name: row.name,
+    source: row.source,
+    folderPath: row.folderPath,
+    mimeType: row.mimeType,
+    readable: row.source === 'manual' || isAgentReadable(row.mimeType),
+    usedAsContext: row.usedAsContext,
+  };
+}
+
+function listingStateFor(error: DriveError): DriveListingState {
+  if (error === 'folder_missing' || error === 'folder_duplicate') return error;
+  if (error === 'token_revoked' || error === 'disconnected') return 'disconnected';
+  if (error === 'unconfigured') return 'unconfigured';
+  return 'error';
+}
+
+// Story 5.2 (AD-1) — the single resync of a project's Drive folder into
+// DOCUMENT, shared by the Contexte panel today and the Livrables panel
+// from Story 5.3 (sync-then-read). With a provider (demo → mock,
+// connected → Google): upserts every listed file keyed by
+// `(projectId, driveFileId)` (name, type, modified date — never
+// `usedAsContext`), deletes rows of this origin whose file left the
+// folder, purges drive rows of the other origin, and re-exports the text
+// of selected readable files whose Drive modified date changed. Without a
+// provider (`unconfigured`/`disconnected`) nothing is written and no
+// drive row is shown. `token_revoked` forgets the Google connection.
+async function syncDriveFolder(
+  projectId: string,
+  projectName: string,
+): Promise<{ state: DriveListingState; origin: 'mock' | 'google' | null }> {
+  const { mode, provider } = await getActiveDriveProvider();
+  const origin = originFor(mode);
+  if (!provider || !origin) {
+    return { state: mode === 'unconfigured' ? 'unconfigured' : 'disconnected', origin: null };
+  }
+
+  const listing = await provider.listFiles(projectName);
+  if (!listing.ok) {
+    // The project folder itself is gone or ambiguous: its rows (and the
+    // selections on them) go too, so the agent never keeps receiving files
+    // the panel can no longer show. Transient errors (quota, network) keep
+    // them until the next successful listing.
+    if (listing.error === 'folder_missing' || listing.error === 'folder_duplicate') {
+      db.delete(document)
+        .where(
+          and(
+            eq(document.projectId, projectId),
+            eq(document.source, 'drive'),
+            eq(document.origin, origin),
+          ),
+        )
+        .run();
+    }
+    return { state: listingStateFor(listing.error), origin: null };
+  }
+
+  const files = listing.data;
+  const existing = db
+    .select()
+    .from(document)
+    .where(and(eq(document.projectId, projectId), eq(document.source, 'drive')))
+    .all();
+  const existingByFileId = new Map(
+    existing
+      .filter((row) => row.origin === origin && row.driveFileId)
+      .map((row) => [row.driveFileId as string, row]),
+  );
+
+  // Selected files whose text must be (re-)exported: modified in Drive
+  // since the last export, or selected but never exported.
+  const toExport = files.filter((file) => {
+    const row = existingByFileId.get(file.fileId);
+    return (
+      row?.usedAsContext &&
+      isAgentReadable(file.mimeType) &&
+      (row.modifiedTime !== file.modifiedTime || row.content === '')
+    );
+  });
+  const exported = new Map<string, string>();
+  for (const file of toExport) {
+    const result = await provider.exportText(file.fileId, file.mimeType);
+    if (result.ok) {
+      exported.set(file.fileId, result.data);
+    } else {
+      if (result.error === 'token_revoked') {
+        return { state: 'disconnected', origin: null };
+      }
+      console.error('syncDriveFolder: could not refresh a selected file, keeping its previous text', file.fileId, result.error);
+    }
+  }
+
+  const listedIds = new Set(files.map((file) => file.fileId));
+  db.transaction((tx) => {
+    for (const row of existing) {
+      const otherOrigin = row.origin !== origin;
+      const gone = !row.driveFileId || !listedIds.has(row.driveFileId);
+      if (otherOrigin || gone) {
+        tx.delete(document).where(eq(document.id, row.id)).run();
+      }
+    }
+
+    for (const file of files) {
+      const row = existingByFileId.get(file.fileId);
+      const freshText = exported.get(file.fileId);
+      if (row) {
+        tx.update(document)
+          .set({
+            name: file.name,
+            mimeType: file.mimeType,
+            // Only advance the stored date once the text matching it is
+            // stored, so a failed re-export is retried next time.
+            ...(freshText !== undefined ||
+            !row.usedAsContext ||
+            !isAgentReadable(file.mimeType)
+              ? { modifiedTime: file.modifiedTime }
+              : {}),
+            ...(freshText !== undefined ? { content: freshText } : {}),
+            // A selected file that became unreadable (type changed) is
+            // no longer sent: its text is dropped, the choice is kept.
+            ...(!isAgentReadable(file.mimeType) ? { content: '' } : {}),
+          })
+          .where(eq(document.id, row.id))
+          .run();
+      } else {
         tx.insert(document)
           .values({
-            id: doc.id,
+            id: crypto.randomUUID(),
             projectId,
-            name: doc.name,
+            name: file.name,
             source: 'drive',
-            folderPath: doc.folderPath,
-            content: doc.content,
+            folderPath: null,
+            content: '',
+            driveFileId: file.fileId,
+            mimeType: file.mimeType,
+            origin,
+            modifiedTime: file.modifiedTime,
+            usedAsContext: false,
           })
-          .onConflictDoUpdate({
-            target: document.id,
-            set: {
-              name: doc.name,
-              folderPath: doc.folderPath,
-              content: doc.content,
-            },
-          })
+          // Two overlapping resyncs (two tabs, a render and a refresh) may
+          // both insert a newly listed file: the second insert is a no-op.
+          .onConflictDoNothing()
           .run();
       }
-    });
+    }
+  });
 
-    const rows = await db
-      .select({
-        id: document.id,
-        name: document.name,
-        source: document.source,
-        folderPath: document.folderPath,
-      })
+  return { state: 'ok', origin };
+}
+
+function readProjectName(projectId: string): string | null {
+  return (
+    db.select({ name: project.name }).from(project).where(eq(project.id, projectId)).get()
+      ?.name ?? null
+  );
+}
+
+export async function getContextPanel(
+  projectId: string,
+): Promise<ActionResult<ContextPanelData>> {
+  try {
+    const projectName = readProjectName(projectId);
+    if (projectName === null) {
+      return { ok: false, error: 'Impossible de récupérer les documents du projet.' };
+    }
+
+    // A failing resync never hides the manual documents: the drive part
+    // just shows its generic error state.
+    let sync: Awaited<ReturnType<typeof syncDriveFolder>>;
+    try {
+      sync = await syncDriveFolder(projectId, projectName);
+    } catch (error) {
+      console.error('getContextPanel: drive resync failed', error);
+      sync = { state: 'error', origin: null };
+    }
+    const { state, origin } = sync;
+
+    const rows = db
+      .select()
       .from(document)
-      .where(
-        provider
-          ? eq(document.projectId, projectId)
-          : and(eq(document.projectId, projectId), eq(document.source, 'manual')),
-      );
+      .where(eq(document.projectId, projectId))
+      .all();
 
-    return { ok: true, data: rows };
+    const files = origin
+      ? rows
+          .filter((row) => row.source === 'drive' && row.origin === origin)
+          .sort((a, b) => a.name.localeCompare(b.name, 'fr'))
+          .map(toSummary)
+      : [];
+    const manual = rows.filter((row) => row.source === 'manual').map(toSummary);
+
+    return { ok: true, data: { projectName, drive: { state, files }, manual } };
   } catch (error) {
-    console.error('listDocuments failed', error);
-    return {
-      ok: false,
-      error: 'Impossible de récupérer les documents du projet.',
-    };
+    console.error('getContextPanel failed', error);
+    return { ok: false, error: 'Impossible de récupérer les documents du projet.' };
+  }
+}
+
+// Story 5.2 — "Utiliser comme contexte". Checking exports the file's text
+// first (from the adapter of the current mode, and only for a row of that
+// mode's origin); if the export fails, nothing changes. Unchecking clears
+// the choice and the stored text.
+export async function setDocumentUsedAsContext(
+  documentId: string,
+  used: boolean,
+): Promise<ActionResult<void>> {
+  try {
+    const row = db.select().from(document).where(eq(document.id, documentId)).get();
+    if (!row || row.source !== 'drive' || !row.driveFileId) {
+      return { ok: false, error: 'Ce document est introuvable.' };
+    }
+
+    if (!used) {
+      db.update(document)
+        .set({ usedAsContext: false, content: '' })
+        .where(eq(document.id, documentId))
+        .run();
+      return { ok: true, data: undefined };
+    }
+
+    const { mode, provider } = await getActiveDriveProvider();
+    if (!provider || row.origin !== originFor(mode) || !isAgentReadable(row.mimeType)) {
+      return { ok: false, error: 'Impossible de lire ce fichier.' };
+    }
+
+    const result = await provider.exportText(row.driveFileId, row.mimeType as string);
+    if (!result.ok) {
+      return { ok: false, error: 'Impossible de lire ce fichier.' };
+    }
+
+    db.update(document)
+      .set({ usedAsContext: true, content: result.data })
+      .where(eq(document.id, documentId))
+      .run();
+    return { ok: true, data: undefined };
+  } catch (error) {
+    console.error('setDocumentUsedAsContext failed', error);
+    return { ok: false, error: 'Impossible de modifier ce choix. Réessayez.' };
   }
 }
 
 // Story 1.4 — Ajout d'un document hors-drive. A manually-added document is
 // NOT Octopod data (AD-1): it never goes through `DriveProvider` or any
 // `integrations/*` adapter — this Server Action writes the `DOCUMENT` row
-// directly, the same table `listDocuments` reads from, so the new row is
+// directly, the same table `getContextPanel` reads from, so the new row is
 // visible immediately without any resync. The client (`AddDocumentForm`)
 // already blocks empty name/content before ever calling this action; the
 // checks below are a second line of defense so this function never trusts
@@ -160,6 +361,8 @@ export async function addManualDocument({
         source: 'manual',
         folderPath: trimmedFolderPath,
         content: trimmedContent,
+        // FR-4: a manually added document is always sent to the agent.
+        usedAsContext: true,
       })
       .run();
 
@@ -170,6 +373,9 @@ export async function addManualDocument({
         name: trimmedName,
         source: 'manual',
         folderPath: trimmedFolderPath,
+        mimeType: null,
+        readable: true,
+        usedAsContext: true,
       },
     };
   } catch (error) {
@@ -190,8 +396,8 @@ export async function addManualDocument({
 // pour cette même entrée), pas ici. `source: 'manual'` (jamais `'drive'`,
 // AD-1) : ce n'est pas une donnée Octopod, seulement une mise en scène du
 // mode démo -- ne sera jamais retiré ni écrasé par le prochain
-// `listDocuments`/sync drive (qui ne touche que les ids listés par le
-// provider). Idempotente par projet (`demoReferenceDocumentId`
+// `getContextPanel`/resync drive (qui ne touche que les lignes
+// `source: 'drive'`). Idempotente par projet (`demoReferenceDocumentId`
 // ci-dessus) : ne fait rien si ce projet a déjà sa copie, pour qu'un
 // second déclenchement du même tool-call (ex. la révision globale, même
 // point d'accroche) ne duplique jamais le document -- mais chaque projet
@@ -230,6 +436,7 @@ export async function seedDemoReferenceDocument(projectId: string): Promise<void
         projectId,
         name: 'Références clients — secteur Acme Corp.xlsx',
         source: 'manual',
+        usedAsContext: true,
         folderPath: 'Références',
         content:
           "Liste des missions déjà menées par le cabinet pour des acteurs du secteur d'Acme Corp, avec la portée de chaque mission et les résultats obtenus -- base de travail pour la réponse à l'appel d'offres en cours.",
