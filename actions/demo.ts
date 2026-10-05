@@ -1,6 +1,6 @@
 'use server';
 
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 
 import type { ActionResult } from '@/actions/types';
 import { selectStep } from '@/actions/conversation';
@@ -159,10 +159,15 @@ export async function resetAvantVenteWorkflow(
       // that produced them, and only this demo tool needs an opinion on
       // what happens next — a real product feature would need a different
       // answer, but nothing here is that.
+      // Epic 5 retrospective (A1): a livrable imported or created from
+      // Google Slides (`source = 'drive'`) is real consultant work, not demo
+      // state — it keeps its conversation, messages, suggestions and link.
+      // Detaching it would be permanent: the import dedupe (Story 5.3/5.6)
+      // returns the same livrable, never a new conversation.
       const orphanedLivrableRows = tx
         .select({ id: livrable.id })
         .from(livrable)
-        .where(eq(livrable.projectId, projectId))
+        .where(and(eq(livrable.projectId, projectId), eq(livrable.source, 'local')))
         .all();
       const orphanedLivrableIds = orphanedLivrableRows.map((row) => row.id);
 
@@ -172,12 +177,23 @@ export async function resetAvantVenteWorkflow(
           .run();
       }
 
+      const keptConversationIds = new Set(
+        tx
+          .select({ conversationId: livrable.conversationId })
+          .from(livrable)
+          .where(and(eq(livrable.projectId, projectId), eq(livrable.source, 'drive')))
+          .all()
+          .map((row) => row.conversationId)
+          .filter((id): id is string => id !== null),
+      );
       const conversationRows = tx
         .select({ id: conversation.id })
         .from(conversation)
         .where(eq(conversation.projectId, projectId))
         .all();
-      const conversationIds = conversationRows.map((row) => row.id);
+      const conversationIds = conversationRows
+        .map((row) => row.id)
+        .filter((id) => !keptConversationIds.has(id));
 
       // `inArray` with an empty array is skipped rather than issued: an
       // empty-array `IN ()` matches nothing anyway, but only after a real
@@ -215,10 +231,12 @@ export async function resetAvantVenteWorkflow(
       // (Never: LIVRABLE/SUGGESTION stay untouched otherwise).
       tx.update(livrable)
         .set({ conversationId: null })
-        .where(eq(livrable.projectId, projectId))
+        .where(and(eq(livrable.projectId, projectId), eq(livrable.source, 'local')))
         .run();
 
-      tx.delete(conversation).where(eq(conversation.projectId, projectId)).run();
+      if (conversationIds.length > 0) {
+        tx.delete(conversation).where(inArray(conversation.id, conversationIds)).run();
+      }
     });
 
     if (guardError !== null) {

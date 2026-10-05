@@ -274,3 +274,7 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-6-creation-d-une-presentation-depuis-la-conversation.md`
   summary: No automated tests for Story 5.6 (tool selection, proposal parser, Slides request builder, creation action, import refactor, proposal persistence, demo reset with proposals).
   evidence: Standing project decision (no automated tests); scratch checks recorded in the spec's Verification section covered them once.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-epic-5-retro-fixes-avant-fusion.md`
+  summary: No automated tests for the Epic 5 retrospective fixes (reset keeping Drive livrables, proposal replay, demo reference document filter, rework exclusion, partial anchored batches, deck cap, document fence).
+  evidence: Standing project decision (no automated tests); scratch checks recorded in the spec's Verification section. `formatContextDocuments` and `parseProposeAnchoredSuggestionsInput` are pure and would be the cheapest first tests.

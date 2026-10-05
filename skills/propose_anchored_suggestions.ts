@@ -38,9 +38,12 @@ export const PROPOSE_ANCHORED_SUGGESTIONS_TOOL: Anthropic.Tool = {
 
 export type ProposedAnchoredSuggestions = { blockId: string; text: string }[];
 
+// Epic 5 retrospective (A6): an unknown zone id no longer rejects the
+// whole batch — it is passed through and reported zone by zone by
+// `addAnchoredSuggestions` (`skippedMissing`), which re-checks the blocks
+// inside its own transaction anyway.
 export function parseProposeAnchoredSuggestionsInput(
   input: unknown,
-  blockIds: ReadonlySet<string>,
 ): { ok: true; data: ProposedAnchoredSuggestions } | { ok: false; error: string } {
   if (typeof input !== 'object' || input === null) {
     return { ok: false, error: 'Entrée invalide : un objet est attendu.' };
@@ -60,9 +63,6 @@ export function parseProposeAnchoredSuggestionsInput(
         ok: false,
         error: 'Entrée invalide : chaque suggestion doit avoir "blockId" et "text" (chaînes).',
       };
-    }
-    if (!blockIds.has(blockId)) {
-      return { ok: false, error: `Entrée invalide : la zone "${blockId}" n'existe pas dans cette présentation.` };
     }
     if (seen.has(blockId)) {
       return { ok: false, error: `Entrée invalide : la zone "${blockId}" est ciblée plusieurs fois.` };

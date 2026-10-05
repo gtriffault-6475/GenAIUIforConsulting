@@ -74,8 +74,11 @@ function formatContextDocuments(documents: ContextDocument[]): string {
       doc.truncatedBy === null
         ? ''
         : `\n[Document tronqué (${doc.truncatedBy === 'total' ? 'limite totale des documents atteinte' : 'limite par document'}) : seuls les ${doc.text.length} premiers caractères sont fournis.]`;
-    const name = doc.name.replace(/"/g, "'");
-    return `<document name="${name}">\n${doc.text}${note}\n</document>`;
+    const name = doc.name.replace(/"/g, "'").replace(/[<>]/g, '').replace(/\s+/g, ' ');
+    // Epic 5 retrospective (A7): a document's own text must never open or
+    // close a `<document>` fence and pose as another block.
+    const text = doc.text.replace(/<(\/?)(document)/gi, '<\\$1$2');
+    return `<document name="${name}">\n${text}${note}\n</document>`;
   });
   const omittedNote =
     omitted.length > 0

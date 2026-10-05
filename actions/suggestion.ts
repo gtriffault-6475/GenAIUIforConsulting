@@ -422,7 +422,11 @@ export async function reworkSuggestion(
   // returning, never leave it stuck (Always).
   try {
     const [livrableRow] = await db
-      .select({ projectId: livrable.projectId, content: livrable.content })
+      .select({
+        projectId: livrable.projectId,
+        content: livrable.content,
+        driveFileId: livrable.driveFileId,
+      })
       .from(livrable)
       .where(eq(livrable.id, livrableId));
 
@@ -451,7 +455,11 @@ export async function reworkSuggestion(
       instructions: trimmedInstructions,
       loadedSkills: loadedSkillsResult.data,
       // Story 5.2 (AD-11): the project's context documents.
-      contextDocuments: await listAgentContextDocuments(livrableRow.projectId),
+      // Epic 5 retrospective (A4): same AD-11 rule as `sendMessage` — a
+      // Drive livrable's own deck is never also sent as a context document.
+      contextDocuments: await listAgentContextDocuments(livrableRow.projectId, {
+        excludeDriveFileId: livrableRow.driveFileId ?? null,
+      }),
       demoModeActive: await readDemoModeActive(),
     });
 

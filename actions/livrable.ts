@@ -18,6 +18,7 @@ import {
   slidesToBlocks,
   type LivrableBlock,
 } from '@/domain/livrable';
+import { folderDuplicateMessage, folderMissingMessage } from '@/domain/drive-messages';
 import { resolveAnchorPosition } from '@/domain/suggestion';
 import { MODELS } from '@/skills/models';
 import { parseStoredSlides } from '@/skills/propose_presentation';
@@ -687,10 +688,10 @@ async function runPresentationCreation(
       }
       // Retrying cannot help: same folder messages as the panels (Story 5.2).
       if (created.error === 'folder_missing') {
-        return { ok: false, error: `Aucun dossier « ${row.projectName} » dans le Drive racine.` };
+        return { ok: false, error: folderMissingMessage(row.projectName) };
       }
       if (created.error === 'folder_duplicate') {
-        return { ok: false, error: `Plusieurs dossiers portent le nom « ${row.projectName} ».` };
+        return { ok: false, error: folderDuplicateMessage(row.projectName) };
       }
       return failure;
     }
@@ -757,8 +758,7 @@ export async function reimportDriveLivrable(
     const needsConfirmation = db.transaction((tx) => {
       const current = tx.select().from(livrable).where(eq(livrable.id, livrableId)).get();
       if (!current) return false;
-      const parsed = JSON.parse(current.content) as { blocks?: unknown };
-      const oldBlocks = Array.isArray(parsed?.blocks) ? (parsed.blocks as LivrableBlock[]) : [];
+      const oldBlocks = parseLivrableBlocks(current.content);
       if (!confirmed && hasUnsavedDriveChanges(oldBlocks)) return true;
 
       const open = tx

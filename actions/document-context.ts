@@ -24,6 +24,19 @@ export function originFor(mode: DriveMode): 'mock' | 'google' | null {
   return null;
 }
 
+// Epic 5 retrospective (A3): the demo script's staged reference document
+// (`seedDemoReferenceDocument`, `actions/document.ts`) is a manual row,
+// but simulated content: outside demo mode it is neither listed nor sent.
+const DEMO_REFERENCE_DOCUMENT_PREFIX = 'doc-demo-references-';
+
+export function demoReferenceDocumentId(projectId: string): string {
+  return `${DEMO_REFERENCE_DOCUMENT_PREFIX}${projectId}`;
+}
+
+export function isDemoReferenceDocument(documentId: string): boolean {
+  return documentId.startsWith(DEMO_REFERENCE_DOCUMENT_PREFIX);
+}
+
 // The documents every real agent call receives: all manual documents
 // (FR-4) and the selected drive documents of the current mode's origin —
 // never a stale row of the other origin, none at all after disconnecting.
@@ -46,6 +59,7 @@ export async function listAgentContextDocuments(
         (row) =>
           row.content !== '' &&
           (excludeDriveFileId === null || row.driveFileId !== excludeDriveFileId) &&
+          (origin === 'mock' || !isDemoReferenceDocument(row.id)) &&
           (row.source === 'manual' ||
             (origin !== null && row.origin === origin && isAgentReadable(row.mimeType))),
       )
