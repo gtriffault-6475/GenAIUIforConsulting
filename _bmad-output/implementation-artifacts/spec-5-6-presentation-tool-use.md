@@ -49,3 +49,5 @@ context:
 | 15 | (follow-up) prompt wording / comment | low | patch |
 
 Follow-up implementation: pure `presentationGuidance(context)` in `domain/agent-tools.ts`, injected by `sendMessage` as `__presentation_tool_rule`. Verification: tsc clean, fresh-db build OK; table check of the 6 cases; `sendMessage` with a fake Anthropic endpoint — disconnected → "Connecter Google Drive" rule, connected → tool rule, demo → no API call.
+
+Follow-up 2 (owner test, 2026-10-05): asked "sais-tu créer cette présentation sur le drive du projet ?", the agent answered it had no Drive access. The guidance now also covers capability questions, and when the tool is offered it states that the app can create Google Slides decks in the project Drive and must never deny Drive access. `sendMessage` logs (server console) the drive mode, template flag, livrable source and offered tools for each message — no content. Verified: tsc clean, fresh-db build OK.
