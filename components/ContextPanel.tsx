@@ -9,6 +9,7 @@ import {
   type DocumentSummary,
 } from '@/actions/document';
 import { AddDocumentForm } from '@/components/AddDocumentForm';
+import { UploadDocumentForm } from '@/components/UploadDocumentForm';
 import { driveStateMessage } from '@/components/drive-state-message';
 import { useOverlay } from '@/components/OverlayProvider';
 
@@ -96,7 +97,11 @@ export function ContextPanel({
           // carries its own accessible name (`AddDocumentForm`'s
           // `aria-label`), so this wrapper needs none of its own.
           <div className="card add-document-dropdown">
-            <AddDocumentForm projectId={projectId} onAdded={handleAdded} />
+            {data?.uploadToDrive ? (
+              <UploadDocumentForm projectId={projectId} onAdded={handleAdded} />
+            ) : (
+              <AddDocumentForm projectId={projectId} onAdded={handleAdded} />
+            )}
           </div>
         )}
       </div>

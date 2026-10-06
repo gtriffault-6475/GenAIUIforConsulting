@@ -2,7 +2,8 @@
 title: 'Ajouter un document — upload to the project Drive folder, used as context'
 type: 'feature'
 created: '2026-10-06'
-status: 'draft'
+status: 'done'
+baseline_commit: '9b7c7aa83b0e01c32a7dbd71aa2299ae813f8d15'
 route: 'dispatch'
 review_loop_iteration: 0
 context:
@@ -56,25 +57,48 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] port, mock, Google adapter, wrapper, conversion helper.
-- [ ] `uploadDocumentToDrive` action.
-- [ ] form switch and file form; body size limit.
-- [ ] README.
+- [x] port, mock, Google adapter, wrapper, conversion helper.
+- [x] `uploadDocumentToDrive` action.
+- [x] form switch and file form; body size limit.
+- [x] README.
 
 **Acceptance Criteria:**
 - Given `rm -f db/local.db* && npm run build`, then it succeeds; `npx tsc --noEmit` is clean.
 
 ## Implementation Notes
 
+- `domain/document.ts`: `uploadTargetMimeType` (extension → Google type), `uploadSourceMimeType` (browser type, else from the extension), `uploadedFileName`, `UPLOAD_ACCEPT`, `MAX_UPLOAD_BYTES` / `MAX_UPLOAD_LABEL`.
+- Port `uploadFile`; Google adapter `files.create` with `requestBody.mimeType` = Google type (Drive converts), media from the uploaded bytes, 120 s timeout; mock `unknown`; revoked-token wrapper covers it.
+- `actions/document.ts` `uploadDocumentToDrive(projectId, formData)`: validation, upload, DOCUMENT row (origin from the mode), then the Story 5.2 tick (`setDocumentUsedAsContext`) — tick failure returned as `contextError`. Once the file is in Drive, a later failure says so instead of "Réessayez". `getContextPanel` returns `uploadToDrive` (mode `connected`).
+- `components/UploadDocumentForm.tsx` (file form) chosen by `ContextPanel` when `uploadToDrive`; text form unchanged otherwise.
+- `next.config.ts`: `experimental.serverActions.bodySizeLimit: '11mb'` (a first edit had emptied the file by mistake; restored from git before the build that counts).
+
 ## Spec Change Log
 
 ## Review Triage Log
+
+| # | Source | Finding | Verdict | Route / evidence |
+|---|--------|---------|---------|------------------|
+| 1 | blind, edge | Source MIME type empty/generic for .md/.csv/.odt may break conversion | medium | patch — source type from the extension when the browser gives none |
+| 2 | blind, edge | Failure after a successful upload says "Réessayez" → duplicate in Drive | medium | patch — dedicated message naming the file, "rechargez" |
+| 3 | blind | Notice state leaves the file selected → second click re-uploads | low | patch — input cleared |
+| 4 | blind, edge | Empty file told "Choisissez un fichier." | low | patch — "Le fichier est vide." (client and server) |
+| 5 | blind, edge | 30 s timeout short for 10 MB + conversion | medium | patch — 120 s for uploads |
+| 6 | blind, edge | `token_revoked` / `quota` shown as "Réessayez" | low | patch — specific messages |
+| 7 | blind | Origin hard-coded | low | patch — `originFor(mode)` |
+| 8 | blind | Format list in label/README incomplete; "10 Mo" repeated | low | patch — label/README completed, messages from `MAX_UPLOAD_LABEL`, config comment |
+| 9 | blind, edge | Buffer copied; `modifiedTime` '' fallback | low | patch |
+| 10 | edge, gap | A resync whose listing misses the new file deletes the ticked row | maybe-false (medium) | defer — needs a real Drive check of listing consistency right after `files.create` |
+| 11 | blind, edge | Upload form offered when the folder is missing / panel data null | low | rejected — the server answers with the folder message; data-null case is a load failure |
+| 12 | gap | No automated tests | — | defer — project decision; scratch checks below |
 
 ## Verification
 
 **Commands:**
 - `npx tsc --noEmit` -- expected: no errors.
 - `rm -f db/local.db* && npm run build` -- expected: success.
+
+**Results (2026-10-06):** tsc clean; fresh-db build OK. Scratch: extension tables; adapter `files.create` request (parent folder, Google target type, source type, body) and folder errors; action on SQLite with a stubbed provider — upload ticks the row with its exported text, export failure → `contextError` and unticked, unsupported / empty / too big refused before upload, not connected refused, token-revoked and folder messages. Browser (production build, fake credentials): text form when disconnected and in demo, file form when connected, `.zip` refused, a 2 MB `.docx` reaches Drive (fails on the fake credentials, no body-size error). Real Google upload not yet tested.
 
 **Manual checks (if no CLI):**
 - Adapter against a stubbed Drive: create request (parents, Google mime type, media), folder errors.

@@ -136,6 +136,8 @@ function forgetConnectionOnRevokedToken(provider: DriveProvider): DriveProvider 
       forgetIfRevoked(await provider.writePresentationText(fileId, edits, requiredRevisionId)),
     createPresentation: async (projectName, title, slides) =>
       forgetIfRevoked(await provider.createPresentation(projectName, title, slides)),
+    uploadFile: async (projectName, file) =>
+      forgetIfRevoked(await provider.uploadFile(projectName, file)),
   };
 }
 

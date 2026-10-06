@@ -74,7 +74,18 @@ export interface DriveProvider {
     title: string,
     slides: NewSlide[],
   ): Promise<DriveResult<{ fileId: string }>>;
+  // Upload (spec-upload-document-drive) — puts a new file in the project
+  // folder (resolved like `listFiles`, never created), converted by Drive to
+  // `targetMimeType` (a Google format). Never overwrites an existing file.
+  uploadFile(projectName: string, file: UploadedFile): Promise<DriveResult<DriveFile>>;
 }
+
+export type UploadedFile = {
+  name: string;
+  mimeType: string;
+  targetMimeType: string;
+  data: Uint8Array;
+};
 
 // Story 5.6 — one slide of a deck to create: its title and body text.
 export type NewSlide = { title: string; content: string };
