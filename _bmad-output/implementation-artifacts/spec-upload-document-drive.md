@@ -105,3 +105,5 @@ context:
 - Action on SQLite with a stubbed provider: row ticked with exported text; unsupported / too big refused; export failure leaves it unticked.
 - Browser (fake credentials): file form when connected, text form when disconnected and in demo.
 - Real Google: owner uploads a .docx and a PDF.
+
+Owner test with real Google (2026-10-06): upload works and the document is ticked as context.
