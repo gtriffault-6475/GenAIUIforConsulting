@@ -93,4 +93,8 @@ export const mockDriveProvider: DriveProvider = {
   async createPresentation() {
     return { ok: false, error: 'unknown' };
   },
+  // Upload is only offered when connected: never reached.
+  async uploadFile() {
+    return { ok: false, error: 'unknown' };
+  },
 };

@@ -290,3 +290,10 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-epic-5-retro-a10-ownership.md`
   summary: Other 'use server' modules still export server-internal writers callable from the browser (`createLivrableWithSuggestions`, `updateLivrableWithSuggestions` in `actions/livrable.ts`; `seedDemoReferenceDocument`, `resolveDemoReferenceDocumentId` in `actions/document.ts`), and comments in `integrations/index.ts`, `integrations/google/oauth.ts`, `integrations/ports/drive-provider.ts` still name `actions/google-connection.ts`.
   evidence: Retro A10 review; the A10 spec limited the change to PRESENTATION_PROPOSAL and the Google helpers and forbade touching `integrations/`.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-upload-document-drive.md`
+  summary: If a Contexte resync lists the folder before Drive shows a just-uploaded file, the sync deletes the new ticked row; it comes back unticked at the next sync (unverified, medium).
+  evidence: `syncDriveFolder` deletes current-origin rows missing from `listFiles`; settle by uploading with the real Drive and reloading immediately.
+- source_spec: `_bmad-output/implementation-artifacts/spec-upload-document-drive.md`
+  summary: No automated tests for the upload (extension tables, adapter request, action outcomes).
+  evidence: Project decision; scratch checks recorded in the spec.

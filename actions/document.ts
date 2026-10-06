@@ -2,11 +2,19 @@
 
 import { and, eq } from 'drizzle-orm';
 
-import { getActiveDriveProvider } from '@/actions/google-drive';
+import { getActiveDriveProvider, resolveDriveMode } from '@/actions/google-drive';
 import type { ActionResult } from '@/actions/types';
 import { db } from '@/db/client';
 import { document, project } from '@/db/schema';
-import { isAgentReadable } from '@/domain/document';
+import {
+  isAgentReadable,
+  MAX_UPLOAD_BYTES,
+  MAX_UPLOAD_LABEL,
+  uploadedFileName,
+  uploadSourceMimeType,
+  uploadTargetMimeType,
+} from '@/domain/document';
+import { folderDuplicateMessage, folderMissingMessage } from '@/domain/drive-messages';
 import type { DriveError } from '@/integrations/ports/drive-provider';
 import {
   demoReferenceDocumentId,
@@ -77,6 +85,9 @@ export type ContextPanelData = {
   projectName: string;
   drive: { state: DriveListingState; files: DocumentSummary[] };
   manual: DocumentSummary[];
+  // spec-upload-document-drive: Google Drive connected — "Ajouter un
+  // document" uploads a file to the project folder instead of the text form.
+  uploadToDrive: boolean;
 };
 
 type DocumentRow = typeof document.$inferSelect;
@@ -287,7 +298,8 @@ export async function getContextPanel(
       .filter((row) => demoModeActive || !isDemoReferenceDocument(row.id))
       .map(toSummary);
 
-    return { ok: true, data: { projectName, drive: { state, files }, manual } };
+    const uploadToDrive = (await resolveDriveMode()) === 'connected';
+    return { ok: true, data: { projectName, drive: { state, files }, manual, uploadToDrive } };
   } catch (error) {
     console.error('getContextPanel failed', error);
     return { ok: false, error: 'Impossible de récupérer les documents du projet.' };
@@ -334,6 +346,98 @@ export async function setDocumentUsedAsContext(
   } catch (error) {
     console.error('setDocumentUsedAsContext failed', error);
     return { ok: false, error: 'Impossible de modifier ce choix. Réessayez.' };
+  }
+}
+
+// Upload (spec-upload-document-drive) — "Ajouter un document" when Google
+// Drive is connected: the file goes into the project Drive folder,
+// converted to a Google format, then is ticked as context exactly like
+// "Utiliser comme contexte" (Story 5.2). If the upload succeeded but the
+// text cannot be read, the file stays in Drive and in the list, unticked,
+// and `contextError` says so.
+export type UploadDocumentResult = { contextError: string | null };
+
+export async function uploadDocumentToDrive(
+  projectId: string,
+  formData: FormData,
+): Promise<ActionResult<UploadDocumentResult>> {
+  const failure = { ok: false as const, error: "L'envoi du fichier dans Drive a échoué. Réessayez." };
+  let uploadedName: string | null = null;
+  try {
+    const file = formData.get('file');
+    if (!(file instanceof File)) return { ok: false, error: 'Choisissez un fichier.' };
+    if (file.size === 0) return { ok: false, error: 'Le fichier est vide.' };
+    if (file.size > MAX_UPLOAD_BYTES) {
+      return { ok: false, error: `Le fichier dépasse ${MAX_UPLOAD_LABEL}.` };
+    }
+    const targetMimeType = uploadTargetMimeType(file.name);
+    if (!targetMimeType) return { ok: false, error: "Ce format n'est pas pris en charge." };
+
+    const projectName = readProjectName(projectId);
+    if (projectName === null) return failure;
+    const { mode, provider } = await getActiveDriveProvider();
+    const origin = originFor(mode);
+    if (mode !== 'connected' || !provider || !origin) {
+      return { ok: false, error: 'Connectez Google Drive pour ajouter un fichier.' };
+    }
+
+    const uploaded = await provider.uploadFile(projectName, {
+      name: uploadedFileName(file.name),
+      mimeType: uploadSourceMimeType(file.name, file.type),
+      targetMimeType,
+      data: new Uint8Array(await file.arrayBuffer()),
+    });
+    if (!uploaded.ok) {
+      console.error('uploadDocumentToDrive: uploadFile failed', uploaded.error);
+      if (uploaded.error === 'folder_missing') return { ok: false, error: folderMissingMessage(projectName) };
+      if (uploaded.error === 'folder_duplicate') return { ok: false, error: folderDuplicateMessage(projectName) };
+      if (uploaded.error === 'token_revoked') {
+        return { ok: false, error: 'La connexion à Google Drive a expiré. Reconnectez Google Drive.' };
+      }
+      if (uploaded.error === 'quota') {
+        return { ok: false, error: 'Google Drive refuse temporairement l’envoi (quota). Réessayez plus tard.' };
+      }
+      return failure;
+    }
+
+    // From here the file exists in Drive: a failure must not invite a
+    // retry that would upload it a second time.
+    const driveFile = uploaded.data;
+    uploadedName = driveFile.name;
+    db.insert(document)
+      .values({
+        id: crypto.randomUUID(),
+        projectId,
+        name: driveFile.name,
+        source: 'drive',
+        folderPath: null,
+        content: '',
+        driveFileId: driveFile.fileId,
+        mimeType: driveFile.mimeType,
+        origin,
+        modifiedTime: driveFile.modifiedTime,
+        usedAsContext: false,
+      })
+      .onConflictDoNothing()
+      .run();
+    const row = db
+      .select({ id: document.id })
+      .from(document)
+      .where(and(eq(document.projectId, projectId), eq(document.driveFileId, driveFile.fileId)))
+      .get();
+    if (!row) throw new Error('uploaded document row not found');
+
+    const ticked = await setDocumentUsedAsContext(row.id, true);
+    return { ok: true, data: { contextError: ticked.ok ? null : ticked.error } };
+  } catch (error) {
+    console.error('uploadDocumentToDrive failed', error);
+    if (uploadedName !== null) {
+      return {
+        ok: false,
+        error: `« ${uploadedName} » a bien été ajouté dans Drive, mais l'app n'a pas pu l'enregistrer. Rechargez la page plutôt que de le renvoyer.`,
+      };
+    }
+    return failure;
   }
 }
 

@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { Readable } from 'node:stream';
 
 import { drive, type drive_v3 } from '@googleapis/drive';
 import { slides, type slides_v1 } from '@googleapis/slides';
@@ -38,6 +39,8 @@ const FOLDER_MIME = 'application/vnd.google-apps.folder';
 const REQUEST_TIMEOUT_MS = 10_000;
 // Story 5.6 — copying a template deck and filling it can take longer.
 const CREATE_TIMEOUT_MS = 30_000;
+// Upload of up to 10 MB plus Drive's conversion (PDF text extraction).
+const UPLOAD_TIMEOUT_MS = 120_000;
 
 // Drive query string literal: backslash and single quote must be escaped.
 function quote(value: string): string {
@@ -398,6 +401,43 @@ export function createGoogleDriveProvider(
           return { ok: false, error: 'revision_conflict' };
         }
         return fail('writePresentationText', error);
+      }
+    },
+
+    // Upload (spec-upload-document-drive): one new file in the project
+    // folder, converted by Drive to the Google format asked for. No other
+    // Drive write.
+    async uploadFile(projectName, file) {
+      try {
+        const folder = await resolveProjectFolder(projectName);
+        if (!folder.ok) return folder;
+        const created = await api.files.create(
+          {
+            supportsAllDrives: true,
+            fields: 'id, name, mimeType, modifiedTime',
+            requestBody: { name: file.name, parents: [folder.data], mimeType: file.targetMimeType },
+            media: {
+              mimeType: file.mimeType,
+              body: Readable.from(Buffer.from(file.data.buffer, file.data.byteOffset, file.data.byteLength)),
+            },
+          },
+          { timeout: UPLOAD_TIMEOUT_MS },
+        );
+        const data = created.data;
+        if (!data.id || !data.mimeType) {
+          return fail('uploadFile', new Error('files.create returned no id'));
+        }
+        return {
+          ok: true,
+          data: {
+            fileId: data.id,
+            name: data.name ?? file.name,
+            mimeType: data.mimeType,
+            modifiedTime: data.modifiedTime ?? new Date().toISOString(),
+          },
+        };
+      } catch (error) {
+        return fail('uploadFile', error);
       }
     },
 
