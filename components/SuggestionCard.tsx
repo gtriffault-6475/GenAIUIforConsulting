@@ -10,7 +10,8 @@ import {
 } from '@/actions/suggestion';
 import type { SuggestionSummary } from '@/actions/suggestion';
 import { useOverlay } from '@/components/OverlayProvider';
-import { resolveAnchorPosition } from '@/domain/suggestion';
+import { JumpButton } from '@/components/EditorJump';
+import { suggestionPosition } from '@/domain/suggestion';
 
 // Story 4.3 — Traitement d'une suggestion ancrée (FR-21). Client component:
 // one card per suggestion, replacing `SuggestionsPanel.tsx`'s own
@@ -53,22 +54,21 @@ export function SuggestionCard({
     suggestion.status === 'accepted' || suggestion.status === 'rejected';
 
   // `anchorRef` is a block id, never a position (epic-4-context.md's
-  // Technical Decisions) — resolved to a display position at render time
-  // against the livrable's current blocks. spec-position-figee-suggestions-
-  // resolues: once a suggestion is `accepted`/`rejected`, prefer the
-  // `resolvedPosition` frozen at that transition — it never degrades even
-  // after a global revision regenerates every block id, unlike live
-  // resolution below. Falls back to live resolution (via `anchorRef`) for
-  // `pending`/`revising` suggestions (unchanged behavior), and also for an
-  // already-resolved suggestion whose `resolvedPosition` is still `null`
-  // (resolved before this column existed — no backfill, same degrade-to-
-  // live-then-possibly-bare-`¶` behavior as before this feature).
-  const position =
-    isResolved && suggestion.resolvedPosition !== null
-      ? suggestion.resolvedPosition
-      : suggestion.anchorRef
-        ? resolveAnchorPosition(blocks, suggestion.anchorRef)
-        : null;
+  // Technical Decisions) — resolved to a display position at render time.
+  // `suggestionPosition` (domain/suggestion.ts) prefers the
+  // `resolvedPosition` frozen at accept/reject time
+  // (spec-position-figee-suggestions-resolues) and otherwise resolves the
+  // anchor live against the current blocks.
+  const position = suggestionPosition(blocks, suggestion);
+  // spec-editeur-deux-panneaux.md — the paragraph this card targets, when
+  // it is still in the document: its marker becomes a jump button, and a
+  // `pending`/`revising` card shows its current text (D3).
+  const targetBlock = suggestion.anchorRef
+    ? blocks.find((block) => block.id === suggestion.anchorRef)
+    : undefined;
+  const showBeforeAfter =
+    targetBlock !== undefined &&
+    (suggestion.status === 'pending' || suggestion.status === 'revising');
   const anchorLabel = position !== null ? `¶${position}` : '¶';
 
   function handleAccept() {
@@ -170,6 +170,8 @@ export function SuggestionCard({
 
   return (
     <section
+      id={`suggestion-${suggestion.id}`}
+      tabIndex={-1}
       className="ai-suggestion-card"
       aria-label={`Suggestion ancrée, paragraphe ${anchorLabel}`}
     >
@@ -177,14 +179,48 @@ export function SuggestionCard({
         className="text-body-strong"
         style={{ margin: 0, color: 'var(--color-ai-accent)' }}
       >
-        {anchorLabel}
+        {/* Only when the shown `¶N` is the anchor block's live position:
+            a resolved card's frozen `resolvedPosition` can differ, and the
+            label must name the paragraph the jump lands on. */}
+        {targetBlock && position === blocks.indexOf(targetBlock) + 1 ? (
+          <JumpButton
+            targetId={`block-${targetBlock.id}`}
+            label={`Voir le paragraphe ${anchorLabel}`}
+            className="ai-suggestion-anchor"
+          >
+            {anchorLabel}
+          </JumpButton>
+        ) : (
+          anchorLabel
+        )}
       </p>
-      <p
-        className={isResolved ? 'text-body ai-suggestion-card-resolved-text' : 'text-body'}
-        style={{ margin: 0 }}
-      >
-        {suggestion.text}
-      </p>
+      {showBeforeAfter ? (
+        // spec-editeur-deux-panneaux.md — before/after: the paragraph's
+        // current text struck through, then the proposed text.
+        <div className="ai-suggestion-diff">
+          <p className="text-caption" style={{ margin: 0 }}>
+            Actuel
+          </p>
+          <p className="text-body" style={{ margin: 0 }}>
+            <del className="ai-suggestion-current">
+              {targetBlock.text.replace(/\u000b/g, '\n')}
+            </del>
+          </p>
+          <p className="text-caption" style={{ margin: 0 }}>
+            Proposé
+          </p>
+          <p className="text-body" style={{ margin: 0 }}>
+            <ins className="ai-suggestion-proposed">{suggestion.text}</ins>
+          </p>
+        </div>
+      ) : (
+        <p
+          className={isResolved ? 'text-body ai-suggestion-card-resolved-text' : 'text-body'}
+          style={{ margin: 0 }}
+        >
+          {suggestion.text}
+        </p>
+      )}
 
       {suggestion.status === 'pending' && (
         <div
