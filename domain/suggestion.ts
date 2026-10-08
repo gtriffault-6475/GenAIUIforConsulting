@@ -113,3 +113,27 @@ export function orderSuggestionsByAnchor<
 export function countPending(suggestions: { status: SuggestionStatus }[]): number {
   return suggestions.filter((suggestion) => suggestion.status === 'pending').length;
 }
+
+// spec-moins-de-clics.md (D2) — the suggestions "Tout accepter" applies:
+// `pending`, anchored, and whose paragraph is still in `blocks`, in
+// document order. `revising` ones, global ones and those whose paragraph is
+// gone are left out. One rule for both sides: the panel counts these to
+// show the button, `acceptAllSuggestions` applies these. Returns a new array.
+export function acceptableSuggestions<
+  T extends {
+    anchorRef: string | null;
+    status: SuggestionStatus;
+    resolvedPosition: number | null;
+  },
+>(blocks: { id: string }[], suggestions: T[]): T[] {
+  const blockIds = new Set(blocks.map((block) => block.id));
+  return orderSuggestionsByAnchor(
+    blocks,
+    suggestions.filter(
+      (suggestion) =>
+        suggestion.status === 'pending' &&
+        suggestion.anchorRef !== null &&
+        blockIds.has(suggestion.anchorRef),
+    ),
+  );
+}

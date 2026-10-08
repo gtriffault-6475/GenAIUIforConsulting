@@ -2,7 +2,7 @@
 title: 'Moins de clics — accept all pending suggestions, formatting reminder once per session'
 type: 'feature'
 created: '2026-10-08'
-status: 'ready-for-dev'
+status: 'done'
 baseline_commit: 'ad69713701805b26ddf160bceb487946a3c5b3fb'
 route: 'dispatch'
 review_loop_iteration: 0
@@ -70,10 +70,10 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `acceptableSuggestions` (domain); `acceptAllSuggestions` action.
-- [ ] `AcceptAllSuggestions` component; panel and page wiring.
-- [ ] Reminder once per session in `DriveLivrableActions`.
-- [ ] CSS; EXPERIENCE.md rows.
+- [x] `acceptableSuggestions` (domain); `acceptAllSuggestions` action.
+- [x] `AcceptAllSuggestions` component; panel and page wiring.
+- [x] Reminder once per session in `DriveLivrableActions`.
+- [x] CSS; EXPERIENCE.md rows.
 
 **Acceptance Criteria:**
 - Given `rm -f db/local.db* && npm run build`, then it succeeds; `npx tsc --noEmit` is clean.
@@ -83,6 +83,26 @@ context:
 ## Spec Change Log
 
 ## Review Triage Log
+
+| # | Source | Finding | Verdict | Route / evidence |
+|---|--------|---------|---------|------------------|
+| 1 | blind, edge | Reminder skipped: a fast double click on "Enregistrer dans Drive" starts two saves (second may report a conflict) | medium | patch — synchronous ref guard in `save()` |
+| 2 | blind | "1 restent à traiter" (plural verb in the singular) | low | patch |
+| 3 | blind, edge | Nothing accepted after a race → "0 acceptée." | low | patch — "Aucune suggestion à accepter." |
+| 4 | blind, edge | Confirmation hidden but `confirming` left true when the count drops below 2; reappears by itself later | low | patch — reset when `canAcceptAll` turns false |
+| 5 | blind, edge | `sessionStorage` is per tab, EXPERIENCE.md says per browser session | low | patch — wording "par onglet" (behaviour matches the spec's "closed tab → asked again") |
+| 6 | blind | Outcome line stays until the next "Tout accepter" | low | rejected — fix needs a reset rule; the line is accurate at the time it appears |
+| 7 | blind | Focus not returned to the trigger after cancel / confirm | low | rejected — the trigger usually disappears after a run; cancel leaves focus in the panel |
+| 8 | blind | `role="alertdialog"` on an inline confirmation; two live regions update together | low | rejected — same pattern as the existing Drive confirmations |
+| 9 | blind, gap | `{...content, blocks}` vs `{ blocks }` in `acceptSuggestion` | low | rejected — `content` only holds `blocks` (AD-9); no observable difference |
+| 10 | blind | `remaining` counted in JS rather than SQL | low | rejected — a handful of rows per livrable |
+| 11 | blind | `status = 'pending'` guard on the update is dead inside the synchronous transaction | low | rejected — harmless belt-and-braces |
+| 12 | blind | Confirmation count (acceptable) differs from "N en attente" (all pending) | low | rejected — D2: outcome reports what remains |
+| 13 | edge, gap | Two pending suggestions on one anchor → first text overwritten, count inflated | false | unique index `suggestion_livrable_id_anchor_ref_pending_anchored_unique` forbids it |
+| 14 | edge | Client count ignores `type`, server filters `anchored` | false | global suggestions have `anchorRef` null, already excluded on both sides |
+| 15 | gap | Reminder flag set before the save result | low | rejected — the flag records that the reminder was read, not that the save succeeded |
+| 16 | gap | No automated tests for `acceptableSuggestions`, `acceptAllSuggestions`, the session reminder | — | defer — no test runner (project decision) |
+| 17 | gap | Pre-existing `package.json` / lock changes in the tree | — | rejected — not part of this change, left out of the commit |
 
 ## Verification
 
@@ -94,3 +114,5 @@ context:
 - Scratch: `acceptableSuggestions` (pending only, anchored, anchor present, document order).
 - Action on a scratch SQLite: mixed set → accepted / remaining counts, content written once, `resolvedPosition` frozen, a suggestion made non-pending before the run skipped, a failure mid-run leaves nothing applied.
 - Browser (production build, demo mode and a Drive livrable with stubbed Google): button visibility (≥ 2), confirm / cancel / Échap, outcome, cards and count after refresh; reminder first save only, again after a new session, every time with storage blocked.
+
+**Results (2026-10-08):** tsc clean; fresh-db build OK (scratch copy, the owner's dev server holds `db/local.db`). Scratch: `acceptableSuggestions` (pending, anchored, anchor present, document order). Action on a scratch SQLite: 4 pending + 1 revising + 1 global → 4 accepted, 2 remaining, paragraphs updated, `resolvedPosition` frozen, revising and global untouched; a card accepted just before the run skipped; a failure forced mid-run leaves nothing applied; second run 0 accepted; missing livrable → error. Browser (production build, scratch copy, stubbed Google): button with 4 acceptable, Échap and Annuler cancel, outcome, cards accepted after refresh, button gone, "Enregistrer dans Drive" enabled with the slide marked unsaved; reminder on the first save, skipped on another Drive livrable in the same tab, every time with storage blocked; local livrable works the same. Review patches 1–5 applied after; tsc and build re-run. Demo mode and a real Google save not exercised.

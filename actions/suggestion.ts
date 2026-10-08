@@ -7,7 +7,11 @@ import { listAgentContextDocuments, readDemoModeActive } from '@/actions/documen
 import { listLoadedSkillInstructions } from '@/actions/skill';
 import { db } from '@/db/client';
 import { livrable, suggestion } from '@/db/schema';
-import { applyAcceptedSuggestion, resolveAnchorPosition } from '@/domain/suggestion';
+import {
+  acceptableSuggestions,
+  applyAcceptedSuggestion,
+  resolveAnchorPosition,
+} from '@/domain/suggestion';
 import type { SuggestionStatus } from '@/domain/suggestion';
 import { reworkSuggestionContent } from '@/skills/rework_suggestion';
 
@@ -227,6 +231,96 @@ export async function acceptSuggestion(
   } catch (error) {
     console.error('acceptSuggestion failed', error);
     return { ok: false, error: 'Impossible de traiter cette suggestion.' };
+  }
+}
+
+// spec-moins-de-clics.md — "Tout accepter". One synchronous transaction
+// (same exception to AD-2 as `acceptSuggestion`: LIVRABLE.content is written
+// only together with the SUGGESTION rows it applies). The `pending` rows are
+// read inside the transaction, so a card accepted/rejected/reworked between
+// the consultant's confirmation and this run is simply not there: skipped,
+// counted neither accepted nor remaining, never an error. Which rows apply is
+// `acceptableSuggestions` (domain, D2): the same rule the panel uses to count
+// them. Each `resolvedPosition` is frozen against the blocks as they stand
+// before the run — accepting only replaces a block's text, never adds or
+// removes one, so positions are the same before and after each apply. The
+// content is written once. Any throw rolls the whole transaction back:
+// nothing applied.
+export async function acceptAllSuggestions(
+  livrableId: string,
+): Promise<ActionResult<{ accepted: number; remaining: number }>> {
+  const failure = "Impossible d'accepter les suggestions. Réessayez.";
+  try {
+    let result: ActionResult<{ accepted: number; remaining: number }> | null = null;
+
+    db.transaction((tx) => {
+      const [livrableRow] = tx
+        .select()
+        .from(livrable)
+        .where(eq(livrable.id, livrableId))
+        .all();
+
+      if (!livrableRow) {
+        result = { ok: false, error: 'Le livrable ciblé est introuvable.' };
+        return;
+      }
+
+      const content = JSON.parse(livrableRow.content) as { blocks?: unknown };
+      if (!Array.isArray(content?.blocks)) {
+        console.error('acceptAllSuggestions: malformed content.blocks', livrableRow.id);
+        result = { ok: false, error: failure };
+        return;
+      }
+      const blocks = content.blocks as { id: string; text: string }[];
+
+      const pendingRows = tx
+        .select()
+        .from(suggestion)
+        .where(
+          and(
+            eq(suggestion.livrableId, livrableId),
+            eq(suggestion.type, 'anchored'),
+            eq(suggestion.status, 'pending'),
+          ),
+        )
+        .all();
+
+      const toAccept = acceptableSuggestions(blocks, pendingRows);
+
+      let nextBlocks = blocks;
+      for (const row of toAccept) {
+        // `acceptableSuggestions` keeps only rows whose `anchorRef` is a
+        // block id of `blocks` — never null here.
+        const anchorRef = row.anchorRef as string;
+        const resolvedPosition = resolveAnchorPosition(blocks, anchorRef);
+        nextBlocks = applyAcceptedSuggestion(nextBlocks, anchorRef, row.text);
+        tx.update(suggestion)
+          .set({ status: 'accepted', resolvedPosition })
+          .where(and(eq(suggestion.id, row.id), eq(suggestion.status, 'pending')))
+          .run();
+      }
+
+      if (toAccept.length > 0) {
+        tx.update(livrable)
+          .set({ content: JSON.stringify({ ...content, blocks: nextBlocks }) })
+          .where(eq(livrable.id, livrableRow.id))
+          .run();
+      }
+
+      const remaining = tx
+        .select({ status: suggestion.status })
+        .from(suggestion)
+        .where(eq(suggestion.livrableId, livrableId))
+        .all()
+        .filter((row) => row.status === 'pending' || row.status === 'revising').length;
+
+      result = { ok: true, data: { accepted: toAccept.length, remaining } };
+    });
+
+    return result ?? { ok: false, error: failure };
+  } catch (error) {
+    console.error('acceptAllSuggestions failed', error);
+    return { ok: false, error: failure };
   }
 }
 

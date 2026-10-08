@@ -306,3 +306,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-apercu-diapositives.md`
   summary: No automated tests for `getSlideThumbnail` (cache, generation guard, slide membership, connected-only), the Google adapter's thumbnail mapping, `slideHasUnsavedChanges`, `googleSlidesSlideUrl`.
   evidence: Project decision (no test runner); stubbed-provider and browser checks recorded in the spec.
+- source_spec: `_bmad-output/implementation-artifacts/spec-moins-de-clics.md`
+  summary: No automated tests for `acceptableSuggestions`, `acceptAllSuggestions` (counts, frozen positions, rollback) and the once-per-tab save reminder.
+  evidence: Project decision (no test runner); scratch SQLite and browser checks recorded in the spec.
