@@ -55,3 +55,61 @@ export function applyAcceptedSuggestion<T extends { id: string; text: string }>(
     block.id === anchorRef ? { ...block, text: newText } : block,
   );
 }
+
+// spec-editeur-deux-panneaux.md — the `¶N` a suggestion card shows. Once a
+// suggestion is `accepted`/`rejected`, the `resolvedPosition` frozen at that
+// transition wins (spec-position-figee-suggestions-resolues: it survives a
+// global revision regenerating every block id); otherwise the anchor is
+// resolved live against the current blocks. `null` for a global suggestion
+// (no `anchorRef`) or an anchor no longer in `blocks`.
+export function suggestionPosition(
+  blocks: { id: string }[],
+  suggestion: {
+    anchorRef: string | null;
+    status: SuggestionStatus;
+    resolvedPosition: number | null;
+  },
+): number | null {
+  const isResolved =
+    suggestion.status === 'accepted' || suggestion.status === 'rejected';
+  if (isResolved && suggestion.resolvedPosition !== null) {
+    return suggestion.resolvedPosition;
+  }
+  return suggestion.anchorRef
+    ? resolveAnchorPosition(blocks, suggestion.anchorRef)
+    : null;
+}
+
+// spec-editeur-deux-panneaux.md (D2) — suggestions in document order (by
+// the `¶N` their card shows), suggestions whose paragraph cannot be
+// resolved (global, or anchor gone) last. Stable: equal positions keep
+// their input order. Returns a new array, never sorts `suggestions` in
+// place.
+export function orderSuggestionsByAnchor<
+  T extends {
+    anchorRef: string | null;
+    status: SuggestionStatus;
+    resolvedPosition: number | null;
+  },
+>(blocks: { id: string }[], suggestions: T[]): T[] {
+  return suggestions
+    .map((suggestion, index) => ({
+      suggestion,
+      index,
+      position: suggestionPosition(blocks, suggestion),
+    }))
+    .sort((a, b) => {
+      if (a.position === null && b.position === null) return a.index - b.index;
+      if (a.position === null) return 1;
+      if (b.position === null) return -1;
+      return a.position - b.position || a.index - b.index;
+    })
+    .map((entry) => entry.suggestion);
+}
+
+// spec-editeur-deux-panneaux.md — "N en attente" in the AI panel header:
+// suggestions still awaiting a decision (`pending`). A `revising` one is
+// "en retravail" (EXPERIENCE.md's state names), not counted.
+export function countPending(suggestions: { status: SuggestionStatus }[]): number {
+  return suggestions.filter((suggestion) => suggestion.status === 'pending').length;
+}

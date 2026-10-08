@@ -1511,3 +1511,212 @@ body.demo-mode-active {
 .drive-actions-changed {
   margin-top: var(--space-1);
 }
+
+/* spec-editeur-deux-panneaux.md — the livrable editor on two panes
+   (≥ 1100px): a full-width header (breadcrumb `.top-bar`, then title and
+   Drive actions), then the document (left, own scroll, readable width) and
+   the AI panel (right, fixed width, own scroll for the cards, global
+   revision pinned at its bottom) filling the rest of the viewport height.
+   The page is a flex column so the panes take whatever height the header
+   leaves (the Drive banner can make it taller). */
+/* The app-wide `body { min-width: 1280px }` would force a horizontal
+   scroll on a narrower window and defeat the single-column layout (D4);
+   lifted on the editor page only — the workspace `/` keeps it. */
+body:has(.editor-page) {
+  min-width: 0;
+}
+
+/* ≥ 1100px the body itself is a viewport-high column that never scrolls:
+   the demo banner and the demo border (`body.demo-mode-active`) sit inside
+   it, and `.editor-page` takes the rest — only the two panes scroll. */
+@media (width >= 1100px) {
+  body:has(.editor-page) {
+    height: 100vh;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+}
+
+.editor-page {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.editor-header {
+  flex-shrink: 0;
+  padding: var(--space-4) var(--space-gutter);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.editor-panes {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+}
+
+.editor-document {
+  min-height: 0;
+  overflow-y: auto;
+  /* Containing block for the paragraphs' absolutely positioned `.sr-only`
+     spans: without it they resolve against the viewport, make the whole
+     page scrollable and a jump scrolls the window too. Same on the cards
+     list below. */
+  position: relative;
+  padding: var(--space-gutter);
+}
+
+.editor-document-card {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: var(--space-panel-padding);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.editor-ai-panel {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface);
+  border-left: 1px solid var(--color-border);
+}
+
+.editor-ai-suggestions {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.editor-ai-panel-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-panel-padding);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.editor-ai-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.editor-ai-panel-footer {
+  flex-shrink: 0;
+  padding: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+/* One paragraph with its `¶N` in the left margin. The marker column plus
+   the gap leave room for `.ai-tint-block`'s negative left margin, so the
+   tint never covers the marker. */
+.editor-block {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  column-gap: var(--space-3);
+  align-items: baseline;
+}
+
+.editor-block > p {
+  margin: 0;
+}
+
+/* Keeps `.ai-tint-block`'s negative inline margin (overridden just above),
+   so a tinted paragraph's text stays aligned with the others. */
+.editor-block > p.ai-tint-block {
+  margin: 0 calc(-1 * var(--space-3));
+}
+
+.editor-block-marker {
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Jump links (`components/EditorJump.tsx`): text-only buttons that keep
+   the look of the text they replace. */
+.editor-jump-button {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+}
+
+.editor-jump-button:hover,
+.editor-jump-button:focus-visible {
+  color: var(--color-ai-accent);
+  text-decoration-style: solid;
+}
+
+.ai-suggestion-anchor {
+  color: var(--color-ai-accent);
+}
+
+/* Short highlight on a jump target (paragraph or card), removed after
+   about 2s by `EditorJump.tsx`. An outline, so it never shifts layout; the
+   jump also moves focus, so it is never a colour-only cue. */
+.editor-jump-highlight {
+  outline: 2px solid var(--color-ai-accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .editor-jump-highlight {
+    transition: outline-color 0.2s ease;
+  }
+}
+
+/* Before/after on a `pending`/`revising` card. */
+.ai-suggestion-diff {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.ai-suggestion-current {
+  color: var(--color-text-muted);
+  white-space: pre-line;
+}
+
+.ai-suggestion-proposed {
+  text-decoration: none;
+}
+
+/* D4 — below 1100px the panes stack back into one column (document, then
+   AI panel) and the page scrolls as a whole. */
+@media (width < 1100px) {
+  .editor-panes {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .editor-document,
+  .editor-ai-list {
+    overflow-y: visible;
+  }
+
+  .editor-ai-panel {
+    border-left: none;
+    border-top: 1px solid var(--color-border);
+  }
+}

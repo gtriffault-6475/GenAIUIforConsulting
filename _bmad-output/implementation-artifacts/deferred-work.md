@@ -300,3 +300,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-ouvrir-dans-google-slides.md`
   summary: No automated tests for `driveTextChanged`, `googleSlidesUrl` and `checkDriveChanges` (mode, source, error rules).
   evidence: Project decision (no test runner); scratch checks recorded in the spec. `node --test` on `domain/` would work without new dependencies (Node 24 strips types).
+- source_spec: `_bmad-output/implementation-artifacts/spec-editeur-deux-panneaux.md`
+  summary: No automated tests for `suggestionPosition`, `orderSuggestionsByAnchor`, `countPending`, nor for the jump buttons' DOM-id contract (`block-{id}`, `suggestion-{id}`).
+  evidence: Project decision (no test runner); scratch and browser checks recorded in the spec.

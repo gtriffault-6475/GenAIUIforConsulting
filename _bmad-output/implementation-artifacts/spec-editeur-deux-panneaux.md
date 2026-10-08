@@ -2,7 +2,7 @@
 title: 'Éditeur sur deux panneaux — document and AI panel side by side, linked both ways'
 type: 'feature'
 created: '2026-10-08'
-status: 'ready-for-dev'
+status: 'done'
 baseline_commit: 'c350ff29475c2860712779837055b20802b91a7a'
 route: 'dispatch'
 review_loop_iteration: 0
@@ -71,12 +71,12 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `orderSuggestionsByAnchor`, `countPending` (domain).
-- [ ] `EditorJump` client component.
-- [ ] Page layout, margin markers, block ids.
-- [ ] Panel header, ordering, empty state; card ids, jump button, before/after.
-- [ ] CSS (panes, markers, highlight, narrow layout).
-- [ ] EXPERIENCE.md rows.
+- [x] `orderSuggestionsByAnchor`, `countPending` (domain).
+- [x] `EditorJump` client component.
+- [x] Page layout, margin markers, block ids.
+- [x] Panel header, ordering, empty state; card ids, jump button, before/after.
+- [x] CSS (panes, markers, highlight, narrow layout).
+- [x] EXPERIENCE.md rows.
 
 **Acceptance Criteria:**
 - Given `rm -f db/local.db* && npm run build`, then it succeeds; `npx tsc --noEmit` is clean.
@@ -89,6 +89,30 @@ context:
 
 ## Review Triage Log
 
+| # | Source | Finding | Verdict | Route / evidence |
+|---|--------|---------|---------|------------------|
+| 1 | blind, edge | Demo banner and body border sit outside `.editor-page { height: 100vh }`: window scrolls, a jump moves the window and both panes | medium | patch — body becomes a fixed-height flex column at ≥ 1100px, `.editor-page` flexes |
+| 2 | edge | `.editor-block > p { margin: 0 }` overrides `.ai-tint-block`'s negative margin: tinted text indented | low | patch — negative margin restored for tinted paragraphs |
+| 3 | blind, edge | Resolved card: frozen `¶N` label but jump to the anchor's current position (can differ after reimport) | low | patch — jump only when frozen and live positions match |
+| 4 | blind | Plain `¶N` marker read aloud before every paragraph | low | patch — `aria-hidden` |
+| 5 | blind | `activeAnchorRefs` and `activeSuggestionIdByAnchor` built twice from one filter | low | patch — tint derived from the map |
+| 6 | blind | Breakpoint `max-width: 1099px` leaves fractional widths uncovered | low | patch — `width < 1100px` |
+| 7 | blind | "N en attente" not announced when it changes | low | patch — `role="status"` |
+| 8 | blind | Card order mixes frozen (resolved) and live (pending) positions after a paragraph count change | low | rejected — resolved cards are faded history (D2 keeps them in place); fix needs a new ordering rule |
+| 9 | blind | Revising card shows the old text under "Proposé" | low | rejected — D3 includes `revising`; the card already says "Nouvelle proposition en cours de génération." |
+| 10 | blind | `router.refresh()` can drop the highlight class early | low | rejected — cosmetic, 2s highlight |
+| 11 | blind | "0 en attente" while a card is `revising` | low | rejected — EXPERIENCE.md names `revising` "en retravail", the card says so |
+| 12 | blind | Narrow layout: jumps scroll the window, no way back | low | rejected — D4 only asks that links still work; checked at 1000px |
+| 13 | blind | `100vh` vs `100dvh` on mobile | false | desktop only (EXPERIENCE.md "Responsive & Platform") |
+| 14 | blind | Error / not-found branches inside the flex page | low | rejected — render correctly (checked) |
+| 15 | edge | Pending and revising suggestions on one anchor → nondeterministic marker | false | rework moves the same row `pending` → `revising` (`reworkSuggestion`), never two rows |
+| 16 | edge | `listSuggestions` has no ORDER BY: ties / unresolved cards may reorder between loads | low | rejected — SQLite returns insertion order in practice; ties are rare |
+| 17 | edge | Duplicate block ids → marker / card `¶N` disagree | false | ids are Slides objectIds or generated UUIDs, unique per livrable |
+| 18 | edge | Short viewport with tall header collapses the card list | low | rejected — target width ≥ 1280px desktop |
+| 19 | gap | No automated tests for `suggestionPosition`, `orderSuggestionsByAnchor`, `countPending` | — | defer — no test runner (project decision) |
+| 20 | gap | DOM-id contract between jump buttons and targets checked by hand only | — | defer — no browser harness |
+| 21 | blind, gap | Pre-existing `package.json` / lock changes in the tree | — | rejected — not part of this change, left out of the commit |
+
 ## Verification
 
 **Commands:**
@@ -98,3 +122,5 @@ context:
 **Manual checks:**
 - Scratch: `orderSuggestionsByAnchor` (document order, ties stable, unresolved and global last), `countPending`.
 - Browser (production build, demo mode and a Drive livrable): two panes, independent scroll, markers, both jumps with focus, before/after, accept updates count and paragraph, empty state, narrow layout at 1000px, `prefers-reduced-motion`.
+
+**Results (2026-10-08):** tsc clean; fresh-db build OK (scratch copy, the owner's dev server holds `db/local.db`). Scratch: `orderSuggestionsByAnchor` (document order, stable ties, frozen positions, global and unresolved last, no mutation), `countPending` (revising excluded), `suggestionPosition` — all pass. Browser (production build, scratch copy of the DB, 55-paragraph Drive livrable with test suggestions): two panes, cards ¶3/¶12/¶20/¶40 then global then unresolved, "5 en attente"; card → paragraph centred and focused, paragraph → card focused, other pane and window still; accept updates paragraph, tint, card and count; empty state; local livrable; 1000px single column without horizontal scroll; reduced motion (overridden `matchMedia`) instant. After review patches, demo mode on at 1400×900: page exactly viewport height, jumps leave the window at `scrollY` 0, tinted text aligned with the others.
