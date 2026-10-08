@@ -1396,7 +1396,13 @@ body.demo-mode-active {
   flex-direction: column;
   align-items: flex-end;
   gap: var(--space-1);
-  max-width: 360px;
+  /* Room for three header actions with "Ouvrir dans Google Slides". */
+  max-width: 480px;
+}
+
+/* Right-aligned when the header actions wrap. */
+.drive-actions > .drive-actions-buttons {
+  justify-content: flex-end;
 }
 
 .drive-actions-buttons,
@@ -1449,4 +1455,59 @@ body.demo-mode-active {
 .presentation-proposal-preview {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* Ouvrir dans Google Slides — a link styled as the secondary action
+   (`.button-later` for the editor header), with an external-link icon.
+   Never the primary button nor the AI purple. */
+.open-in-google {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  text-decoration: none;
+}
+
+.open-in-google-icon {
+  flex-shrink: 0;
+}
+
+.open-in-google-inline {
+  display: inline;
+  text-decoration: underline;
+}
+
+.open-in-google-inline .open-in-google-icon {
+  vertical-align: -2px;
+  margin-right: 2px;
+}
+
+/* Livrables panel: card link + icon link side by side (siblings, never
+   an `<a>` inside an `<a>`). */
+.livrables-item {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-1);
+}
+
+.livrables-item-card {
+  flex: 1;
+  min-width: 0;
+}
+
+.open-in-google-compact {
+  justify-content: center;
+  padding: 0 var(--space-2);
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-sm);
+}
+
+.open-in-google-compact:hover,
+.open-in-google-compact:focus-visible {
+  color: var(--color-text-primary);
+  background: var(--color-selected-tint);
+}
+
+/* Editor banner after a return from Slides: same look as the conflict box. */
+.drive-actions-changed {
+  margin-top: var(--space-1);
 }

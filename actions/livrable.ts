@@ -16,6 +16,7 @@ import {
 } from '@/actions/presentation-proposal';
 import { getActiveDriveProvider, type DriveMode } from '@/actions/google-drive';
 import {
+  driveTextChanged,
   hasUnsavedDriveChanges,
   isBlockModified,
   parseLivrableBlocks,
@@ -149,6 +150,8 @@ export type LivrableDetail = {
   // Story 5.5: also gates "Enregistrer dans Drive".
   driveConnected: boolean;
   driveMode: DriveMode | null;
+  // Ouvrir dans Google Slides — the deck behind a Drive livrable.
+  driveFileId: string | null;
 };
 
 // Reads a single LIVRABLE row by id alone, no project filter (Boundaries:
@@ -205,6 +208,7 @@ export async function getLivrable(
         source: row.source,
         driveConnected,
         driveMode,
+        driveFileId: row.driveFileId,
       },
     };
   } catch (error) {
@@ -796,6 +800,39 @@ export async function reimportDriveLivrable(
     return { ok: true, data: { needsConfirmation } };
   } catch (error) {
     console.error('reimportDriveLivrable failed', error);
+    return failure;
+  }
+}
+
+// Ouvrir dans Google Slides (D2, D3) — called by the editor only when the
+// consultant comes back to its tab after opening the deck in Slides. Reads
+// the deck and tells whether the text of the tracked zones changed since
+// the last import or save. Read-only: nothing is written; the consultant
+// decides whether to reimport. Only while `connected` (no read otherwise).
+// Failures are logged and returned as `ok: false`; the editor stays silent.
+export async function checkDriveChanges(
+  livrableId: string,
+): Promise<ActionResult<{ changed: boolean }>> {
+  const failure = {
+    ok: false as const,
+    error: 'Impossible de vérifier cette présentation.',
+  };
+  try {
+    const row = db.select().from(livrable).where(eq(livrable.id, livrableId)).get();
+    if (!row || row.source !== 'drive' || !row.driveFileId) return failure;
+
+    const { mode, provider } = await getActiveDriveProvider();
+    if (mode !== 'connected' || !provider) return failure;
+
+    const presentation = await provider.readPresentation(row.driveFileId);
+    if (!presentation.ok) {
+      console.error('checkDriveChanges: readPresentation failed', presentation.error);
+      return failure;
+    }
+    const changed = driveTextChanged(parseLivrableBlocks(row.content), presentation.data);
+    return { ok: true, data: { changed } };
+  } catch (error) {
+    console.error('checkDriveChanges failed', error);
     return failure;
   }
 }

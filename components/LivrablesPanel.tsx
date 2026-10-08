@@ -7,6 +7,7 @@ import { useState, useTransition } from 'react';
 import type { DocumentSummary, DriveListingState } from '@/actions/document';
 import { importDrivePresentation, type LivrableSummary } from '@/actions/livrable';
 import { driveStateMessage } from '@/components/drive-state-message';
+import { OpenInGoogleLink } from '@/components/OpenInGoogleLink';
 
 // Story 2.6 — Panneau Livrables; Story 5.3 (EXPERIENCE.md "Panneau
 // Livrables") adds a second group. "En cours": livrables open in the app,
@@ -14,7 +15,9 @@ import { driveStateMessage } from '@/components/drive-state-message';
 // Slides presentations not imported yet — clicking one imports it, then
 // opens the editor. That group is absent in demo mode (`drive === null`)
 // and shows the Contexte panel's message when the Drive cannot be read.
-// A Slides icon marks every Drive-backed item.
+// A Slides icon marks every Drive-backed item. Outside demo mode, a Drive
+// livrable also gets a compact "Ouvrir dans Google Slides" link beside its
+// card — a sibling of the card link, never nested in it.
 export type DriveLivrables = {
   projectName: string;
   state: DriveListingState;
@@ -91,15 +94,18 @@ export function LivrablesPanel({
       ) : (
         <ul className="livrables-list">
           {livrables.map((item) => (
-            <li key={item.id}>
+            <li key={item.id} className="livrables-item">
               <Link
                 href={`/livrables/${item.id}`}
-                className="card skill-card"
+                className="card skill-card livrables-item-card"
                 style={{ textDecoration: 'none' }}
               >
                 {item.source === 'drive' ? <SlidesIcon /> : <DocumentIcon />}
                 <span className="text-body-strong">{item.title}</span>
               </Link>
+              {drive !== null && item.source === 'drive' && item.driveFileId && (
+                <OpenInGoogleLink driveFileId={item.driveFileId} variant="compact" />
+              )}
             </li>
           ))}
         </ul>

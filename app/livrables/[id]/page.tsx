@@ -146,6 +146,7 @@ export default async function LivrablePage({
                 {result.data.source === 'drive' && result.data.driveMode !== 'demo' && (
                   <DriveLivrableActions
                     livrableId={result.data.id}
+                    driveFileId={result.data.driveFileId}
                     connected={result.data.driveConnected}
                     showConnectHint={result.data.driveMode === 'disconnected'}
                     hasUnsavedChanges={hasUnsavedDriveChanges(result.data.blocks)}

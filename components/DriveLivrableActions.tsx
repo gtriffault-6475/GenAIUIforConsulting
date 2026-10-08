@@ -1,9 +1,10 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 
-import { reimportDriveLivrable, saveLivrableToDrive } from '@/actions/livrable';
+import { checkDriveChanges, reimportDriveLivrable, saveLivrableToDrive } from '@/actions/livrable';
+import { OpenInGoogleLink } from '@/components/OpenInGoogleLink';
 
 // Story 5.3 / 5.5 — editor header actions of a livrable imported from
 // Google Slides (EXPERIENCE.md "Enregistrer dans Drive", "Réimporter").
@@ -16,6 +17,12 @@ import { reimportDriveLivrable, saveLivrableToDrive } from '@/actions/livrable';
 // Both disabled outside the `connected` mode, with the connect hint only
 // when connecting would help; the page never renders this in demo mode.
 // Outcomes are announced in text, never by color alone.
+// Ouvrir dans Google Slides: the link is shown in every mode this renders
+// in (D1, opening only needs the browser's Google session). Once it was
+// clicked in this tab, each return to the tab (`visibilitychange`) re-reads
+// the deck while `connected` (D3, never at page open); changed text shows a
+// banner whose "Réimporter" is the header's flow, confirmation included. A
+// failed check shows nothing (logged server-side).
 type Pending = 'save' | 'reimport' | null;
 
 const CONFLICT_MESSAGE =
@@ -23,11 +30,13 @@ const CONFLICT_MESSAGE =
 
 export function DriveLivrableActions({
   livrableId,
+  driveFileId,
   connected,
   showConnectHint,
   hasUnsavedChanges,
 }: {
   livrableId: string;
+  driveFileId: string | null;
   connected: boolean;
   showConnectHint: boolean;
   hasUnsavedChanges: boolean;
@@ -38,6 +47,37 @@ export function DriveLivrableActions({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
+  const [changedInSlides, setChangedInSlides] = useState(false);
+  // Set by a click on "Ouvrir dans Google Slides" in this tab.
+  const openedInSlidesRef = useRef(false);
+  const checkingRef = useRef(false);
+  // Bumped by each check and by a successful reimport/save: a check still
+  // in flight then is stale (computed against the previous content).
+  const checkSeqRef = useRef(0);
+
+  useEffect(() => {
+    if (!connected) return;
+    function onVisibilityChange() {
+      if (document.visibilityState !== 'visible') return;
+      if (!openedInSlidesRef.current || checkingRef.current) return;
+      checkingRef.current = true;
+      // Each return starts hidden: "Ignorer" lasts until the next return.
+      setChangedInSlides(false);
+      const seq = ++checkSeqRef.current;
+      checkDriveChanges(livrableId)
+        .then((result) => {
+          if (result.ok && seq === checkSeqRef.current) setChangedInSlides(result.data.changed);
+        })
+        .catch((callError) => {
+          console.error('DriveLivrableActions: checkDriveChanges call failed', callError);
+        })
+        .finally(() => {
+          checkingRef.current = false;
+        });
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, [connected, livrableId]);
 
   // A later accepted change makes the deck unsaved again: drop a stale
   // "Enregistré dans Drive." next to the re-enabled button.
@@ -61,6 +101,7 @@ export function DriveLivrableActions({
         setStatus('conflict');
         return;
       }
+      checkSeqRef.current += 1;
       setStatus(result.data.status);
       router.refresh();
     });
@@ -82,6 +123,8 @@ export function DriveLivrableActions({
         return;
       }
       setConfirming(null);
+      checkSeqRef.current += 1;
+      setChangedInSlides(false);
       router.refresh();
     });
   }
@@ -91,6 +134,14 @@ export function DriveLivrableActions({
   return (
     <div className="drive-actions">
       <div className="drive-actions-buttons">
+        {driveFileId && (
+          <OpenInGoogleLink
+            driveFileId={driveFileId}
+            onOpen={() => {
+              openedInSlidesRef.current = true;
+            }}
+          />
+        )}
         <button
           type="button"
           className="button-later"
@@ -110,6 +161,27 @@ export function DriveLivrableActions({
         >
           {running === 'save' ? 'Enregistrement…' : 'Enregistrer dans Drive'}
         </button>
+      </div>
+
+      <div role="status" aria-live="polite">
+        {changedInSlides && connected && confirming === null && (
+          <div className="drive-actions-conflict drive-actions-changed">
+            <p className="text-caption">Cette présentation a été modifiée dans Google Slides.</p>
+            <div className="drive-actions-confirm-buttons">
+              <button type="button" className="button-later" disabled={isPending} onClick={requestReimport}>
+                Réimporter
+              </button>
+              <button
+                type="button"
+                className="button-later"
+                disabled={isPending}
+                onClick={() => setChangedInSlides(false)}
+              >
+                Ignorer
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {!connected && showConnectHint && (

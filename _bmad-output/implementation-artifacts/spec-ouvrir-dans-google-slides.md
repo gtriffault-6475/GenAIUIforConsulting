@@ -2,7 +2,7 @@
 title: 'Ouvrir dans Google Slides — open a Drive livrable in Google, detect edits made there'
 type: 'feature'
 created: '2026-10-08'
-status: 'ready-for-dev'
+status: 'done'
 baseline_commit: 'b1f156370271c6ac57d2907a43ed402594620c51'
 route: 'dispatch'
 review_loop_iteration: 0
@@ -68,10 +68,10 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `googleSlidesUrl`, `driveTextChanged` (domain).
-- [ ] `driveFileId` in `LivrableDetail` and `PresentationProposalSummary`; `checkDriveChanges` action.
-- [ ] `OpenInGoogleLink`; editor header, panel, proposal card.
-- [ ] Return detection and banner in `DriveLivrableActions`.
+- [x] `googleSlidesUrl`, `driveTextChanged` (domain).
+- [x] `driveFileId` in `LivrableDetail` and `PresentationProposalSummary`; `checkDriveChanges` action.
+- [x] `OpenInGoogleLink`; editor header, panel, proposal card.
+- [x] Return detection and banner in `DriveLivrableActions`.
 
 **Acceptance Criteria:**
 - Given `rm -f db/local.db* && npm run build`, then it succeeds; `npx tsc --noEmit` is clean.
@@ -82,6 +82,23 @@ context:
 ## Spec Change Log
 
 ## Review Triage Log
+
+| # | Source | Finding | Verdict | Route / evidence |
+|---|--------|---------|---------|------------------|
+| 1 | blind, edge | A check in flight when a reimport succeeds re-shows the banner with a pre-reimport result | medium | patch — sequence ref, bumped by successful reimport/save |
+| 2 | blind, edge | Middle-click opens Slides without `onClick`, detection never armed | medium | patch — `onAuxClick` also arms it (context-menu "open in new tab" stays unarmed; header "Réimporter" is the fallback) |
+| 3 | blind | Banner stays visible next to the unsaved-changes confirmation (two reimport actions) | low | patch — banner hidden while a confirmation is open |
+| 4 | blind | Inline link in the proposal card is caption-grey beside a link-coloured neighbour | low | patch — `color: inherit` removed |
+| 5 | blind, edge | A return while a check runs is dropped, no re-check queued | low | rejected — a read takes about a second; next return re-checks; fix adds a queued-recheck guard |
+| 6 | blind, edge | Panel hides the link when the context panel fails to load outside demo (`drive` null) | low | rejected — only on a load failure of the home page; fix adds a prop |
+| 7 | blind | Each return clears the banner before the read; a failed read then hides a known change | low | rejected — matches "a failed check shows nothing"; header "Réimporter" stays |
+| 8 | blind | Spec lacks acceptance criteria for Ignorer, disconnected, failed check, null `driveFileId`, proposal card | — | rejected — fix edits this build's spec |
+| 9 | blind | `checkDriveChanges` reads any livrable by id, no ownership check, no rate limit | false | same boundary as `reimportDriveLivrable` / `saveLivrableToDrive` (single active project, opaque UUID); one read per return to the tab |
+| 10 | blind | `role="status"` paragraph in the proposal card now holds a link | low | rejected — the live region pre-exists; the link is announced once at creation |
+| 11 | blind | `.button-later` on an `<a>`: height / `:visited` colour may differ from the buttons | low | rejected — the class sets `color` explicitly (no visited change); same font and padding, checked in the browser |
+| 12 | gap | No automated test for `driveTextChanged` / `googleSlidesUrl` | — | defer — project decision (no test runner); scratch checks below |
+| 13 | gap | No automated test for `checkDriveChanges` mode / source / error rules | — | defer — no harness for actions; scratch checks below |
+| 14 | gap | Pre-existing `package.json` / lock changes (next `^16.3.8`, `allowScripts`) in the tree | — | rejected — not part of this change, left out of the commit |
 
 ## Verification
 
@@ -94,3 +111,5 @@ context:
 - Action on SQLite with a stubbed provider: `changed` true/false, Drive error → `ok:false`, not connected → no read.
 - Browser (production build): link in header, panel and proposal card; absent in demo and on local livrables; no `<a>` nested in `<a>`; banner after a simulated return with a stubbed change.
 - Real Google (owner): open a created deck, edit a text box in Slides, come back, reimport.
+
+**Results (2026-10-08):** tsc clean; fresh-db build OK (scratch copy, the owner's dev server holds `db/local.db`). Scratch: `driveTextChanged` on unchanged / edited / removed / added / added blank / unsaved local edit / saved blank, `googleSlidesUrl` encoding — all pass. Action on SQLite with a stubbed provider: changed true/false, Drive error → `ok:false`, not connected → no read. Browser (production build): links in header, panel and proposal card with `target`/`rel`, none nested; absent in demo and on local livrables; shown when disconnected; no check at page open; banner after a simulated return, its "Réimporter" opens the unsaved-changes confirmation, "Ignorer" hides it. Review patches 1–4 applied after; tsc and build re-run. Real Google not yet tested.

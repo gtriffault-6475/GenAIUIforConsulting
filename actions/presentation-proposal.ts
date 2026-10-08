@@ -42,6 +42,7 @@ export function listConversationProposals(conversationId: string) {
       slides: presentationProposal.slides,
       status: presentationProposal.status,
       livrableId: presentationProposal.livrableId,
+      driveFileId: presentationProposal.driveFileId,
     })
     .from(presentationProposal)
     .where(eq(presentationProposal.conversationId, conversationId))

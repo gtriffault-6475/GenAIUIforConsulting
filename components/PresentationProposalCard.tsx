@@ -8,6 +8,7 @@ import type { PresentationProposalSummary } from '@/actions/conversation';
 import type { DriveMode } from '@/actions/google-connection';
 import { createPresentationFromProposal } from '@/actions/livrable';
 import { prefillComposer } from '@/components/composer-prefill';
+import { OpenInGoogleLink } from '@/components/OpenInGoogleLink';
 
 const ADJUST_PREFIX = 'Ajuste la proposition de présentation : ';
 const PREVIEW_LINES = 2;
@@ -90,6 +91,12 @@ export function PresentationProposalCard({
         <p className="text-caption" role="status" style={{ margin: 0 }}>
           Présentation créée —{' '}
           <Link href={`/livrables/${proposal.livrableId}`}>ouvrir le livrable</Link>
+          {proposal.driveFileId && (
+            <>
+              {' · '}
+              <OpenInGoogleLink driveFileId={proposal.driveFileId} variant="inline" />
+            </>
+          )}
         </p>
       ) : (
         <>

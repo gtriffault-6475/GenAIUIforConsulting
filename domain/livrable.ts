@@ -115,3 +115,35 @@ export function planDriveSave(
   }
   return plan;
 }
+
+// Ouvrir dans Google Slides — the deck's edit URL in Google Slides, the
+// single place this URL is built.
+export function googleSlidesUrl(driveFileId: string): string {
+  return `https://docs.google.com/presentation/d/${encodeURIComponent(driveFileId)}/edit`;
+}
+
+// Ouvrir dans Google Slides (D2) — has the deck's text changed in Slides
+// since the last import or save? Compares the zones the app tracks
+// (`slidesToBlocks`, so blank boxes are ignored) with the blocks' `driveText`,
+// by Slides objectId: a box added with non-blank text, a tracked box removed
+// (or emptied), or a box whose text differs from `driveText`. Images,
+// layout and slide order alone are not reported.
+export function driveTextChanged(
+  blocks: LivrableBlock[],
+  presentation: Parameters<typeof slidesToBlocks>[0],
+): boolean {
+  const remote = new Map(slidesToBlocks(presentation).map((block) => [block.id, block.text]));
+  // A zone saved as blank is absent from both sides: not a change.
+  const known = new Map(
+    blocks
+      .filter((block) => block.driveText !== undefined && block.driveText.trim() !== '')
+      .map((block) => [block.id, block.driveText]),
+  );
+  for (const [id, driveText] of known) {
+    if (remote.get(id) !== driveText) return true;
+  }
+  for (const id of remote.keys()) {
+    if (!known.has(id)) return true;
+  }
+  return false;
+}
