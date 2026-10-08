@@ -5,10 +5,13 @@ import { listSuggestions } from '@/actions/suggestion';
 import { GlobalRevisionField } from '@/components/GlobalRevisionField';
 import { DriveLivrableActions } from '@/components/DriveLivrableActions';
 import { JumpButton } from '@/components/EditorJump';
+import { SlidePreview } from '@/components/SlidePreview';
+import { SlidePreviewToggle } from '@/components/SlidePreviewToggle';
 import { SuggestionsPanel } from '@/components/SuggestionsPanel';
 import {
   groupBlocksBySlide,
   hasUnsavedDriveChanges,
+  slideHasUnsavedChanges,
   type LivrableBlock,
 } from '@/domain/livrable';
 
@@ -180,6 +183,13 @@ export default async function LivrablePage({
                     blocks={result.data.blocks}
                     bySlide={result.data.source === 'drive'}
                     activeSuggestionIdByAnchor={activeSuggestionIdByAnchor}
+                    previews={
+                      result.data.source === 'drive' &&
+                      result.data.driveConnected &&
+                      result.data.driveFileId
+                        ? { livrableId: result.data.id, driveFileId: result.data.driveFileId }
+                        : null
+                    }
                   />
                 )}
               </div>
@@ -271,14 +281,20 @@ function BlockParagraph({
 // Rendered in `content.blocks`' own array order, keyed by `block.id`.
 // Story 5.3 — a presentation imported from Drive is read slide by slide,
 // under "Diapositive N" headings; `¶N` numbering runs across slides.
+// spec-apercu-diapositives — `previews` (Drive livrable, Google
+// `connected` only): an image of the real slide at the top of each group,
+// loaded lazily, with the "Masquer / Afficher les aperçus" toggle above the
+// groups. `null` (demo, local, not connected): text only, no toggle.
 function LivrableBlocks({
   blocks,
   bySlide,
   activeSuggestionIdByAnchor,
+  previews,
 }: {
   blocks: LivrableBlock[];
   bySlide: boolean;
   activeSuggestionIdByAnchor: Map<string, string>;
+  previews: { livrableId: string; driveFileId: string } | null;
 }) {
   // 1-based position in the stored array — the same numbering as
   // `resolveAnchorPosition` (domain/suggestion.ts), computed once.
@@ -295,16 +311,30 @@ function LivrableBlocks({
   if (!bySlide) return <>{blocks.map(renderBlock)}</>;
   return (
     <>
-      {groupBlocksBySlide(blocks).map((group) => (
-        <section
-          key={`slide-${group.slideNumber}`}
-          className="livrable-slide"
-          aria-label={`Diapositive ${group.slideNumber}`}
-        >
-          <h2 className="text-label">Diapositive {group.slideNumber}</h2>
-          {group.blocks.map(renderBlock)}
-        </section>
-      ))}
+      {previews && <SlidePreviewToggle />}
+      {groupBlocksBySlide(blocks).map((group) => {
+        const slideId = group.blocks[0]?.slideId;
+        return (
+          <section
+            key={`slide-${group.slideNumber}`}
+            className="livrable-slide"
+            aria-label={`Diapositive ${group.slideNumber}`}
+          >
+            <h2 className="text-label">Diapositive {group.slideNumber}</h2>
+            {previews && slideId && (
+              <SlidePreview
+                key={slideId}
+                livrableId={previews.livrableId}
+                driveFileId={previews.driveFileId}
+                slideId={slideId}
+                slideNumber={group.slideNumber}
+                unsaved={slideHasUnsavedChanges(blocks, slideId)}
+              />
+            )}
+            {group.blocks.map(renderBlock)}
+          </section>
+        );
+      })}
     </>
   );
 }

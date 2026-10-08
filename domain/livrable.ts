@@ -122,6 +122,17 @@ export function googleSlidesUrl(driveFileId: string): string {
   return `https://docs.google.com/presentation/d/${encodeURIComponent(driveFileId)}/edit`;
 }
 
+// spec-apercu-diapositives — the deck opened in Google Slides on one slide.
+export function googleSlidesSlideUrl(driveFileId: string, slideId: string): string {
+  return `${googleSlidesUrl(driveFileId)}#slide=id.${encodeURIComponent(slideId)}`;
+}
+
+// spec-apercu-diapositives (D2) — does this slide hold a change not saved
+// to Drive yet? Its preview then shows the Drive version, not that change.
+export function slideHasUnsavedChanges(blocks: LivrableBlock[], slideId: string): boolean {
+  return blocks.some((block) => block.slideId === slideId && isBlockModified(block));
+}
+
 // Ouvrir dans Google Slides (D2) — has the deck's text changed in Slides
 // since the last import or save? Compares the zones the app tracks
 // (`slidesToBlocks`, so blank boxes are ignored) with the blocks' `driveText`,

@@ -2,7 +2,7 @@
 title: 'Aperçu des diapositives — real slide thumbnails in the editor of a Drive livrable'
 type: 'feature'
 created: '2026-10-08'
-status: 'ready-for-dev'
+status: 'done'
 baseline_commit: '5d3df4c9b059fd769fb86614de96663bf948f9ab'
 route: 'dispatch'
 review_loop_iteration: 0
@@ -73,10 +73,10 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] Port, Google adapter, mock, wrapper.
-- [ ] Domain helpers; `getSlideThumbnail` action with cache and invalidation on save / reimport.
-- [ ] `SlidePreview`, `SlidePreviewToggle`; page wiring; refresh event from `DriveLivrableActions`.
-- [ ] CSS.
+- [x] Port, Google adapter, mock, wrapper.
+- [x] Domain helpers; `getSlideThumbnail` action with cache and invalidation on save / reimport.
+- [x] `SlidePreview`, `SlidePreviewToggle`; page wiring; refresh event from `DriveLivrableActions`.
+- [x] CSS.
 
 **Acceptance Criteria:**
 - Given `rm -f db/local.db* && npm run build`, then it succeeds; `npx tsc --noEmit` is clean.
@@ -87,6 +87,26 @@ context:
 ## Spec Change Log
 
 ## Review Triage Log
+
+| # | Source | Finding | Verdict | Route / evidence |
+|---|--------|---------|---------|------------------|
+| 1 | edge, gap | Previews keyed by slide number: after a reimport that reorders slides, a group shows the previous slide's image or "Aperçu indisponible" | medium | patch — `SlidePreview` keyed by `slideId` |
+| 2 | blind, edge | Deck edited in Slides (`checkDriveChanges` → changed): cached images stay up to 25 min, no longer the Drive version (D2) | medium | patch — cache cleared and refresh dispatched on a detected change |
+| 3 | blind | Failure state not announced to screen readers | low | patch — `role="status"` |
+| 4 | blind, edge | "Réessayer" after an image load error gets the same cached URL | low | rejected — cache (25 min) is shorter than Google's URL lifetime (30 min); a dead URL is rare; fix adds a bypass parameter |
+| 5 | blind | No server-side cap against the 60/min quota | low | rejected — Next runs a page's Server Actions one at a time, so one tab cannot burst; failures degrade to the retry state |
+| 6 | blind | All errors shown as "Aperçu indisponible" (no distinct `not_found` / `quota`) | low | rejected — the header "Réimporter" and the retry cover both; spec asks one message |
+| 7 | blind | Cache not keyed by Google account | low | rejected — single-user app; previews hidden when disconnected; entries expire in 25 min |
+| 8 | blind, edge | Cache / generation maps never swept | low | rejected — a few bytes per slide ever viewed; process-local |
+| 9 | blind, edge | `rootMargin` computed once, stale after a resize | low | rejected — only the prefetch distance changes |
+| 10 | blind, edge | No `IntersectionObserver` → blank preview | false | supported by every browser the app targets (desktop, recent) |
+| 11 | edge | Late `<img>` error can override a newer loading state | low | rejected — needs an image error racing a refresh; next refresh corrects it |
+| 12 | edge | Toggle unmounting leaves `data-previews="hidden"` | low | rejected — the toggle only unmounts with the previews themselves |
+| 13 | edge | Non-16:9 deck: text moves once when the real ratio arrives | low | rejected — accepted by the spec (16:9 placeholder, then real size) |
+| 14 | blind | Toggle sets another component's DOM attribute; no `aria-pressed` | low | rejected — spec's chosen mechanism; label states the action |
+| 15 | blind | Group whose first block has no `slideId` gets no preview, silently | false | every Drive block carries `slideId` since Story 5.3 (`slidesToBlocks`) |
+| 16 | gap | No automated tests for the action's cache / guards, the adapter mapping, the domain helpers | — | defer — no test runner (project decision) |
+| 17 | blind, gap | Pre-existing `package.json` / lock changes in the tree | — | rejected — not part of this change, left out of the commit |
 
 ## Verification
 
@@ -99,3 +119,5 @@ context:
 - Action on SQLite with a stubbed provider: cache hit within 25 min, cleared after save / reimport, slide not in the livrable refused, not connected → no call.
 - Browser (production build, stubbed provider returning a placeholder image URL): lazy requests on scroll, reserved space, failure + retry, toggle persisted, unsaved mark, refresh after save; nothing in demo mode or on a local livrable.
 - Real Google (owner): open an imported deck, scroll, accept and save a change, check the image updates.
+
+**Results (2026-10-08):** tsc clean; fresh-db build OK (scratch copy, the owner's dev server holds `db/local.db`). Scratch: `slideHasUnsavedChanges`, `googleSlidesSlideUrl`; Google adapter against a stubbed Slides client (PNG / MEDIUM / 30 s, 404 → `not_found`, 429 → `quota`, empty answer → `unknown`). Browser (production build, scratch DB, stubbed provider, 15-slide Drive livrable): disconnected → text only, no toggle, no request; connected → slides 1–3 requested at open, 4–7 on scroll, text did not move, window did not scroll; failure + "Réessayer"; reload served from cache; toggle persisted, no request while hidden; unsaved mark on the modified slide only; save and reimport cleared the cache and reloaded the slides in view; 1000px follows the window; local livrable and demo mode → nothing. Review patches 1–3 applied after; tsc and build re-run. Not run: the 25-minute expiry, the slide-membership refusal (code read only). Real Google not yet tested.

@@ -29,7 +29,12 @@ import { folderDuplicateMessage, folderMissingMessage } from '@/domain/drive-mes
 import { resolveAnchorPosition } from '@/domain/suggestion';
 import { MODELS } from '@/skills/models';
 import { parseStoredSlides } from '@/skills/propose_presentation';
-import type { DriveError, DriveProvider } from '@/integrations/ports/drive-provider';
+import type {
+  DriveError,
+  DriveProvider,
+  DriveResult,
+  SlideThumbnail,
+} from '@/integrations/ports/drive-provider';
 import type { ProposedLivrableContent } from '@/skills/propose_livrable_content';
 
 // AD-2 — this is the only file allowed to read or write LIVRABLE. The one
@@ -797,6 +802,9 @@ export async function reimportDriveLivrable(
       return false;
     });
 
+    // spec-apercu-diapositives — the deck may have changed in Drive: its
+    // slide images are fetched again.
+    if (!needsConfirmation) clearSlideThumbnails(row.driveFileId);
     return { ok: true, data: { needsConfirmation } };
   } catch (error) {
     console.error('reimportDriveLivrable failed', error);
@@ -830,9 +838,92 @@ export async function checkDriveChanges(
       return failure;
     }
     const changed = driveTextChanged(parseLivrableBlocks(row.content), presentation.data);
+    // spec-apercu-diapositives (D2) — the deck changed in Slides: its cached
+    // slide images no longer show the Drive version.
+    if (changed) clearSlideThumbnails(row.driveFileId);
     return { ok: true, data: { changed } };
   } catch (error) {
     console.error('checkDriveChanges failed', error);
+    return failure;
+  }
+}
+
+// spec-apercu-diapositives — image of one slide of a Drive livrable, as
+// saved in Drive (D2), for the editor's slide groups. Only while
+// `connected`, and only for a slide the livrable's blocks belong to (D4).
+// Each Google call is one "expensive read" (quota 60/min per user), so the
+// editor asks lazily and results are cached here, in memory, per process,
+// keyed `fileId:slideId`, for 25 minutes (Google's URL lives 30). A save or
+// reimport of the livrable clears its file's entries; a request still in
+// flight then is not cached (`thumbnailGenerations`). Never stored in the
+// DB. Errors are logged server-side only.
+const THUMBNAIL_CACHE_MS = 25 * 60 * 1000;
+const thumbnailCache = new Map<string, { data: SlideThumbnail; expiresAt: number }>();
+const thumbnailsInFlight = new Map<string, Promise<DriveResult<SlideThumbnail>>>();
+const thumbnailGenerations = new Map<string, number>();
+
+function clearSlideThumbnails(fileId: string): void {
+  const prefix = `${fileId}:`;
+  for (const key of [...thumbnailCache.keys()]) {
+    if (key.startsWith(prefix)) thumbnailCache.delete(key);
+  }
+  for (const key of [...thumbnailsInFlight.keys()]) {
+    if (key.startsWith(prefix)) thumbnailsInFlight.delete(key);
+  }
+  thumbnailGenerations.set(fileId, (thumbnailGenerations.get(fileId) ?? 0) + 1);
+}
+
+export async function getSlideThumbnail(
+  livrableId: string,
+  slideId: string,
+): Promise<ActionResult<SlideThumbnail>> {
+  const failure = { ok: false as const, error: 'Aperçu indisponible.' };
+  try {
+    if (typeof livrableId !== 'string' || typeof slideId !== 'string' || slideId === '') {
+      return failure;
+    }
+    const row = db.select().from(livrable).where(eq(livrable.id, livrableId)).get();
+    if (!row || row.source !== 'drive' || !row.driveFileId) return failure;
+    if (!parseLivrableBlocks(row.content).some((block) => block.slideId === slideId)) {
+      console.error('getSlideThumbnail: slide not in the livrable', livrableId, slideId);
+      return failure;
+    }
+
+    const { mode, provider } = await getActiveDriveProvider();
+    if (mode !== 'connected' || !provider) return failure;
+
+    const fileId = row.driveFileId;
+    const key = `${fileId}:${slideId}`;
+    const cached = thumbnailCache.get(key);
+    if (cached && cached.expiresAt > Date.now()) return { ok: true, data: cached.data };
+    if (cached) thumbnailCache.delete(key);
+
+    let request = thumbnailsInFlight.get(key);
+    if (!request) {
+      const generation = thumbnailGenerations.get(fileId) ?? 0;
+      const started = provider.getSlideThumbnail(fileId, slideId);
+      request = started;
+      thumbnailsInFlight.set(key, started);
+      started
+        .then((result) => {
+          if (result.ok && (thumbnailGenerations.get(fileId) ?? 0) === generation) {
+            thumbnailCache.set(key, { data: result.data, expiresAt: Date.now() + THUMBNAIL_CACHE_MS });
+          }
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          if (thumbnailsInFlight.get(key) === started) thumbnailsInFlight.delete(key);
+        });
+    }
+
+    const result = await request;
+    if (!result.ok) {
+      console.error('getSlideThumbnail: getSlideThumbnail failed', result.error);
+      return failure;
+    }
+    return { ok: true, data: result.data };
+  } catch (error) {
+    console.error('getSlideThumbnail failed', error);
     return failure;
   }
 }
@@ -929,6 +1020,8 @@ export async function saveLivrableToDrive(
           .where(eq(livrable.id, livrableId))
           .run();
       });
+      // spec-apercu-diapositives — the images now show the saved text.
+      clearSlideThumbnails(row.driveFileId);
       return { ok: true, data: { status: 'saved' } };
     }
     return { ok: true, data: { status: 'conflict' } };
