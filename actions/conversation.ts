@@ -85,6 +85,8 @@ export type PresentationProposalSummary = {
   slides: ProposedSlide[];
   status: 'pending' | 'created';
   livrableId: string | null;
+  // Ouvrir dans Google Slides — the created deck, once the copy exists.
+  driveFileId: string | null;
 };
 
 type FixtureMessage = {
@@ -345,6 +347,7 @@ export async function getActiveConversation(projectId: string): Promise<
           slides: parseStoredSlides(row.slides),
           status: row.status,
           livrableId: row.livrableId,
+          driveFileId: row.driveFileId,
         },
       ]),
     );
