@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, useTransition } from 'react';
 
 import { checkDriveChanges, reimportDriveLivrable, saveLivrableToDrive } from '@/actions/livrable';
 import { OpenInGoogleLink } from '@/components/OpenInGoogleLink';
+import { SLIDE_PREVIEWS_REFRESH_EVENT } from '@/components/SlidePreview';
 
 // Story 5.3 / 5.5 — editor header actions of a livrable imported from
 // Google Slides (EXPERIENCE.md "Enregistrer dans Drive", "Réimporter").
@@ -66,7 +67,10 @@ export function DriveLivrableActions({
       const seq = ++checkSeqRef.current;
       checkDriveChanges(livrableId)
         .then((result) => {
-          if (result.ok && seq === checkSeqRef.current) setChangedInSlides(result.data.changed);
+          if (!result.ok) return;
+          // spec-apercu-diapositives — the server dropped the cached images.
+          if (result.data.changed) window.dispatchEvent(new Event(SLIDE_PREVIEWS_REFRESH_EVENT));
+          if (seq === checkSeqRef.current) setChangedInSlides(result.data.changed);
         })
         .catch((callError) => {
           console.error('DriveLivrableActions: checkDriveChanges call failed', callError);
@@ -103,6 +107,10 @@ export function DriveLivrableActions({
       }
       checkSeqRef.current += 1;
       setStatus(result.data.status);
+      // spec-apercu-diapositives — the slide images show the saved text.
+      if (result.data.status === 'saved') {
+        window.dispatchEvent(new Event(SLIDE_PREVIEWS_REFRESH_EVENT));
+      }
       router.refresh();
     });
   }
@@ -125,6 +133,7 @@ export function DriveLivrableActions({
       setConfirming(null);
       checkSeqRef.current += 1;
       setChangedInSlides(false);
+      window.dispatchEvent(new Event(SLIDE_PREVIEWS_REFRESH_EVENT));
       router.refresh();
     });
   }

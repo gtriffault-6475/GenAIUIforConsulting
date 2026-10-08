@@ -41,6 +41,8 @@ const REQUEST_TIMEOUT_MS = 10_000;
 const CREATE_TIMEOUT_MS = 30_000;
 // Upload of up to 10 MB plus Drive's conversion (PDF text extraction).
 const UPLOAD_TIMEOUT_MS = 120_000;
+// spec-apercu-diapositives — Google renders the slide image on demand.
+const THUMBNAIL_TIMEOUT_MS = 30_000;
 
 // Drive query string literal: backslash and single quote must be escaped.
 function quote(value: string): string {
@@ -401,6 +403,31 @@ export function createGoogleDriveProvider(
           return { ok: false, error: 'revision_conflict' };
         }
         return fail('writePresentationText', error);
+      }
+    },
+
+    // spec-apercu-diapositives — read-only: an image of one slide as saved
+    // in Drive (one "expensive read" in Google's quota, so the caller
+    // requests it lazily and caches it). Errors mapped like
+    // `readPresentation` (404 -> `not_found`, 429 -> `quota`).
+    async getSlideThumbnail(fileId, slideId) {
+      try {
+        const response = await slidesApi.presentations.pages.getThumbnail(
+          {
+            presentationId: fileId,
+            pageObjectId: slideId,
+            'thumbnailProperties.mimeType': 'PNG',
+            'thumbnailProperties.thumbnailSize': 'MEDIUM',
+          },
+          { timeout: THUMBNAIL_TIMEOUT_MS },
+        );
+        const { contentUrl, width, height } = response.data;
+        if (!contentUrl || !width || !height) {
+          return fail('getSlideThumbnail', new Error('getThumbnail returned no image'));
+        }
+        return { ok: true, data: { url: contentUrl, width, height } };
+      } catch (error) {
+        return fail('getSlideThumbnail', error);
       }
     },
 

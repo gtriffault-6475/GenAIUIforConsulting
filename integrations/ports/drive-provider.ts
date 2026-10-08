@@ -78,7 +78,13 @@ export interface DriveProvider {
   // folder (resolved like `listFiles`, never created), converted by Drive to
   // `targetMimeType` (a Google format). Never overwrites an existing file.
   uploadFile(projectName: string, file: UploadedFile): Promise<DriveResult<DriveFile>>;
+  // spec-apercu-diapositives — an image of one slide as saved in Drive
+  // (Slides API `pages.getThumbnail`, PNG, MEDIUM = 800px wide). `url` is a
+  // Google-hosted link valid about 30 minutes; never stored in the DB.
+  getSlideThumbnail(fileId: string, slideId: string): Promise<DriveResult<SlideThumbnail>>;
 }
+
+export type SlideThumbnail = { url: string; width: number; height: number };
 
 export type UploadedFile = {
   name: string;

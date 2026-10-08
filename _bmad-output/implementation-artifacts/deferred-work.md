@@ -303,3 +303,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-editeur-deux-panneaux.md`
   summary: No automated tests for `suggestionPosition`, `orderSuggestionsByAnchor`, `countPending`, nor for the jump buttons' DOM-id contract (`block-{id}`, `suggestion-{id}`).
   evidence: Project decision (no test runner); scratch and browser checks recorded in the spec.
+- source_spec: `_bmad-output/implementation-artifacts/spec-apercu-diapositives.md`
+  summary: No automated tests for `getSlideThumbnail` (cache, generation guard, slide membership, connected-only), the Google adapter's thumbnail mapping, `slideHasUnsavedChanges`, `googleSlidesSlideUrl`.
+  evidence: Project decision (no test runner); stubbed-provider and browser checks recorded in the spec.

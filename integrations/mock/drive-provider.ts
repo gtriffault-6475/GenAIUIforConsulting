@@ -97,4 +97,8 @@ export const mockDriveProvider: DriveProvider = {
   async uploadFile() {
     return { ok: false, error: 'unknown' };
   },
+  // No Drive livrables in demo mode, so no slide previews: never reached.
+  async getSlideThumbnail() {
+    return { ok: false, error: 'unknown' };
+  },
 };
