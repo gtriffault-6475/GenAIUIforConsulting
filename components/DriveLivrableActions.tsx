@@ -12,7 +12,8 @@ import { SLIDE_PREVIEWS_REFRESH_EVENT } from '@/components/SlidePreview';
 // - "Enregistrer dans Drive": neutral primary button (`.button-primary`,
 //   the navy accent — never the AI purple), disabled while no
 //   zone is modified (`hasUnsavedChanges`, from `domain/livrable.ts`);
-//   an inline reminder about formatting comes before any write.
+//   an inline reminder about formatting comes before the first write of
+//   the browser session (spec-moins-de-clics.md D3).
 // - "Réimporter": secondary; an inline confirmation first when accepted
 //   changes are not saved yet (re-checked by the action itself).
 // Both disabled outside the `connected` mode, with the connect hint only
@@ -25,6 +26,29 @@ import { SLIDE_PREVIEWS_REFRESH_EVENT } from '@/components/SlidePreview';
 // banner whose "Réimporter" is the header's flow, confirmation included. A
 // failed check shows nothing (logged server-side).
 type Pending = 'save' | 'reimport' | null;
+
+// spec-moins-de-clics.md (D3) — the formatting reminder before "Enregistrer
+// dans Drive" is asked once per browser session, for every Drive livrable:
+// set only when the consultant confirms "Enregistrer" in it. Never skipped
+// forever (sessionStorage, not localStorage). Storage unavailable (blocked,
+// private mode) → read as "not confirmed": the reminder is asked every time.
+const SAVE_REMINDER_KEY = 'genai4consulting.driveSaveReminderConfirmed';
+
+function saveReminderConfirmed(): boolean {
+  try {
+    return window.sessionStorage.getItem(SAVE_REMINDER_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function rememberSaveReminder() {
+  try {
+    window.sessionStorage.setItem(SAVE_REMINDER_KEY, '1');
+  } catch {
+    // Storage blocked: the reminder will simply be asked again next time.
+  }
+}
 
 const CONFLICT_MESSAGE =
   "Ce fichier a été modifié dans Google Slides depuis l'import. Réimportez-le pour repartir de la dernière version.";
@@ -89,29 +113,40 @@ export function DriveLivrableActions({
     if (hasUnsavedChanges) setStatus((current) => (current === 'saved' ? null : current));
   }, [hasUnsavedChanges]);
 
+  // Synchronous guard: with the session reminder already confirmed, a click
+  // calls `save()` directly, and `isPending` alone leaves a double click
+  // room to start two saves before React's next commit.
+  const savingRef = useRef(false);
+
   function save() {
+    if (savingRef.current) return;
+    savingRef.current = true;
     setError(null);
     setStatus(null);
     setConfirming(null);
     setRunning('save');
     startTransition(async () => {
-      const result = await saveLivrableToDrive(livrableId);
-      setRunning(null);
-      if (!result.ok) {
-        setError(result.error);
-        return;
+      try {
+        const result = await saveLivrableToDrive(livrableId);
+        setRunning(null);
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+        if (result.data.status === 'conflict') {
+          setStatus('conflict');
+          return;
+        }
+        checkSeqRef.current += 1;
+        setStatus(result.data.status);
+        // spec-apercu-diapositives — the slide images show the saved text.
+        if (result.data.status === 'saved') {
+          window.dispatchEvent(new Event(SLIDE_PREVIEWS_REFRESH_EVENT));
+        }
+        router.refresh();
+      } finally {
+        savingRef.current = false;
       }
-      if (result.data.status === 'conflict') {
-        setStatus('conflict');
-        return;
-      }
-      checkSeqRef.current += 1;
-      setStatus(result.data.status);
-      // spec-apercu-diapositives — the slide images show the saved text.
-      if (result.data.status === 'saved') {
-        window.dispatchEvent(new Event(SLIDE_PREVIEWS_REFRESH_EVENT));
-      }
-      router.refresh();
     });
   }
 
@@ -164,6 +199,10 @@ export function DriveLivrableActions({
           className="button-primary"
           disabled={!connected || !hasUnsavedChanges || isPending}
           onClick={() => {
+            if (saveReminderConfirmed()) {
+              save();
+              return;
+            }
             setStatus(null);
             setConfirming('save');
           }}
@@ -203,7 +242,16 @@ export function DriveLivrableActions({
             Seul le texte des zones modifiées est réécrit ; leur mise en forme peut être simplifiée.
           </p>
           <div className="drive-actions-confirm-buttons">
-            <button type="button" className="button-primary" disabled={isPending} onClick={save} autoFocus>
+            <button
+              type="button"
+              className="button-primary"
+              disabled={isPending}
+              onClick={() => {
+                rememberSaveReminder();
+                save();
+              }}
+              autoFocus
+            >
               Enregistrer
             </button>
             <button type="button" className="button-later" disabled={isPending} onClick={() => setConfirming(null)}>

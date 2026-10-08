@@ -198,7 +198,11 @@ export default async function LivrablePage({
             <aside className="editor-ai-panel" aria-label="Panneau IA">
               {/* Story 4.2 (FR-24) — suggestions already persisted for this
                   livrable, in document order (D2). */}
-              <SuggestionsPanel blocks={result.data.blocks} suggestions={suggestions} />
+              <SuggestionsPanel
+                livrableId={result.data.id}
+                blocks={result.data.blocks}
+                suggestions={suggestions}
+              />
 
               {/* Story 4.4 (FR-23, UX-DR15) — révision globale, distincte des
                   suggestions ancrées ci-dessus, pinned at the bottom of the
