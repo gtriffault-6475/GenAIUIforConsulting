@@ -12,6 +12,8 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000). No separate services to start — the app runs as a single Next.js process, with SQLite (`node:sqlite`, no native compile step) as its only dependency.
 
+`npm test` runs the tests of the pure rules in `domain/` (Node's built-in runner, no extra dependency).
+
 Copy `.env.local.example` to `.env.local` and set `ANTHROPIC_API_KEY` before sending a message from the workspace composer (Story 2.5) — without it, the composer still works but every reply fails with a clear error.
 
 ## Google Drive (Epic 5)
