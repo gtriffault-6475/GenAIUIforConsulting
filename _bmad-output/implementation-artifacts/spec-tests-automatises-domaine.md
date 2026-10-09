@@ -2,7 +2,7 @@
 title: 'Tests automatisés — first kept tests, on the pure domain rules, with Node’s built-in runner'
 type: 'chore'
 created: '2026-10-09'
-status: 'ready-for-dev'
+status: 'done'
 baseline_commit: '3392d9fccd75cca08ae7d159313e91ac03234b2f'
 route: 'dispatch'
 review_loop_iteration: 0
@@ -66,9 +66,9 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `tsconfig.json`, `package.json` script.
-- [ ] Six test files covering every exported function listed above.
-- [ ] Spine Deferred line, README line.
+- [x] `tsconfig.json`, `package.json` script.
+- [x] Six test files covering every exported function listed above.
+- [x] Spine Deferred line, README line.
 
 **Acceptance Criteria:**
 - Given `npm test`, then all tests pass with exit code 0 and no type-stripping warning.
@@ -79,6 +79,22 @@ context:
 
 ## Review Triage Log
 
+| # | Source | Finding | Verdict | Route / evidence |
+|---|--------|---------|---------|------------------|
+| 1 | blind, edge | D4's rule for future specs ("add or update tests") is written nowhere; the spine line only states coverage | medium | patch — rule appended to the spine's Deferred line |
+| 2 | blind | No check that the two private upload tables stay in sync (`UPLOAD_ACCEPT` / source MIME) | low | patch — one loop test over `UPLOAD_ACCEPT` |
+| 3 | blind | Budget 500-character cutoff not tested at its edge | low | patch — 500 kept, 499 left out |
+| 4 | blind, edge | `planDriveSave` with a modified block lacking `driveText` not pinned | low | patch — case added |
+| 5 | blind | Workflow labels compared to `STEPS` itself | low | rejected — writing labels literally would snapshot UI copy (spec: no snapshot tests) |
+| 6 | blind | `groupBlocksBySlide` mixed slide / no-slide blocks; `parseLivrableBlocks` with ill-typed optional fields | low | rejected — inputs not produced by any writer today |
+| 7 | blind | `agent-tools` assertions match exact phrases; one combination missing | low | rejected — phrases are the behaviour the agent is told; missing combination follows the same branch |
+| 8 | blind | `drive-messages` tests restate the full message | low | rejected — the message is the function's output |
+| 9 | blind | `allowImportingTsExtensions` applies app-wide | low | rejected — no app file uses `.ts` imports; a second tsconfig adds more than it saves |
+| 10 | edge | `exportMimeTypeFor` fallback, trailing-dot names, surrogate cut by total budget, `driveTextChanged` with blocks lacking `driveText` | low | rejected — branches already exercised through neighbouring cases or unreachable from writers |
+| 11 | edge | No guard against syntax Node cannot strip (enum, namespace, extensionless import) | false | `npm test` then fails loudly at load, which is the visible signal; TS 5.7 has no `erasableSyntaxOnly` |
+| 12 | edge | `npm test` on Node < 22.18 fails with a syntax error | false | `engines` requires Node ≥ 24 |
+| 13 | gap | Nothing in the agent instructions says to run `npm test` when `domain/` changes | — | defer — fix edits agent-context files (AGENTS.md); D4 puts it in each spec's verification |
+
 ## Verification
 
 **Commands:**
@@ -88,3 +104,5 @@ context:
 
 **Manual checks:**
 - Mutation spot-check in a scratch copy: break three rules (`countPending`, `driveTextChanged` blank filter, `planDriveSave` conflict branch) one at a time; each makes `npm test` fail.
+
+**Results (2026-10-09):** `npm test` 115 pass, 0 fail, 0 todo, no type-stripping warning; tsc clean (test files included); fresh-db build exit 0 (scratch copy, the owner's dev server holds `db/local.db`); no `domain/` source changed. Mutation spot-check in scratch copies, one rule at a time: `countPending` counting non-accepted → 2 failures; `driveTextChanged` blank filter removed → 1; `planDriveSave` conflict branch removed → 3; `orderSuggestionsByAnchor` globals first → 2. Review patches 1–4 added the D4 rule to the spine and 3 tests (115 in total).

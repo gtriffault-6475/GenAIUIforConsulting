@@ -10,7 +10,8 @@
     "build": "next build --turbopack",
     "start": "next start",
     "db:generate": "drizzle-kit generate",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"domain/**/*.test.ts\""
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.126.0",

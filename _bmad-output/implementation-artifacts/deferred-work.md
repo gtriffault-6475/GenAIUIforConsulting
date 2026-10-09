@@ -309,3 +309,6 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-moins-de-clics.md`
   summary: No automated tests for `acceptableSuggestions`, `acceptAllSuggestions` (counts, frozen positions, rollback) and the once-per-tab save reminder.
   evidence: Project decision (no test runner); scratch SQLite and browser checks recorded in the spec.
+- source_spec: `_bmad-output/implementation-artifacts/spec-tests-automatises-domaine.md`
+  summary: The project agent instructions (AGENTS.md project-context block) do not say "changes to `domain/` → run `npm test`"; only each spec's Verification section (D4) carries it.
+  evidence: Verification-gap review; edits to agent-context files are routed to the owner.
