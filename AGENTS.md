@@ -7,3 +7,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
+
+# Project rules
+
+- `domain/` holds the pure rules (no I/O) and is covered by `npm test` (`node --test`, see `domain/*.test.ts`). When a change touches a `domain/` function, add or update its tests and run `npm test` before reporting the work done; it must pass alongside `npx tsc --noEmit`.
