@@ -1,0 +1,17 @@
+# Team overrides for bmad-build (committed — applies to every developer).
+# Epic 5 retrospective (2026-10-05), action items A13 and A14.
+
+[workflow]
+
+# A13 — avoid a second, parallel series on the same story (retro finding P1:
+# PRs #5–#8 re-implemented stories 5.1–5.3 already in progress elsewhere).
+activation_steps_append = [
+  "Parallel-work check (Epic 5 retro A13): run `git fetch origin`, then read `_bmad-output/implementation-artifacts/sprint-status.yaml` as it is on `origin/main` (`git show origin/main:<path>`) and list open PRs (`gh pr list --state open`). If the requested work is an epic story already `in-progress` or `review` on `origin/main`, or an open PR already covers it, tell the user what you found and HALT until they confirm. Read-only: never push or change remote state here.",
+  "Visibility reminder (Epic 5 retro A13): when the user approves the spec of an epic story at Checkpoint 1, remind them in one line to put the story `in-progress` in `sprint-status.yaml` on `main` (or open a draft PR) before implementation starts, so parallel work is visible. Do not do it yourself.",
+]
+
+# A14 — specs must say which existing flows read or write what they change
+# (retro finding P2: demo reset and other writers were missed).
+persistent_facts = [
+  "Existing flows touched (Epic 5 retro A14): every spec written in step-02 has a `## Existing flows touched` section right after `## Code Map`. For each table, stored field or shared state the change reads differently or writes (DB tables, `LIVRABLE.content`, `APP_STATE`, browser storage, server caches), list every existing reader and writer found in the code (`path:symbol`), always including demo mode, the demo reset (`resetAvantVenteWorkflow`, `actions/demo.ts`) and the agent context assembly, and say for each one whether it is unaffected, adapted by this spec, or a risk. Write `None` only after searching, and say what was searched.",
+]
