@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-14-2026 15:47
-last_updated: 10-05-2026 14:57
+last_updated: 10-09-2026 09:00
 project: GenAI4Consulting
 project_key: NOKEY
 tracking_system: file-system
@@ -52,7 +52,7 @@ development_status:
   2-6-panneau-livrables: done
   epic-2-retrospective: done
 
-  epic-3: in-progress
+  epic-3: done
   3-1-stepper-de-workflow-avant-vente: done
   3-2-workflow-du-cas-livrable-de-mission: done
   3-3-suggestion-proactive-de-démarrage: done
